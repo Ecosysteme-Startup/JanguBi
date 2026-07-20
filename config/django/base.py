@@ -305,7 +305,22 @@ CACHES = {
 }
 
 APP_DOMAIN = env("APP_DOMAIN", default="http://localhost:8001")
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+
+# Base des liens envoyés par email (vérification de compte, réinitialisation) —
+# cf. `_build_url` dans apps/users/services.py.
+#
+# ⚠️ Repli sur `BASE_FRONTEND_URL` (issu de DJANGO_BASE_FRONTEND_URL, défini par
+# l'infra pour le CORS) : ce sont DEUX variables distinctes pour la MÊME notion.
+# Le déploiement ne renseignait que la seconde, donc les liens d'activation
+# partaient vers `http://localhost:3000` — l'email arrivait, le lien était mort,
+# et le compte restait inactivable (audit beta 2026-07-20).
+# NB : on relit `DJANGO_BASE_FRONTEND_URL` depuis l'environnement plutôt que la
+# constante `BASE_FRONTEND_URL` — `config.settings.cors` n'est importé que plus
+# bas dans ce fichier, elle n'existe pas encore ici.
+FRONTEND_URL = env(
+    "FRONTEND_URL",
+    default=env.str("DJANGO_BASE_FRONTEND_URL", default="http://localhost:3000"),
+)
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 from config.settings.loggers.settings import *  # noqa
