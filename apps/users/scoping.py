@@ -71,7 +71,16 @@ def is_global_admin(user) -> bool:
         return False
     if getattr(user, "role", None) == UserRole.SUPER_ADMIN:
         return True
-    return active_role_assignments(user).filter(role=UserRole.SUPER_ADMIN).exists()
+    # La PORTÉE est aussi déterminante que le rôle : sans `scope=GLOBAL`, une
+    # RoleAssignment(role=super_admin, scope=parish) — créable par tout admin de
+    # paroisse sur sa propre paroisse — conférait l'autorité globale sur toute
+    # la plateforme (audit beta 2026-07-20). `services_roles` refuse désormais
+    # ce couple ; ce filtre neutralise en plus les lignes déjà en base.
+    return (
+        active_role_assignments(user)
+        .filter(role=UserRole.SUPER_ADMIN, scope=RoleScope.GLOBAL)
+        .exists()
+    )
 
 
 # Rôles d'administration digitale (UserRole). Source de vérité = RoleAssignment :

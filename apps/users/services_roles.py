@@ -7,7 +7,7 @@ from datetime import date
 from django.db import transaction
 
 from apps.core.exceptions import ApplicationError
-from apps.users.enums import RoleScope
+from apps.users.enums import RoleScope, UserRole
 from apps.users.models import RoleAssignment
 
 _SCOPE_REQUIRED_FK: dict[str, str] = {
@@ -15,6 +15,27 @@ _SCOPE_REQUIRED_FK: dict[str, str] = {
     RoleScope.DIOCESE: "diocese",
     RoleScope.PARISH: "parish",
     RoleScope.CHURCH: "church",
+}
+
+# Portées légitimes pour chaque rôle d'administration.
+#
+# Sans ce garde-fou, la validation ne portait QUE sur la cible territoriale :
+# un admin de paroisse autorisé sur la paroisse X pouvait s'accorder
+# `role=super_admin, scope=parish, parish=X`, ce qui suffisait à rendre
+# `is_global_admin()` vrai partout (audit beta 2026-07-20). Le rôle et la portée
+# doivent être validés ENSEMBLE.
+#
+# `CHURCH_ADMIN` accepte aussi `PARISH` : c'est le cas produit par la migration
+# de backfill 0004 quand la paroisse n'a pas d'église principale.
+# `FIDELE` n'accorde aucune capacité (absent de `_ANY_ADMIN_ROLES` dans
+# `scoping.py`) — toute portée y est donc inoffensive.
+_ROLE_ALLOWED_SCOPES: dict[str, set[str]] = {
+    UserRole.SUPER_ADMIN: {RoleScope.GLOBAL},
+    UserRole.PROVINCE_ADMIN: {RoleScope.PROVINCE},
+    UserRole.DIOCESE_ADMIN: {RoleScope.DIOCESE},
+    UserRole.PARISH_ADMIN: {RoleScope.PARISH},
+    UserRole.CHURCH_ADMIN: {RoleScope.CHURCH, RoleScope.PARISH},
+    UserRole.FIDELE: set(RoleScope.values),
 }
 
 
@@ -34,6 +55,15 @@ def role_assignment_create(
     end_date=None,
     note: str = "",
 ) -> RoleAssignment:
+    # Cohérence rôle ↔ portée (anti-escalade de privilèges).
+    allowed = _ROLE_ALLOWED_SCOPES.get(role)
+    if allowed is None:
+        raise ApplicationError(f"Rôle inconnu : '{role}'.")
+    if scope not in allowed:
+        raise ApplicationError(
+            f"Le rôle '{role}' ne peut pas être accordé au niveau '{scope}'."
+        )
+
     # Cohérence scope ↔ entité territoriale.
     if scope != RoleScope.GLOBAL:
         required = _SCOPE_REQUIRED_FK[scope]

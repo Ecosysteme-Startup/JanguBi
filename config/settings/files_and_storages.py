@@ -72,5 +72,12 @@ if FILE_UPLOAD_STORAGE == FileUploadStorage.S3:
     if _AWS_S3_CUSTOM_DOMAIN:
         AWS_S3_CUSTOM_DOMAIN = _AWS_S3_CUSTOM_DOMAIN
 
-# Public URL for MinIO (replaces internal Docker hostname in generated audio URLs)
-MINIO_PUBLIC_URL = env("MINIO_PUBLIC_URL", default="http://localhost:9002")
+# URL publique de MinIO — remplace le nom d'hôte Docker interne dans les URLs
+# audio générées (apps/rosary/storage.py).
+#
+# ⚠️ Le défaut DOIT rester vide. `rosary/storage.py` fait
+# `MINIO_PUBLIC_URL or AWS_S3_ENDPOINT_URL` : un défaut « http://localhost:9002 »
+# est toujours truthy, donc le repli sur l'endpoint réel ne se déclenchait JAMAIS
+# et la production servait des URLs pointant vers la machine du visiteur
+# (audio du chapelet entièrement mort — audit beta 2026-07-20).
+MINIO_PUBLIC_URL = env("MINIO_PUBLIC_URL", default="")

@@ -11,6 +11,7 @@ from apps.api.mixins import ApiAuthMixin
 from apps.core.exceptions import ApplicationError
 from apps.users.enums import RoleScope, UserRole
 from apps.users.models import RoleAssignment
+from apps.users.permissions import IsAnyAdmin
 from apps.users.scoping import (
     accessible_diocese_ids,
     accessible_parish_ids,
@@ -88,6 +89,11 @@ class RoleAssignmentCreateInputSerializer(serializers.Serializer):
 
 
 class RoleAssignmentListApi(ApiAuthMixin, APIView):
+    # Défense en profondeur : sans permission dédiée, ces vues n'héritaient que
+    # d'`IsAuthenticated` — toute la charge d'autorisation reposait sur les
+    # helpers de `scoping.py` appelés dans le corps des méthodes.
+    permission_classes = [IsAnyAdmin]
+
     @extend_schema(
         parameters=[OpenApiParameter("user", OpenApiTypes.UUID, description="Filtrer par utilisateur")],
         responses={200: RoleAssignmentOutputSerializer(many=True)},
@@ -176,6 +182,7 @@ class RoleAssignmentListApi(ApiAuthMixin, APIView):
 
 
 class RoleAssignmentRevokeApi(ApiAuthMixin, APIView):
+    permission_classes = [IsAnyAdmin]
     @extend_schema(
         request=None,
         responses={200: RoleAssignmentOutputSerializer},
