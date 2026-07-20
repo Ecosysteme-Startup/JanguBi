@@ -190,7 +190,11 @@ seed: seed-senegal seed-demo
 	@echo "   Seed termine (seed_senegal + seed_demo) — multi-appartenance"
 	@echo "==========================================================="
 
-init-all: init-data
+# `seed-senegal` fait partie de l'initialisation, pas des données de démo : sans
+# structure territoriale, AUCUN compte ne peut finir son onboarding. La sélection
+# de paroisse est obligatoire et bloquante — menu vide, bouton grisé, aucun moyen
+# de passer l'étape (audit beta 2026-07-20). `seed_senegal` est idempotent.
+init-all: init-data seed-senegal
 
 
 # ==============================================================================

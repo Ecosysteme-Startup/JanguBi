@@ -5,6 +5,7 @@ from .apis import (
     EmailChangeRequestApi,
     EmailChangeRevertApi,
     EmailVerifyApi,
+    EmailVerifyResendApi,
     FideleRegisterApi,
     PasswordChangeApi,
     PasswordResetConfirmApi,
@@ -42,6 +43,7 @@ urlpatterns = [
     # -------------------------------------------------------------------------
     path("register/", FideleRegisterApi.as_view(), name="register"),
     path("verify-email/", EmailVerifyApi.as_view(), name="verify-email"),
+    path("verify-email/resend/", EmailVerifyResendApi.as_view(), name="verify-email-resend"),
 
     # -------------------------------------------------------------------------
     # Mot de passe

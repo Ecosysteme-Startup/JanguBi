@@ -557,6 +557,42 @@ def password_reset_request(*, email: str, ip: str | None = None) -> None:
 
 
 @transaction.atomic
+def verification_email_resend(*, email: str, ip: str | None = None) -> None:
+    """
+    Renvoie le lien de vérification à un compte encore inactif.
+
+    Un compte est créé `is_active=False` et n'est activé que par ce lien, valable
+    24 h. Sans renvoi, un testeur ayant perdu son email restait bloqué pour
+    toujours : la réinscription est refusée (« un compte avec cet email existe
+    déjà »), et aucune autre issue n'existait qu'une intervention en base.
+
+    Réponse TOUJOURS identique, que le compte existe, soit déjà vérifié ou non
+    (anti-énumération) — même contrat que `password_reset_request`.
+    """
+    rate_limit_check("email_verify_resend", ip, limit=5)
+
+    try:
+        user = BaseUser.objects.get(email__iexact=email, is_verified=False)
+    except BaseUser.DoesNotExist:
+        # Compte inexistant OU déjà vérifié : rien à renvoyer, et surtout rien
+        # à révéler. On imite le coût d'un envoi réel.
+        _dummy_delay()
+        return
+
+    token = generate_url_token()
+    token_store("email_verify", token, {"user_id": user.id}, ttl=VERIFY_TOKEN_TTL)
+
+    _send_email_safe(
+        "email_verification",
+        {
+            "user": user,
+            "verification_url": _build_url(f"verify-email?token={token}"),
+        },
+        user.email,
+    )
+
+
+@transaction.atomic
 def password_reset_confirm(
     *,
     token: str,

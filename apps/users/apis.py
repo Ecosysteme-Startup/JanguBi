@@ -33,6 +33,7 @@ from django.http import Http404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import serializers, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
@@ -71,6 +72,7 @@ from apps.users.services import (
     user_soft_delete,
     user_toggle_active,
     user_update_profile,
+    verification_email_resend,
 )
 
 
@@ -212,6 +214,54 @@ class EmailVerifyApi(APIView):
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"detail": "Votre compte est activé. Vous pouvez vous connecter."})
+
+
+class EmailVerifyResendApi(APIView):
+    """Renvoi du lien d'activation.
+
+    Sans cet endpoint, un compte dont le lien a expiré (24 h) était définitivement
+    bloqué : la réinscription est refusée et le compte reste `is_active=False`.
+    """
+
+    throttle_scope = "login"
+    throttle_classes = [ScopedRateThrottle]
+
+    class ResendInputSerializer(serializers.Serializer):
+        email = serializers.EmailField()
+
+    @extend_schema(
+        tags=["Authentification"],
+        summary="Renvoyer le lien d'activation du compte",
+        description=(
+            "Renvoie l'email de vérification à un compte encore inactif. "
+            "**Paramètres d'entrée (JSON Body)** : `email`. "
+            "La réponse est identique que le compte existe, soit déjà vérifié ou "
+            "non (anti-énumération)."
+        ),
+        request=ResendInputSerializer,
+        responses={
+            200: OpenApiResponse(description="Demande prise en compte"),
+            429: OpenApiResponse(description="Trop de demandes"),
+        },
+    )
+    def post(self, request):
+        s = self.ResendInputSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        try:
+            verification_email_resend(email=s.validated_data["email"], ip=_get_ip(request))
+        except OtpRateLimitError as exc:
+            return Response({"detail": exc.message}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        # Message volontairement neutre : il ne doit jamais révéler si l'adresse
+        # correspond à un compte, ni si ce compte est déjà activé.
+        return Response(
+            {
+                "detail": (
+                    "Si un compte non activé correspond à cette adresse, "
+                    "un nouvel email de vérification vient d'être envoyé."
+                )
+            }
+        )
 
 
 # ===========================================================================
