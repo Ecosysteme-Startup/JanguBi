@@ -1,206 +1,136 @@
-from typing import Optional
-from uuid import UUID
+"""Lectures des demandes d'actes V1 (SRS §3.6)."""
+
+import datetime
+import statistics
+from typing import Any
 
 from django.db.models import Count, Prefetch, Q, QuerySet
+from django.utils import timezone
 
-from apps.core.exceptions import ApplicationError
-from apps.documents.exceptions import DocumentRequestNotFoundError
-from apps.documents.models import (
-    DocumentRequest,
-    DocumentRequestAttachment,
-    DocumentRequestStatusLog,
-    InternalNote,
-)
-from apps.users.enums import UserRole
-from apps.users.models import BaseUser
+from apps.core.exceptions import NotFoundError
+from apps.documents.models import DocumentRequest, DocumentRequestAttachment, DocumentRequestStatusLog, InternalNote
+from apps.documents.services import SLA_KEY_BY_STATUS, sla_for_node
+from apps.hierarchy import authz
+from apps.hierarchy.models import Node
 
-_ADMIN_ROLES = {
-    UserRole.SUPER_ADMIN,
-    UserRole.PROVINCE_ADMIN,
-    UserRole.DIOCESE_ADMIN,
-    UserRole.PARISH_ADMIN,
-    UserRole.CHURCH_ADMIN,
-}
+_RELATED = ("requester", "assigned_to", "target_node", "target_node__type", "pickup_place")
 
 
-def document_request_list(*, user: BaseUser, filters: Optional[dict] = None) -> QuerySet[DocumentRequest]:
-    filters = filters or {}
-    # target_parish__diocese : sortie B5c (nom/diocèse via la FK) sans N+1.
-    # attachments : le sérialiseur de liste expose l'URL du document final —
-    # sans ce prefetch, chaque demande déclencherait sa propre requête.
-    qs = DocumentRequest.objects.select_related(
-        "requester", "assigned_to", "target_parish__diocese"
-    ).prefetch_related(
-        Prefetch(
-            "attachments",
-            queryset=DocumentRequestAttachment.objects.select_related("file"),
-        )
-    )
+# --- Fidèle -------------------------------------------------------------------------------
 
-    # Source de vérité d'autorité = RoleAssignment (is_any_admin / accessible_parish_ids),
-    # plus user.role seul. Fail-CLOSED : un admin sans affectation territoriale ne voit
-    # RIEN (et non plus « tout », l'ancien repli legacy était un fail-open).
-    from apps.users.scoping import accessible_parish_ids, is_any_admin, is_global_admin
 
-    if not is_any_admin(user):
-        qs = qs.filter(requester=user)
-    elif not is_global_admin(user):
-        parish_ids = accessible_parish_ids(user)  # set (jamais None ici)
-        # Visibilité = admins de la paroisse CIBLE uniquement (confidentialité PII
-        # inter-paroisse). Le repli sur la paroisse principale du demandeur ne vaut
-        # QUE pour les demandes orphelines (target_parish NULL) — sinon le curé de la
-        # paroisse home verrait une demande adressée à une AUTRE paroisse.
-        qs = qs.filter(
-            Q(target_parish_id__in=parish_ids)
-            | Q(
-                target_parish_id__isnull=True,
-                requester__profile__primary_parish_id__in=parish_ids,
+def request_list_for_requester(*, user: Any, status: str | None = None) -> QuerySet[DocumentRequest]:
+    qs = DocumentRequest.objects.filter(requester=user).select_related(*_RELATED)
+    if status:
+        qs = qs.filter(status=status)
+    return qs.order_by("-created_at")
+
+
+def request_get_for_requester(*, user: Any, request_id: Any) -> DocumentRequest:
+    try:
+        return (
+            DocumentRequest.objects.select_related(*_RELATED)
+            .prefetch_related(
+                Prefetch("status_logs", queryset=DocumentRequestStatusLog.objects.order_by("created_at")),
+                Prefetch("attachments", queryset=DocumentRequestAttachment.objects.select_related("file")),
             )
+            .get(pk=request_id, requester=user)
         )
-    # is_global_admin → aucune restriction
+    except (DocumentRequest.DoesNotExist, ValueError) as exc:
+        raise NotFoundError("Demande introuvable.", {"request_id": str(request_id)}) from exc
 
+
+# --- Paroisse --------------------------------------------------------------------------------
+
+
+def _node_filter(qs: QuerySet[DocumentRequest], node_id: Any) -> QuerySet[DocumentRequest]:
+    if not node_id:
+        return qs
+    node = Node.objects.filter(pk=node_id).first()
+    if node is None:
+        raise NotFoundError("Nœud introuvable.", {"node_id": str(node_id)})
+    return qs.filter(target_node__path__startswith=node.path)
+
+
+def queue_for(*, user: Any, filters: dict[str, Any] | None = None) -> QuerySet[DocumentRequest]:
+    """File de traitement (EF-ACT-03) : demandes adressées aux nœuds où ``user`` a ``actes.traiter``."""
+    filters = filters or {}
+    qs = DocumentRequest.objects.filter(target_node__in=authz.noeuds_autorises(user, "actes.traiter")).select_related(
+        *_RELATED
+    )
+    qs = _node_filter(qs, filters.get("node"))
     if status := filters.get("status"):
         qs = qs.filter(status=status)
     if document_type := filters.get("document_type"):
         qs = qs.filter(document_type=document_type)
-    if parish_name := filters.get("parish_name"):
-        qs = qs.filter(parish_name__icontains=parish_name)
     if search := filters.get("search"):
-        qs = qs.filter(requester_last_name__icontains=search)
-    if assigned_to_id := filters.get("assigned_to_id"):
-        qs = qs.filter(assigned_to_id=assigned_to_id)
-
+        qs = qs.filter(
+            Q(reference__icontains=search)
+            | Q(requester_last_name__icontains=search)
+            | Q(requester_first_names__icontains=search)
+        )
+    if filters.get("overdue"):
+        qs = qs.filter(pk__in=[r.pk for r in qs if is_overdue(r)])
     return qs.order_by("-created_at")
 
 
-def document_request_status_counts(*, user: BaseUser, filters: Optional[dict] = None) -> dict:
-    """Nombre de demandes par statut sur le périmètre d'autorité de `user`.
+def request_get_for_processor(*, user: Any, request_id: Any) -> DocumentRequest:
+    """404 hors de la file : on ne révèle pas l'existence d'une demande d'une autre paroisse."""
+    try:
+        return (
+            queue_for(user=user)
+            .prefetch_related(
+                Prefetch("status_logs", queryset=DocumentRequestStatusLog.objects.select_related("changed_by").order_by("created_at")),
+                Prefetch("attachments", queryset=DocumentRequestAttachment.objects.select_related("file")),
+            )
+            .get(pk=request_id)
+        )
+    except (DocumentRequest.DoesNotExist, ValueError) as exc:
+        raise NotFoundError("Demande introuvable.", {"request_id": str(request_id)}) from exc
 
-    Réutilise `document_request_list` pour hériter exactement du même scoping
-    et des mêmes filtres, à une exception près : le filtre `status` est ignoré,
-    sinon les autres statuts seraient comptés à zéro alors qu'ils existent.
 
-    Les six statuts sont toujours présents (à 0 le cas échéant) pour que le
-    client n'ait pas à distinguer « aucune demande » de « clé absente ».
-    """
-    filters = {k: v for k, v in (filters or {}).items() if k != "status"}
-    qs = document_request_list(user=user, filters=filters)
-
-    counts = {status.value: 0 for status in DocumentRequest.Status}
-    # Une seule requête agrégée, et `order_by()` neutralise le tri par défaut
-    # qui casserait le GROUP BY.
-    for row in qs.order_by().values("status").annotate(total=Count("id")):
+def status_counts(*, queryset: QuerySet[DocumentRequest]) -> dict[str, Any]:
+    counts = {s: 0 for s in DocumentRequest.Status.values if s not in ("validated", "document_deposited")}
+    for row in queryset.order_by().values("status").annotate(total=Count("id")):
         counts[row["status"]] = row["total"]
-
     return {"counts": counts, "total": sum(counts.values())}
 
 
-def document_request_get(*, request_id: UUID, user: BaseUser) -> DocumentRequest:
-    from apps.users.scoping import is_any_admin
-
-    qs = DocumentRequest.objects.select_related(
-        "requester", "assigned_to", "target_parish__diocese"
-    ).prefetch_related(
-        "status_logs__changed_by",
-        "attachments__file",
-    )
-    # Non-admin → ses propres demandes. Un curé (RoleAssignment, role='fidele') est
-    # admin : on ne le filtre pas comme simple demandeur ; l'autorité territoriale
-    # fine est tranchée par la permission objet (IsDocumentRequesterOrAdmin).
-    if not is_any_admin(user):
-        qs = qs.filter(requester=user)
-
-    try:
-        return qs.get(pk=request_id)
-    except DocumentRequest.DoesNotExist:
-        raise ApplicationError(f"Demande {request_id} introuvable.")
+def internal_notes(*, request_obj: DocumentRequest) -> QuerySet[InternalNote]:
+    return InternalNote.objects.filter(request=request_obj).select_related("author").order_by("created_at")
 
 
-def _request_effective_parish_id(obj: DocumentRequest) -> Optional[int]:
-    if obj.target_parish_id:
-        return obj.target_parish_id
-    prof = getattr(obj.requester, "profile", None)
-    return getattr(prof, "primary_parish_id", None)
+def status_logs(*, request_obj: DocumentRequest) -> QuerySet[DocumentRequestStatusLog]:
+    return DocumentRequestStatusLog.objects.filter(request=request_obj).select_related("changed_by").order_by("created_at")
 
 
-def document_request_get_for_admin(*, request_id: UUID, user: BaseUser) -> DocumentRequest:
-    """Récupère une demande pour un agent back-office, **scopée à son autorité
-    territoriale réelle** (RoleAssignment).
-
-    Hors de la portée de l'agent → ``DocumentRequestNotFoundError`` (exception
-    DOMAINE, pas ``Http404`` : ce sélecteur est appelable hors HTTP). `apis.py`
-    la mappe en **404** — inexistante et hors périmètre restent indiscernables,
-    donc pas de fuite d'existence inter-paroisses. Ferme le trou : un
-    parish_admin de A ne peut plus lire/agir sur une demande de B par UUID.
-    """
-    from apps.users.scoping import accessible_parish_ids, is_global_admin
-
-    obj = (
-        DocumentRequest.objects.select_related(
-            "requester", "assigned_to", "target_parish__diocese"
-        )
-        .prefetch_related("status_logs__changed_by", "attachments__file")
-        .filter(pk=request_id)
-        .first()
-    )
-    if obj is None:
-        raise DocumentRequestNotFoundError(f"Demande {request_id} introuvable.")
-
-    if is_global_admin(user):
-        return obj
-
-    parish_ids = accessible_parish_ids(user)  # set (jamais None ici : global admin déjà traité)
-    eff_parish_id = _request_effective_parish_id(obj)
-    if parish_ids is None or eff_parish_id is None or eff_parish_id not in parish_ids:
-        raise DocumentRequestNotFoundError(f"Demande {request_id} introuvable.")
-    return obj
+# --- SLA ------------------------------------------------------------------------------------
 
 
-def document_request_status_log_list(
-    *, request_obj: DocumentRequest
-) -> QuerySet[DocumentRequestStatusLog]:
-    return (
-        DocumentRequestStatusLog.objects.filter(request=request_obj)
-        .select_related("changed_by")
-        .order_by("created_at")
-    )
+def age_days(request_obj: DocumentRequest, *, now: datetime.datetime | None = None) -> int | None:
+    if request_obj.status not in SLA_KEY_BY_STATUS:
+        return None
+    return max(0, ((now or timezone.now()) - request_obj.updated_at).days)
 
 
-def document_request_internal_note_list(*, request_obj: DocumentRequest) -> QuerySet[InternalNote]:
-    return (
-        InternalNote.objects.filter(request=request_obj)
-        .select_related("author")
-        .order_by("created_at")
-    )
+def is_overdue(request_obj: DocumentRequest, *, now: datetime.datetime | None = None) -> bool:
+    days = age_days(request_obj, now=now)
+    if days is None:
+        return False
+    return days >= sla_for_node(request_obj.target_node)[SLA_KEY_BY_STATUS[request_obj.status]]
 
 
-def document_request_attachment_list(
-    *, request_obj: DocumentRequest
-) -> QuerySet[DocumentRequestAttachment]:
-    return (
-        DocumentRequestAttachment.objects.filter(request=request_obj)
-        .select_related("file", "uploaded_by")
-        .order_by("created_at")
-    )
+# --- Supervision agrégée (EF-ACT-10) : aucun nom ------------------------------------------
 
 
-def document_request_agent_recipients(*, request_obj: DocumentRequest) -> list[BaseUser]:
-    """Destinataires des notifications agents pour cette demande.
-
-    Priorité : l'agent assigné ; sinon le clergé de la paroisse cible (curé +
-    vicaires) ; sinon, en repli, tous les admins actifs (comportement legacy).
-    """
-    if request_obj.assigned_to is not None:
-        return [request_obj.assigned_to]
-
-    parish = request_obj.target_parish or getattr(
-        getattr(request_obj.requester, "profile", None), "primary_parish", None
-    )
-    if parish is not None:
-        from apps.users.scoping import clergy_of_parish
-
-        recipients = list(clergy_of_parish(parish.id).filter(is_active=True)[:20])
-        if recipients:
-            return recipients
-
-    return list(BaseUser.objects.filter(role__in=list(_ADMIN_ROLES), is_active=True)[:20])
+def supervision_stats(*, user: Any, node_id: Any = None) -> dict[str, Any]:
+    qs = DocumentRequest.objects.filter(target_node__in=authz.noeuds_autorises(user, "actes.superviser"))
+    qs = _node_filter(qs, node_id)
+    closed = qs.filter(status="collected", closed_at__isnull=False).values_list("created_at", "closed_at")
+    durations = [(end - start).days for start, end in closed if start is not None and end is not None]
+    open_requests = qs.filter(status__in=list(SLA_KEY_BY_STATUS)).select_related("target_node")
+    return {
+        **status_counts(queryset=qs),
+        "median_days_to_collect": statistics.median(durations) if durations else None,
+        "overdue": sum(1 for r in open_requests if is_overdue(r)),
+    }

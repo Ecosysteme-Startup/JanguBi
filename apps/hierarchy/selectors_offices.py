@@ -107,6 +107,43 @@ def audit_list(*, actor: Any, filters: dict[str, Any] | None = None) -> QuerySet
     return qs.order_by("-at")
 
 
+def capability_holders(*, node: Node, capability: str, direct_only: bool = False) -> QuerySet[Any]:
+    """Personnes qui détiennent ``capability`` sur ``node`` par une nomination active.
+
+    ``direct_only`` : seulement les titulaires d'un office sur le nœud lui-même (ex. l'équipe
+    de la paroisse), pas les autorités des nœuds ancêtres (évêque, vicaire général…).
+    """
+    from django.utils import timezone
+
+    from apps.hierarchy.enums import AssignmentStatus
+    from apps.hierarchy.selectors import node_ancestors
+
+    today = timezone.localdate()
+    lineage = [node] if direct_only else [*node_ancestors(node=node), node]
+    assignments = (
+        OfficeAssignment.objects.filter(
+            node__in=lineage,
+            status=AssignmentStatus.ACTIVE,
+            start_date__lte=today,
+            office_type__capabilities__code=capability,
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .filter(Q(node=node) | Q(office_type__inherits_down=True))
+        .select_related("node", "office_type")
+    )
+    overrides = list(
+        CapabilityOverride.objects.filter(capability_id=capability).select_related("diocese_node")
+    )
+    person_ids = {
+        a.person_id
+        for a in assignments
+        if not any(
+            o.office_type_id == a.office_type_id and a.node.path.startswith(o.diocese_node.path) for o in overrides
+        )
+    }
+    return get_user_model().objects.filter(pk__in=person_ids, is_active=True)
+
+
 def capability_override_list() -> QuerySet[CapabilityOverride]:
     return CapabilityOverride.objects.select_related("diocese_node", "office_type", "capability").order_by(
         "diocese_node__name"

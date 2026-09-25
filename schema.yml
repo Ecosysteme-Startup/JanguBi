@@ -1023,428 +1023,43 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
-  /api/v1/documents/admin/requests/:
-    get:
-      operationId: v1_documents_admin_requests_retrieve
-      summary: Lister toutes les demandes (admin)
-      parameters:
-      - in: query
-        name: assigned_to_id
-        schema:
-          type: integer
-        description: Filtrer par agent assigné
-      - in: query
-        name: document_type
-        schema:
-          type: string
-        description: Filtrer par type de document
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats (défaut 20)
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: query
-        name: parish_name
-        schema:
-          type: string
-        description: Filtrer par nom de paroisse
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche textuelle
-      - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - document_deposited
-          - info_requested
-          - rejected
-          - submitted
-          - under_verification
-          - validated
-        description: Filtrer par statut
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedDocumentRequestListOutputList'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/:
-    get:
-      operationId: v1_documents_admin_requests_retrieve_2
-      summary: Détail d'une demande (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/deposit/:
-    post:
-      operationId: v1_documents_admin_requests_deposit_create
-      summary: Déposer le document final (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DepositDocumentInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DepositDocumentInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DepositDocumentInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/logs/:
-    get:
-      operationId: v1_documents_admin_requests_logs_list
-      summary: Historique des statuts (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/StatusLogOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/notes/:
-    get:
-      operationId: v1_documents_admin_requests_notes_list
-      summary: Lister les notes internes (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/InternalNoteOutput'
-          description: ''
-    post:
-      operationId: v1_documents_admin_requests_notes_create
-      summary: Ajouter une note interne (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InternalNoteCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/InternalNoteCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/InternalNoteCreateInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InternalNoteOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/reject/:
-    post:
-      operationId: v1_documents_admin_requests_reject_create
-      summary: Rejeter une demande (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RejectInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RejectInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RejectInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/request-info/:
-    post:
-      operationId: v1_documents_admin_requests_request_info_create
-      summary: Demander un complément d'information (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StatusActionWithCommentInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/StatusActionWithCommentInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/StatusActionWithCommentInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/start-verification/:
-    post:
-      operationId: v1_documents_admin_requests_start_verification_create
-      summary: Démarrer la vérification (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/{request_id}/validate/:
-    post:
-      operationId: v1_documents_admin_requests_validate_create
-      description: 'Cet endpoint n''accepte AUCUN corps de requête : la validation
-        est une simple transition d''état. Tout payload envoyé serait ignoré silencieusement.'
-      summary: Valider une demande (admin)
-      parameters:
-      - in: path
-        name: request_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
-          description: ''
-  /api/v1/documents/admin/requests/counts/:
-    get:
-      operationId: v1_documents_admin_requests_counts_retrieve
-      description: 'Renvoie les six statuts, à 0 le cas échéant. Le filtre `status`
-        est volontairement ignoré : les comptages porteraient sinon à zéro sur tous
-        les autres statuts.'
-      summary: Compter les demandes par statut sur son périmètre (admin)
-      parameters:
-      - in: query
-        name: assigned_to_id
-        schema:
-          type: integer
-        description: Filtrer par agent assigné
-      - in: query
-        name: document_type
-        schema:
-          type: string
-        description: Filtrer par type de document
-      - in: query
-        name: parish_name
-        schema:
-          type: string
-        description: Filtrer par nom de paroisse
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche textuelle
-      tags:
-      - documents
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DocumentRequestStatusCountsOutput'
-          description: ''
   /api/v1/documents/requests/:
     get:
-      operationId: v1_documents_requests_retrieve
-      summary: Lister mes demandes de document
+      operationId: documents_requests_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes demandes d'actes
       parameters:
-      - in: query
-        name: document_type
-        schema:
-          type: string
-        description: Filtrer par type de document
       - in: query
         name: limit
         schema:
           type: integer
-        description: Nombre de résultats (défaut 20)
+        description: Nombre de résultats (défaut 10, max 50)
       - in: query
         name: offset
         schema:
           type: integer
-        description: Décalage pagination
-      - in: query
-        name: parish_name
-        schema:
-          type: string
-        description: Filtrer par nom de paroisse
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche textuelle
+        description: Décalage
       - in: query
         name: status
         schema:
-          type: string
           enum:
-          - document_deposited
-          - info_requested
-          - rejected
           - submitted
           - under_verification
-          - validated
-        description: Filtrer par statut
+          - info_requested
+          - ready_for_pickup
+          - collected
+          - rejected
+          - cancelled
+          type: string
+          minLength: 1
+        description: |-
+          * `submitted` - Soumise
+          * `under_verification` - En vérification
+          * `info_requested` - Complément demandé
+          * `ready_for_pickup` - Prête à retirer
+          * `collected` - Retirée
+          * `rejected` - Rejetée
+          * `cancelled` - Annulée
       tags:
       - documents
       security:
@@ -1457,24 +1072,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedDocumentRequestListOutputList'
+                $ref: '#/components/schemas/PaginatedRequesterOutputList'
           description: ''
     post:
       operationId: v1_documents_requests_create
-      summary: Créer une demande de document
+      description: À placer en premier dans les bases des vues V1.
+      summary: Demander un acte à la paroisse du sacrement
       tags:
       - documents
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DocumentRequestCreateInput'
+              $ref: '#/components/schemas/RequestCreateInput'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/DocumentRequestCreateInput'
+              $ref: '#/components/schemas/RequestCreateInput'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/DocumentRequestCreateInput'
+              $ref: '#/components/schemas/RequestCreateInput'
         required: true
       security:
       - keycloakBearer: []
@@ -1486,12 +1102,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
+                $ref: '#/components/schemas/RequesterOutput'
           description: ''
   /api/v1/documents/requests/{request_id}/:
     get:
-      operationId: v1_documents_requests_retrieve_2
-      summary: Détail d'une demande de document
+      operationId: v1_documents_requests_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Suivi de ma demande (statut, historique, retrait)
       parameters:
       - in: path
         name: request_id
@@ -1511,12 +1128,39 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
+                $ref: '#/components/schemas/RequesterOutput'
+          description: ''
+  /api/v1/documents/requests/{request_id}/cancel/:
+    post:
+      operationId: v1_documents_requests_cancel_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Annuler ma demande (soumise ou en complément)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequesterOutput'
           description: ''
   /api/v1/documents/requests/{request_id}/supplement/:
     post:
       operationId: v1_documents_requests_supplement_create
-      summary: Soumettre un complément d'information
+      description: À placer en premier dans les bases des vues V1.
+      summary: Envoyer le complément demandé
       parameters:
       - in: path
         name: request_id
@@ -1530,13 +1174,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/DocumentRequestSupplementInput'
+              $ref: '#/components/schemas/SupplementInput'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/DocumentRequestSupplementInput'
+              $ref: '#/components/schemas/SupplementInput'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/DocumentRequestSupplementInput'
+              $ref: '#/components/schemas/SupplementInput'
       security:
       - keycloakBearer: []
       - legacyJwt: []
@@ -1547,17 +1191,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DocumentRequestDetailOutput'
+                $ref: '#/components/schemas/RequesterOutput'
           description: ''
   /api/v1/documents/requests/options/:
     get:
       operationId: v1_documents_requests_options_retrieve
-      description: |-
-        Référentiel du formulaire : types, motifs, et la règle qui les relie.
-
-        Le frontend consomme cette réponse plutôt que de redéclarer la table en dur —
-        une copie côté client finirait par diverger de la règle appliquée au serveur.
-      summary: Options du formulaire de demande (types, motifs, compatibilités)
+      description: À placer en premier dans les bases des vues V1.
+      summary: Options du formulaire (types, motifs, compatibilités, modes de retrait)
       tags:
       - documents
       security:
@@ -1570,7 +1210,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DocumentRequestOptionsOutput'
+                $ref: '#/components/schemas/DocumentRequestOptions'
           description: ''
   /api/v1/errors/trigger/:
     get:
@@ -5471,6 +5111,341 @@ paths:
               schema:
                 type: string
           description: ''
+  /api/v1/staff/documents/:
+    get:
+      operationId: staff_documents_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: File de traitement (actes.traiter)
+      parameters:
+      - in: query
+        name: document_type
+        schema:
+          enum:
+          - baptism
+          - first_communion
+          - confirmation
+          - religious_marriage
+          - godparent
+          - other
+          type: string
+          minLength: 1
+        description: |-
+          * `baptism` - Certificat de baptême
+          * `first_communion` - Attestation de première communion
+          * `confirmation` - Attestation de confirmation
+          * `religious_marriage` - Attestation de mariage religieux
+          * `godparent` - Attestation parrain / marraine
+          * `other` - Autre document
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: overdue
+        schema:
+          type: boolean
+          default: false
+      - in: query
+        name: search
+        schema:
+          type: string
+          minLength: 1
+        description: Référence ou nom du demandeur
+      - in: query
+        name: status
+        schema:
+          enum:
+          - submitted
+          - under_verification
+          - info_requested
+          - ready_for_pickup
+          - collected
+          - rejected
+          - cancelled
+          type: string
+          minLength: 1
+        description: |-
+          * `submitted` - Soumise
+          * `under_verification` - En vérification
+          * `info_requested` - Complément demandé
+          * `ready_for_pickup` - Prête à retirer
+          * `collected` - Retirée
+          * `rejected` - Rejetée
+          * `cancelled` - Annulée
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedQueueItemList'
+          description: ''
+  /api/v1/staff/documents/{request_id}/:
+    get:
+      operationId: v1_staff_documents_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Détail d'une demande de ma file
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessorOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/{transition}/:
+    post:
+      operationId: v1_staff_documents_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Faire avancer la demande (start-verification, request-info, mark-ready,
+        mark-collected, reject)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: transition
+        schema:
+          type: string
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransitionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransitionInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessorOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/logs/:
+    get:
+      operationId: v1_staff_documents_logs_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Journal des statuts
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatusLog'
+          description: ''
+  /api/v1/staff/documents/{request_id}/notes/:
+    get:
+      operationId: v1_staff_documents_notes_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Notes internes (jamais visibles du fidèle)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NoteOutput'
+          description: ''
+    post:
+      operationId: v1_staff_documents_notes_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Ajouter une note interne
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NoteInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NoteInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NoteOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/register-ref/:
+    put:
+      operationId: v1_staff_documents_register_ref_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Références du registre (jamais visibles du fidèle)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRefInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterRefInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterRefInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessorOutput'
+          description: ''
+  /api/v1/staff/documents/counts/:
+    get:
+      operationId: v1_staff_documents_counts_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Compteurs par statut de ma file
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountsOutput'
+          description: ''
+  /api/v1/staff/documents/stats/:
+    get:
+      operationId: v1_staff_documents_stats_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Indicateurs agrégés, sans nom (actes.superviser)
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsOutput'
+          description: ''
   /api/v1/staff/news/:
     get:
       operationId: staff_news_list
@@ -6933,6 +6908,16 @@ components:
           format: uri
           nullable: true
           maxLength: 500
+    ArticleContentTypeEnum:
+      enum:
+      - announcement
+      - article
+      - pastoral_letter
+      type: string
+      description: |-
+        * `announcement` - Annonce
+        * `article` - Article
+        * `pastoral_letter` - Lettre Pastorale
     ArticleCreateInput:
       type: object
       properties:
@@ -6946,7 +6931,7 @@ components:
           nullable: true
         content_type:
           allOf:
-          - $ref: '#/components/schemas/ContentType1e5Enum'
+          - $ref: '#/components/schemas/ArticleV1TypeEnum'
           default: announcement
         title:
           type: string
@@ -6985,7 +6970,7 @@ components:
           readOnly: true
         content_type:
           allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          - $ref: '#/components/schemas/ArticleContentTypeEnum'
           title: Type de contenu
         title:
           type: string
@@ -7055,7 +7040,7 @@ components:
           readOnly: true
         content_type:
           allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          - $ref: '#/components/schemas/ArticleContentTypeEnum'
           title: Type de contenu
         title:
           type: string
@@ -7126,12 +7111,32 @@ components:
           format: date-time
           nullable: true
           description: 'Futur : publication programmée'
+    ArticleStatusEnum:
+      enum:
+      - draft
+      - scheduled
+      - published
+      - unpublished
+      type: string
+      description: |-
+        * `draft` - Brouillon
+        * `scheduled` - Programmé
+        * `published` - Publié
+        * `unpublished` - Dépublié
     ArticleUnpublishInput:
       type: object
       properties:
         reason:
           type: string
           default: ''
+    ArticleV1TypeEnum:
+      enum:
+      - announcement
+      - article
+      type: string
+      description: |-
+        * `announcement` - Annonce
+        * `article` - Article
     AssignmentCreateInput:
       type: object
       properties:
@@ -7233,43 +7238,6 @@ components:
         * `active` - Active
         * `terminee` - Terminée
         * `annulee` - Annulée
-    AttachmentOutput:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        attachment_type:
-          $ref: '#/components/schemas/AttachmentTypeEnum'
-        attachment_type_label:
-          type: string
-          readOnly: true
-        label:
-          type: string
-          maxLength: 255
-        file_url:
-          type: string
-          nullable: true
-          readOnly: true
-        file_name:
-          type: string
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - attachment_type_label
-      - file_name
-      - file_url
-      - id
-    AttachmentTypeEnum:
-      enum:
-      - user_supporting
-      - parish_final
-      type: string
-      description: |-
-        * `user_supporting` - Justificatif fidèle
-        * `parish_final` - Document final paroisse
     AuditEventOutput:
       type: object
       properties:
@@ -7846,24 +7814,6 @@ components:
       description: |-
         * `text` - Texte brut
         * `html` - HTML riche
-    ContentType1e5Enum:
-      enum:
-      - announcement
-      - article
-      type: string
-      description: |-
-        * `announcement` - Annonce
-        * `article` - Article
-    ContentTypeD15Enum:
-      enum:
-      - announcement
-      - article
-      - pastoral_letter
-      type: string
-      description: |-
-        * `announcement` - Annonce
-        * `article` - Article
-        * `pastoral_letter` - Lettre Pastorale
     ConversationCreateInput:
       type: object
       properties:
@@ -7935,6 +7885,18 @@ components:
       - email
       - full_name
       - id
+    CountsOutput:
+      type: object
+      properties:
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+        total:
+          type: integer
+      required:
+      - counts
+      - total
     DailyTextOutput:
       type: object
       properties:
@@ -8046,17 +8008,6 @@ components:
         * `diacre_permanent` - Diacre permanent
         * `pretre` - Prêtre
         * `eveque` - Évêque
-    DepositDocumentInput:
-      type: object
-      properties:
-        file_id:
-          type: integer
-        label:
-          type: string
-          default: Document officiel
-          maxLength: 255
-      required:
-      - file_id
     DioceseCreateInput:
       type: object
       properties:
@@ -8096,383 +8047,50 @@ components:
       - name
       - province
       - province_name
-    DocumentRequestCreateInput:
+    DocumentRequestOptions:
       type: object
-      properties:
-        document_type:
-          $ref: '#/components/schemas/DocumentTypeEnum'
-        document_type_free:
-          type: string
-          default: ''
-          maxLength: 255
-        reason:
-          $ref: '#/components/schemas/ReasonEnum'
-        reason_free:
-          type: string
-          default: ''
-          maxLength: 255
-        requester_last_name:
-          type: string
-          maxLength: 100
-        requester_first_names:
-          type: string
-          maxLength: 200
-        date_of_birth:
-          type: string
-          format: date
-        place_of_birth:
-          type: string
-          maxLength: 200
-        contact_phone:
-          type: string
-          maxLength: 30
-        contact_email:
-          type: string
-          format: email
-        registered_last_name:
-          type: string
-          default: ''
-          maxLength: 100
-        registered_first_names:
-          type: string
-          default: ''
-          maxLength: 200
-        father_last_name:
-          type: string
-          maxLength: 100
-        mother_last_name:
-          type: string
-          maxLength: 100
-        parish_id:
-          type: integer
-        sacrament_approximate_date:
-          type: string
-          maxLength: 20
-        sacrament_location:
-          type: string
-          maxLength: 200
-        additional_info:
-          type: string
-          default: ''
-        document_details:
-          type: object
-          additionalProperties:
-            type: string
-        consent_given:
-          type: boolean
-        attachment_file_id:
-          type: integer
-          nullable: true
-      required:
-      - consent_given
-      - contact_email
-      - contact_phone
-      - date_of_birth
-      - document_type
-      - father_last_name
-      - mother_last_name
-      - parish_id
-      - place_of_birth
-      - reason
-      - requester_first_names
-      - requester_last_name
-      - sacrament_approximate_date
-      - sacrament_location
-    DocumentRequestDetailOutput:
-      type: object
-      description: |-
-        B5c — nom de paroisse + diocèse affichés depuis la FK target_parish ; repli sur
-        le texte stocké pour les demandes orphelines legacy (FK NULL).
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        reference:
-          type: string
-          maxLength: 30
-        document_type:
-          $ref: '#/components/schemas/DocumentTypeEnum'
-        document_type_label:
-          type: string
-          readOnly: true
-        document_type_free:
-          type: string
-          maxLength: 255
-        reason:
-          $ref: '#/components/schemas/ReasonEnum'
-        reason_label:
-          type: string
-          readOnly: true
-        reason_free:
-          type: string
-          maxLength: 255
-        status:
-          $ref: '#/components/schemas/Status165Enum'
-        status_label:
-          type: string
-          readOnly: true
-        rejection_reason:
-          type: string
-        assigned_to_name:
-          type: string
-          nullable: true
-          readOnly: true
-        requester_last_name:
-          type: string
-          maxLength: 100
-        requester_first_names:
-          type: string
-          maxLength: 200
-        requester_email:
-          type: string
-          format: email
-          readOnly: true
-        date_of_birth:
-          type: string
-          format: date
-        place_of_birth:
-          type: string
-          maxLength: 200
-        contact_phone:
-          type: string
-          maxLength: 30
-        contact_email:
-          type: string
-          format: email
-          maxLength: 254
-        registered_last_name:
-          type: string
-          maxLength: 100
-        registered_first_names:
-          type: string
-          maxLength: 200
-        father_last_name:
-          type: string
-          maxLength: 100
-        mother_last_name:
-          type: string
-          maxLength: 100
-        parish_name:
-          type: string
-          readOnly: true
-        diocese:
-          type: string
-          readOnly: true
-        sacrament_approximate_date:
-          type: string
-          maxLength: 20
-        sacrament_location:
-          type: string
-          maxLength: 200
-        additional_info:
-          type: string
-        document_details: {}
-        consent_given:
-          type: boolean
-        status_logs:
-          type: array
-          items:
-            $ref: '#/components/schemas/StatusLogOutput'
-          readOnly: true
-        attachments:
-          type: array
-          items:
-            $ref: '#/components/schemas/AttachmentOutput'
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - assigned_to_name
-      - attachments
-      - contact_email
-      - contact_phone
-      - date_of_birth
-      - diocese
-      - document_type
-      - document_type_label
-      - father_last_name
-      - id
-      - mother_last_name
-      - parish_name
-      - place_of_birth
-      - reason
-      - reason_label
-      - reference
-      - requester_email
-      - requester_first_names
-      - requester_last_name
-      - sacrament_approximate_date
-      - sacrament_location
-      - status_label
-      - status_logs
-      - updated_at
-    DocumentRequestListOutput:
-      type: object
-      description: |-
-        B5c — nom de paroisse + diocèse affichés depuis la FK target_parish ; repli sur
-        le texte stocké pour les demandes orphelines legacy (FK NULL).
-      properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        reference:
-          type: string
-          maxLength: 30
-        document_type:
-          $ref: '#/components/schemas/DocumentTypeEnum'
-        document_type_label:
-          type: string
-          readOnly: true
-        document_type_free:
-          type: string
-          maxLength: 255
-        reason:
-          $ref: '#/components/schemas/ReasonEnum'
-        status:
-          $ref: '#/components/schemas/Status165Enum'
-        status_label:
-          type: string
-          readOnly: true
-        requester_last_name:
-          type: string
-          maxLength: 100
-        requester_first_names:
-          type: string
-          maxLength: 200
-        requester_email:
-          type: string
-          format: email
-          readOnly: true
-        parish_name:
-          type: string
-          readOnly: true
-        diocese:
-          type: string
-          readOnly: true
-        target_parish:
-          type: integer
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        sla_days:
-          type: integer
-          nullable: true
-          readOnly: true
-        sla_threshold_days:
-          type: integer
-          nullable: true
-          readOnly: true
-        is_escalated:
-          type: boolean
-          readOnly: true
-        final_document_url:
-          type: string
-          nullable: true
-          readOnly: true
-      required:
-      - diocese
-      - document_type
-      - document_type_label
-      - final_document_url
-      - id
-      - is_escalated
-      - parish_name
-      - reason
-      - reference
-      - requester_email
-      - requester_first_names
-      - requester_last_name
-      - sla_days
-      - sla_threshold_days
-      - status_label
-      - updated_at
-    DocumentRequestOptionsOutput:
-      type: object
-      description: Référentiel du formulaire de demande — source unique de la règle
-        type ↔ motif.
       properties:
         document_types:
           type: array
           items:
-            $ref: '#/components/schemas/DocumentRequestTypeOption'
+            type: object
+            additionalProperties: {}
         reasons:
           type: array
           items:
-            $ref: '#/components/schemas/DocumentRequestReasonOption'
-      required:
-      - document_types
-      - reasons
-    DocumentRequestReasonOption:
-      type: object
-      description: 'Un motif de demande : valeur technique + libellé affichable.'
-      properties:
-        value:
-          type: string
-          description: Valeur à renvoyer dans le champ `reason`.
-        label:
-          type: string
-          description: Libellé affichable (français).
-      required:
-      - label
-      - value
-    DocumentRequestStatusCountsOutput:
-      type: object
-      description: Comptages par statut sur le périmètre d'autorité du demandeur.
-      properties:
-        counts:
-          type: object
-          additionalProperties:
-            type: integer
-        total:
-          type: integer
-      required:
-      - counts
-      - total
-    DocumentRequestSupplementInput:
-      type: object
-      properties:
-        additional_info:
-          type: string
-        document_details:
-          type: object
-          additionalProperties:
-            type: string
-    DocumentRequestTypeOption:
-      type: object
-      description: Un type de document, avec les motifs recevables pour ce type.
-      properties:
-        value:
-          type: string
-          description: Valeur à renvoyer dans le champ `document_type`.
-        label:
-          type: string
-          description: Libellé affichable (français).
-        requires_precision:
-          type: boolean
-          description: Si vrai, `document_type_free` est obligatoire (cas « Autre
-            document »).
-        allowed_reasons:
+            type: object
+            additionalProperties: {}
+        pickup_modes:
           type: array
           items:
-            type: string
-          description: Valeurs de `reason` recevables avec ce type de document.
+            type: object
+            additionalProperties: {}
       required:
-      - allowed_reasons
-      - label
-      - requires_precision
-      - value
+      - document_types
+      - pickup_modes
+      - reasons
+    DocumentRequestStatusEnum:
+      enum:
+      - submitted
+      - under_verification
+      - info_requested
+      - ready_for_pickup
+      - collected
+      - rejected
+      - cancelled
+      - validated
+      - document_deposited
+      type: string
+      description: |-
+        * `submitted` - Soumise
+        * `under_verification` - En vérification
+        * `info_requested` - Complément demandé
+        * `ready_for_pickup` - Prête à retirer
+        * `collected` - Retirée
+        * `rejected` - Rejetée
+        * `cancelled` - Annulée
+        * `validated` - Validée (historique)
+        * `document_deposited` - Document déposé (historique)
     DocumentTypeEnum:
       enum:
       - baptism
@@ -8757,31 +8375,6 @@ components:
           type: string
       required:
       - file_id
-    InternalNoteCreateInput:
-      type: object
-      properties:
-        content:
-          type: string
-      required:
-      - content
-    InternalNoteOutput:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        author_name:
-          type: string
-          readOnly: true
-        content:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - author_name
-      - content
-      - id
     LiturgicalDate:
       type: object
       description: |-
@@ -9356,6 +8949,33 @@ components:
       - occurrences
       - places
       - start
+    NoteInput:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+      - content
+    NoteOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        author_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - author_id
+      - content
+      - id
     NotificationOutput:
       type: object
       properties:
@@ -9705,32 +9325,6 @@ components:
       - offset
       - previous
       - results
-    PaginatedDocumentRequestListOutputList:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-        count:
-          type: integer
-        next:
-          type: string
-          nullable: true
-        previous:
-          type: string
-          nullable: true
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/DocumentRequestListOutput'
-      required:
-      - count
-      - limit
-      - next
-      - offset
-      - previous
-      - results
     PaginatedEventOutputList:
       type: object
       properties:
@@ -9861,6 +9455,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedQueueItemList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedRegistrationOutputList:
       type: object
       properties:
@@ -9880,6 +9500,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RegistrationOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedRequesterOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequesterOutput'
       required:
       - count
       - limit
@@ -9990,7 +9636,7 @@ components:
       type: object
       properties:
         content_type:
-          $ref: '#/components/schemas/ContentType1e5Enum'
+          $ref: '#/components/schemas/ArticleV1TypeEnum'
         title:
           type: string
           maxLength: 200
@@ -10333,6 +9979,14 @@ components:
       - institut_node
       - statut_verification
       - verification_note
+    PickupModeEnum:
+      enum:
+      - secretariat
+      - transfer_to_followed_parish
+      type: string
+      description: |-
+        * `secretariat` - Au secrétariat de la paroisse du sacrement
+        * `transfer_to_followed_parish` - Transmis à ma paroisse
     PlaceCreateInput:
       type: object
       properties:
@@ -10503,6 +10157,143 @@ components:
       - full_name
       - id
       - user_id
+    ProcessorOutput:
+      type: object
+      description: 'Vue de la paroisse : identité complète, registre, lieu de retrait.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        reference:
+          type: string
+          maxLength: 30
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_type_label:
+          type: string
+          readOnly: true
+        document_type_free:
+          type: string
+          maxLength: 255
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+        reason_free:
+          type: string
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/DocumentRequestStatusEnum'
+        status_label:
+          type: string
+          readOnly: true
+        target_node:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        requester_last_name:
+          type: string
+          maxLength: 100
+        requester_first_names:
+          type: string
+          maxLength: 200
+        date_of_birth:
+          type: string
+          format: date
+        place_of_birth:
+          type: string
+          maxLength: 200
+        contact_phone:
+          type: string
+          maxLength: 30
+        contact_email:
+          type: string
+          format: email
+          maxLength: 254
+        registered_last_name:
+          type: string
+          maxLength: 100
+        registered_first_names:
+          type: string
+          maxLength: 200
+        father_last_name:
+          type: string
+          maxLength: 100
+        mother_last_name:
+          type: string
+          maxLength: 100
+        sacrament_approximate_date:
+          type: string
+          maxLength: 20
+        sacrament_location:
+          type: string
+          maxLength: 200
+        additional_info:
+          type: string
+        document_details: {}
+        rejection_reason:
+          type: string
+        pickup:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        can_cancel:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        register:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
+        assigned_to_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        pickup_mode:
+          $ref: '#/components/schemas/PickupModeEnum'
+      required:
+      - assigned_to_id
+      - can_cancel
+      - contact_email
+      - contact_phone
+      - date_of_birth
+      - document_type
+      - document_type_label
+      - father_last_name
+      - history
+      - id
+      - mother_last_name
+      - pickup
+      - place_of_birth
+      - reason
+      - reference
+      - register
+      - requester_first_names
+      - requester_last_name
+      - sacrament_approximate_date
+      - sacrament_location
+      - status_label
+      - target_node
+      - updated_at
     ProvinceCreateInput:
       type: object
       properties:
@@ -10565,6 +10356,65 @@ components:
       - created_at
       - id
       - platform
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        reference:
+          type: string
+          maxLength: 30
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_type_label:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/DocumentRequestStatusEnum'
+        status_label:
+          type: string
+          readOnly: true
+        target_node:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        requester_name:
+          type: string
+          readOnly: true
+        assigned_to_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        age_days:
+          type: integer
+          nullable: true
+          readOnly: true
+        is_overdue:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - age_days
+      - assigned_to_id
+      - document_type
+      - document_type_label
+      - id
+      - is_overdue
+      - reference
+      - requester_name
+      - status_label
+      - target_node
+      - updated_at
     ReactInput:
       type: object
       properties:
@@ -10654,6 +10504,20 @@ components:
         * `parish_clergy` - Clergé de la paroisse
         * `diocese_clergy` - Clergé du diocèse
         * `province_bishops` - Évêques de la province
+    RegisterRefInput:
+      type: object
+      properties:
+        register_volume:
+          type: string
+          maxLength: 40
+        register_page:
+          type: string
+          maxLength: 20
+        register_number:
+          type: string
+          maxLength: 40
+        register_marginal_notes:
+          type: string
     RegistrationOutput:
       type: object
       properties:
@@ -10681,13 +10545,218 @@ components:
       - id
       - registered_at
       - user_id
-    RejectInput:
+    RequestCreateInput:
       type: object
       properties:
-        reason:
+        target_node_id:
           type: string
+          format: uuid
+          description: Paroisse où le sacrement a été célébré (RG-02)
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_type_free:
+          type: string
+          default: ''
+          maxLength: 255
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+        reason_free:
+          type: string
+          default: ''
+          maxLength: 255
+        requester_last_name:
+          type: string
+          maxLength: 100
+        requester_first_names:
+          type: string
+          maxLength: 200
+        date_of_birth:
+          type: string
+          format: date
+        place_of_birth:
+          type: string
+          maxLength: 200
+        contact_phone:
+          type: string
+          maxLength: 30
+        contact_email:
+          type: string
+          format: email
+        registered_last_name:
+          type: string
+          default: ''
+          maxLength: 100
+        registered_first_names:
+          type: string
+          default: ''
+          maxLength: 200
+        father_last_name:
+          type: string
+          maxLength: 100
+        mother_last_name:
+          type: string
+          maxLength: 100
+        sacrament_approximate_date:
+          type: string
+          maxLength: 20
+        sacrament_location:
+          type: string
+          maxLength: 200
+        additional_info:
+          type: string
+          default: ''
+        document_details:
+          type: object
+          additionalProperties:
+            type: string
+        pickup_mode:
+          allOf:
+          - $ref: '#/components/schemas/PickupModeEnum'
+          default: secretariat
+        consent_given:
+          type: boolean
+        attachment_file_id:
+          type: integer
+          nullable: true
       required:
+      - consent_given
+      - contact_email
+      - contact_phone
+      - date_of_birth
+      - document_type
+      - father_last_name
+      - mother_last_name
+      - place_of_birth
       - reason
+      - requester_first_names
+      - requester_last_name
+      - sacrament_approximate_date
+      - sacrament_location
+      - target_node_id
+    RequesterOutput:
+      type: object
+      description: 'Vue du fidèle : jamais les notes internes ni les références du
+        registre (EF-ACT-02, -05).'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        reference:
+          type: string
+          maxLength: 30
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_type_label:
+          type: string
+          readOnly: true
+        document_type_free:
+          type: string
+          maxLength: 255
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+        reason_free:
+          type: string
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/DocumentRequestStatusEnum'
+        status_label:
+          type: string
+          readOnly: true
+        target_node:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        requester_last_name:
+          type: string
+          maxLength: 100
+        requester_first_names:
+          type: string
+          maxLength: 200
+        date_of_birth:
+          type: string
+          format: date
+        place_of_birth:
+          type: string
+          maxLength: 200
+        contact_phone:
+          type: string
+          maxLength: 30
+        contact_email:
+          type: string
+          format: email
+          maxLength: 254
+        registered_last_name:
+          type: string
+          maxLength: 100
+        registered_first_names:
+          type: string
+          maxLength: 200
+        father_last_name:
+          type: string
+          maxLength: 100
+        mother_last_name:
+          type: string
+          maxLength: 100
+        sacrament_approximate_date:
+          type: string
+          maxLength: 20
+        sacrament_location:
+          type: string
+          maxLength: 200
+        additional_info:
+          type: string
+        document_details: {}
+        rejection_reason:
+          type: string
+        pickup:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+        history:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        can_cancel:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - can_cancel
+      - contact_email
+      - contact_phone
+      - date_of_birth
+      - document_type
+      - document_type_label
+      - father_last_name
+      - history
+      - id
+      - mother_last_name
+      - pickup
+      - place_of_birth
+      - reason
+      - reference
+      - requester_first_names
+      - requester_last_name
+      - sacrament_approximate_date
+      - sacrament_location
+      - status_label
+      - target_node
+      - updated_at
     RequiredOrderEnum:
       enum:
       - aucun
@@ -11087,7 +11156,7 @@ components:
           readOnly: true
         content_type:
           allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          - $ref: '#/components/schemas/ArticleContentTypeEnum'
           title: Type de contenu
         title:
           type: string
@@ -11129,7 +11198,7 @@ components:
           title: Dimanche concerné
         status:
           allOf:
-          - $ref: '#/components/schemas/StaffArticleOutputStatusEnum'
+          - $ref: '#/components/schemas/ArticleStatusEnum'
           title: Statut
         publish_at:
           type: string
@@ -11170,65 +11239,55 @@ components:
       - slug
       - title
       - updated_at
-    StaffArticleOutputStatusEnum:
-      enum:
-      - draft
-      - scheduled
-      - published
-      - unpublished
-      type: string
-      description: |-
-        * `draft` - Brouillon
-        * `scheduled` - Programmé
-        * `published` - Publié
-        * `unpublished` - Dépublié
-    Status165Enum:
-      enum:
-      - submitted
-      - under_verification
-      - info_requested
-      - validated
-      - rejected
-      - document_deposited
-      type: string
-      description: |-
-        * `submitted` - Soumise
-        * `under_verification` - En vérification
-        * `info_requested` - Complément demandé
-        * `validated` - Validée
-        * `rejected` - Rejetée
-        * `document_deposited` - Document déposé
-    StatusActionWithCommentInput:
+    StatsOutput:
       type: object
       properties:
-        comment:
-          type: string
-          default: ''
-    StatusLogOutput:
-      type: object
-      properties:
-        id:
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+        total:
           type: integer
-          readOnly: true
+        median_days_to_collect:
+          type: number
+          format: double
+          nullable: true
+        overdue:
+          type: integer
+      required:
+      - counts
+      - median_days_to_collect
+      - overdue
+      - total
+    StatusLog:
+      type: object
+      properties:
         from_status:
           type: string
           maxLength: 30
         to_status:
           type: string
           maxLength: 30
-        changed_by_name:
-          type: string
-          nullable: true
-          readOnly: true
         comment:
           type: string
         created_at:
           type: string
           format: date-time
       required:
-      - changed_by_name
-      - id
       - to_status
+    SupplementInput:
+      type: object
+      properties:
+        additional_info:
+          type: string
+          default: ''
+        document_details:
+          type: object
+          additionalProperties:
+            type: string
+        attachment_file_id:
+          type: integer
+          nullable: true
     TestamentWithBooksOutput:
       type: object
       properties:
@@ -11273,6 +11332,21 @@ components:
       required:
       - day
       - standalone_prayers
+    TransitionInput:
+      type: object
+      properties:
+        message:
+          type: string
+          default: ''
+          description: Motif (rejet), complément attendu, ou message de retrait
+        pickup_place_id:
+          type: integer
+          nullable: true
+          description: 'mark-ready : lieu de retrait'
+        pickup_hours:
+          type: string
+          default: ''
+          maxLength: 255
     TypeEnum:
       enum:
       - SIGN_OF_CROSS

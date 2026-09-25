@@ -1,462 +1,266 @@
-from uuid import UUID
-
-from django.http import Http404
-from django.shortcuts import get_object_or_404
-from drf_spectacular.openapi import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.mixins import ApiAuthMixin
-from apps.api.pagination import (
-    LimitOffsetPagination,
-    get_paginated_response,
-    paginated_response_serializer,
-)
-from apps.core.exceptions import ApplicationError
+from apps.api.mixins import ApiAuthMixin, PermissionClassesType
+from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
+from apps.api.v1 import V1ApiMixin
+from apps.core.exceptions import NotFoundError
+from apps.documents import selectors, services
 from apps.documents.constants import allowed_reasons_for
-from apps.documents.exceptions import DocumentRequestNotFoundError
 from apps.documents.models import DocumentRequest
-from apps.documents.permissions import IsDocumentRequester, IsDocumentRequesterOrAdmin
-from apps.documents.selectors import (
-    document_request_get,
-    document_request_get_for_admin,
-    document_request_internal_note_list,
-    document_request_list,
-    document_request_status_counts,
-    document_request_status_log_list,
-)
 from apps.documents.serializers import (
-    DepositDocumentInputSerializer,
-    DocumentRequestCreateInputSerializer,
-    DocumentRequestDetailOutputSerializer,
-    DocumentRequestListOutputSerializer,
-    DocumentRequestOptionsOutputSerializer,
-    DocumentRequestStatusCountsOutputSerializer,
-    DocumentRequestSupplementInputSerializer,
-    InternalNoteCreateInputSerializer,
-    InternalNoteOutputSerializer,
-    RejectInputSerializer,
-    StatusActionWithCommentInputSerializer,
-    StatusLogOutputSerializer,
+    CountsOutputSerializer,
+    NodeQuerySerializer,
+    NoteInputSerializer,
+    NoteOutputSerializer,
+    ProcessorOutputSerializer,
+    QueueFilterSerializer,
+    QueueItemSerializer,
+    RegisterRefInputSerializer,
+    RequestCreateInputSerializer,
+    RequesterFilterSerializer,
+    RequesterOutputSerializer,
+    StatsOutputSerializer,
+    StatusLogSerializer,
+    SupplementInputSerializer,
+    TransitionInputSerializer,
 )
-from apps.documents.services import (
-    document_request_add_internal_note,
-    document_request_create,
-    document_request_deposit_document,
-    document_request_reject,
-    document_request_request_info,
-    document_request_start_verification,
-    document_request_submit_supplement,
-    document_request_validate,
-)
-from apps.users.permissions import IsAnyAdmin, IsOnboardingCompleted
+from apps.hierarchy import selectors as hierarchy_selectors
+from apps.hierarchy.authz import HasCapability
+
+TAG = ["documents"]
+_PAGINATION = [
+    OpenApiParameter("limit", int, description="Nombre de résultats (défaut 10, max 50)"),
+    OpenApiParameter("offset", int, description="Décalage"),
+]
 
 
-def _error(exc: ApplicationError) -> Response:
-    return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+class _AuthedApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes: PermissionClassesType = (IsAuthenticated,)
 
 
-def _get_for_admin_or_404(*, request_id: UUID, user) -> DocumentRequest:
-    """Traduit l'exception domaine du sélecteur en 404 HTTP.
-
-    La couche HTTP est seule responsable du mapping : le sélecteur reste
-    appelable depuis une tâche Celery ou une commande sans lever de `Http404`.
-    Le 404 (et non 403) est VOULU — il évite de révéler l'existence d'une
-    demande appartenant à une autre paroisse.
-    """
-    try:
-        return document_request_get_for_admin(request_id=request_id, user=user)
-    except DocumentRequestNotFoundError:
-        raise Http404
+class _ProcessorApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes: PermissionClassesType = (IsAuthenticated, HasCapability("actes.traiter"))
 
 
-# ---------------------------------------------------------------------------
-# Côté fidèle
-# ---------------------------------------------------------------------------
+# --- Fidèle --------------------------------------------------------------------------------
 
 
-class DocumentRequestListCreateApi(ApiAuthMixin, APIView):
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
-    def get_permissions(self):
-        # GET (lister ses demandes) : authentification suffit. POST (créer une
-        # demande = écriture territoriale) : onboarding finalisé requis (A1).
-        if self.request.method == "POST":
-            return [IsAuthenticated(), IsOnboardingCompleted()]
-        return [IsAuthenticated()]
-
+class RequestListCreateApi(_AuthedApi):
     @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats (défaut 20)"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("status", OpenApiTypes.STR, enum=["submitted", "under_verification", "validated", "info_requested", "rejected", "document_deposited"], description="Filtrer par statut"),
-            OpenApiParameter("document_type", OpenApiTypes.STR, description="Filtrer par type de document"),
-            OpenApiParameter("parish_name", OpenApiTypes.STR, description="Filtrer par nom de paroisse"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche textuelle"),
-        ],
-        responses={200: paginated_response_serializer(DocumentRequestListOutputSerializer)},
-        tags=["documents"],
-        summary="Lister mes demandes de document",
+        tags=TAG,
+        operation_id="documents_requests_list",
+        summary="Mes demandes d'actes",
+        parameters=[RequesterFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(RequesterOutputSerializer),
     )
-    def get(self, request):
-        filters = {
-            k: v
-            for k, v in request.query_params.items()
-            if k in ("status", "document_type", "parish_name", "search")
-        }
-        qs = document_request_list(user=request.user, filters=filters)
+    def get(self, request: Request) -> Response:
+        filters = RequesterFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
         return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=DocumentRequestListOutputSerializer,
-            queryset=qs,
+            pagination_class=LimitOffsetPagination,
+            serializer_class=RequesterOutputSerializer,
+            queryset=selectors.request_list_for_requester(user=request.user, status=filters.validated_data.get("status")),
             request=request,
             view=self,
         )
 
     @extend_schema(
-        request=DocumentRequestCreateInputSerializer,
-        responses={201: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Créer une demande de document",
+        tags=TAG,
+        summary="Demander un acte à la paroisse du sacrement",
+        request=RequestCreateInputSerializer,
+        responses={201: RequesterOutputSerializer},
     )
-    def post(self, request):
-        serializer = DocumentRequestCreateInputSerializer(data=request.data)
+    def post(self, request: Request) -> Response:
+        serializer = RequestCreateInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            req = document_request_create(
-                requester=request.user, data=dict(serializer.validated_data)
-            )
-        except ApplicationError as exc:
-            return _error(exc)
+        data = dict(serializer.validated_data)
+        target = hierarchy_selectors.node_get(node_id=data.pop("target_node_id"))
+        request_obj = services.document_request_create(requester=request.user, target_node=target, data=data)
         return Response(
-            DocumentRequestDetailOutputSerializer(req).data,
+            RequesterOutputSerializer(selectors.request_get_for_requester(user=request.user, request_id=request_obj.pk)).data,
             status=status.HTTP_201_CREATED,
         )
 
 
-class DocumentRequestOptionsApi(ApiAuthMixin, APIView):
-    """Référentiel du formulaire : types, motifs, et la règle qui les relie.
-
-    Le frontend consomme cette réponse plutôt que de redéclarer la table en dur —
-    une copie côté client finirait par diverger de la règle appliquée au serveur.
-    """
-
-    def get_permissions(self):
-        return [IsAuthenticated()]
-
+class RequestOptionsApi(_AuthedApi):
     @extend_schema(
-        responses={200: DocumentRequestOptionsOutputSerializer},
-        tags=["documents"],
-        summary="Options du formulaire de demande (types, motifs, compatibilités)",
+        tags=TAG,
+        summary="Options du formulaire (types, motifs, compatibilités, modes de retrait)",
+        responses=inline_serializer(
+            "DocumentRequestOptions",
+            {
+                "document_types": serializers.ListField(child=serializers.DictField()),
+                "reasons": serializers.ListField(child=serializers.DictField()),
+                "pickup_modes": serializers.ListField(child=serializers.DictField()),
+            },
+        ),
     )
-    def get(self, request):
-        reason_labels = dict(DocumentRequest.RequestReason.choices)
-        payload = {
-            "document_types": [
-                {
-                    "value": value,
-                    "label": str(label),
-                    "requires_precision": value == DocumentRequest.DocumentType.OTHER,
-                    "allowed_reasons": list(allowed_reasons_for(value)),
-                }
-                for value, label in DocumentRequest.DocumentType.choices
-            ],
-            "reasons": [
-                {"value": value, "label": str(label)} for value, label in reason_labels.items()
-            ],
-        }
-        return Response(DocumentRequestOptionsOutputSerializer(payload).data)
+    def get(self, request: Request) -> Response:
+        return Response(
+            {
+                "document_types": [
+                    {
+                        "value": value,
+                        "label": str(label),
+                        "requires_precision": value == DocumentRequest.DocumentType.OTHER,
+                        "allowed_reasons": list(allowed_reasons_for(value)),
+                    }
+                    for value, label in DocumentRequest.DocumentType.choices
+                ],
+                "reasons": [{"value": v, "label": str(label)} for v, label in DocumentRequest.RequestReason.choices],
+                "pickup_modes": [{"value": v, "label": str(label)} for v, label in DocumentRequest.PickupMode.choices],
+            }
+        )
 
 
-class DocumentRequestDetailApi(ApiAuthMixin, APIView):
-    def get_permissions(self):
-        return [IsAuthenticated(), IsDocumentRequesterOrAdmin()]
-
-    @extend_schema(
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Détail d'une demande de document",
-    )
-    def get(self, request, request_id: UUID):
-        try:
-            req = document_request_get(request_id=request_id, user=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        self.check_object_permissions(request, req)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
+class RequestDetailApi(_AuthedApi):
+    @extend_schema(tags=TAG, summary="Suivi de ma demande (statut, historique, retrait)", responses=RequesterOutputSerializer)
+    def get(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
+        return Response(RequesterOutputSerializer(obj, context={"with_history": True}).data)
 
 
-class DocumentRequestSupplementApi(ApiAuthMixin, APIView):
-    def get_permissions(self):
-        return [IsAuthenticated(), IsDocumentRequester()]
-
-    @extend_schema(
-        request=DocumentRequestSupplementInputSerializer,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Soumettre un complément d'information",
-    )
-    def post(self, request, request_id: UUID):
-        req = get_object_or_404(DocumentRequest, pk=request_id)
-        self.check_object_permissions(request, req)
-        if req.status != DocumentRequest.Status.INFO_REQUESTED:
-            return Response(
-                {"detail": "Un complément n'est possible que si le statut est 'info_requested'."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        serializer = DocumentRequestSupplementInputSerializer(data=request.data)
+class RequestSupplementApi(_AuthedApi):
+    @extend_schema(tags=TAG, summary="Envoyer le complément demandé", request=SupplementInputSerializer, responses=RequesterOutputSerializer)
+    def post(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
+        serializer = SupplementInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            req = document_request_submit_supplement(
-                request_obj=req,
-                requester=request.user,
-                data=dict(serializer.validated_data),
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
+        services.document_request_submit_supplement(request_obj=obj, requester=request.user, **serializer.validated_data)
+        obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
+        return Response(RequesterOutputSerializer(obj, context={"with_history": True}).data)
 
 
-# ---------------------------------------------------------------------------
-# Back-office paroisse / admin
-# ---------------------------------------------------------------------------
+class RequestCancelApi(_AuthedApi):
+    @extend_schema(tags=TAG, summary="Annuler ma demande (soumise ou en complément)", request=None, responses=RequesterOutputSerializer)
+    def post(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
+        services.document_request_cancel(request_obj=obj, requester=request.user)
+        return Response(RequesterOutputSerializer(selectors.request_get_for_requester(user=request.user, request_id=request_id)).data)
 
 
-class AdminDocumentRequestListApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
+# --- Paroisse -----------------------------------------------------------------------------
 
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
 
+class QueueApi(_ProcessorApi):
     @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats (défaut 20)"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("status", OpenApiTypes.STR, enum=["submitted", "under_verification", "validated", "info_requested", "rejected", "document_deposited"], description="Filtrer par statut"),
-            OpenApiParameter("document_type", OpenApiTypes.STR, description="Filtrer par type de document"),
-            OpenApiParameter("parish_name", OpenApiTypes.STR, description="Filtrer par nom de paroisse"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche textuelle"),
-            OpenApiParameter("assigned_to_id", OpenApiTypes.INT, description="Filtrer par agent assigné"),
-        ],
-        responses={200: paginated_response_serializer(DocumentRequestListOutputSerializer)},
-        tags=["documents"],
-        summary="Lister toutes les demandes (admin)",
+        tags=TAG,
+        operation_id="staff_documents_list",
+        summary="File de traitement (actes.traiter)",
+        parameters=[QueueFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(QueueItemSerializer),
     )
-    def get(self, request):
-        filters = {
-            k: v
-            for k, v in request.query_params.items()
-            if k in ("status", "document_type", "parish_name", "search", "assigned_to_id")
-        }
-        qs = document_request_list(user=request.user, filters=filters)
+    def get(self, request: Request) -> Response:
+        filters = QueueFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
         return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=DocumentRequestListOutputSerializer,
-            queryset=qs,
+            pagination_class=LimitOffsetPagination,
+            serializer_class=QueueItemSerializer,
+            queryset=selectors.queue_for(user=request.user, filters=filters.validated_data),
             request=request,
             view=self,
         )
 
 
-class AdminDocumentRequestStatusCountsApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
+class QueueCountsApi(_ProcessorApi):
+    @extend_schema(tags=TAG, summary="Compteurs par statut de ma file", parameters=[NodeQuerySerializer], responses=CountsOutputSerializer)
+    def get(self, request: Request) -> Response:
+        query = NodeQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        return Response(selectors.status_counts(queryset=selectors.queue_for(user=request.user, filters=query.validated_data)))
+
+
+class SupervisionStatsApi(_AuthedApi):
+    permission_classes = (IsAuthenticated, HasCapability("actes.superviser"))
 
     @extend_schema(
-        parameters=[
-            OpenApiParameter("document_type", OpenApiTypes.STR, description="Filtrer par type de document"),
-            OpenApiParameter("parish_name", OpenApiTypes.STR, description="Filtrer par nom de paroisse"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche textuelle"),
-            OpenApiParameter("assigned_to_id", OpenApiTypes.INT, description="Filtrer par agent assigné"),
-        ],
-        responses={200: DocumentRequestStatusCountsOutputSerializer},
-        tags=["documents"],
-        summary="Compter les demandes par statut sur son périmètre (admin)",
-        description=(
-            "Renvoie les six statuts, à 0 le cas échéant. Le filtre `status` est "
-            "volontairement ignoré : les comptages porteraient sinon à zéro sur "
-            "tous les autres statuts."
-        ),
+        tags=TAG,
+        summary="Indicateurs agrégés, sans nom (actes.superviser)",
+        parameters=[NodeQuerySerializer],
+        responses=StatsOutputSerializer,
     )
-    def get(self, request):
-        filters = {
-            k: v
-            for k, v in request.query_params.items()
-            if k in ("document_type", "parish_name", "search", "assigned_to_id")
-        }
-        data = document_request_status_counts(user=request.user, filters=filters)
-        return Response(DocumentRequestStatusCountsOutputSerializer(data).data)
+    def get(self, request: Request) -> Response:
+        query = NodeQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        return Response(selectors.supervision_stats(user=request.user, node_id=query.validated_data.get("node")))
 
 
-class AdminDocumentRequestDetailApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
+class ProcessorDetailApi(_ProcessorApi):
+    @extend_schema(tags=TAG, summary="Détail d'une demande de ma file", responses=ProcessorOutputSerializer)
+    def get(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True}).data)
 
+
+_ACTIONS = {
+    "start-verification": "start_verification",
+    "request-info": "request_info",
+    "mark-ready": "mark_ready",
+    "mark-collected": "mark_collected",
+    "reject": "reject",
+}
+
+
+class ProcessorTransitionApi(_ProcessorApi):
     @extend_schema(
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Détail d'une demande (admin)",
+        tags=TAG,
+        summary="Faire avancer la demande (start-verification, request-info, mark-ready, mark-collected, reject)",
+        request=TransitionInputSerializer,
+        responses=ProcessorOutputSerializer,
     )
-    def get(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminStartVerificationApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        request=None,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Démarrer la vérification (admin)",
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        try:
-            req = document_request_start_verification(request_obj=req, agent=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminRequestInfoApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        request=StatusActionWithCommentInputSerializer,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Demander un complément d'information (admin)",
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        serializer = StatusActionWithCommentInputSerializer(data=request.data)
+    def post(self, request: Request, request_id: str, transition: str) -> Response:
+        if transition not in _ACTIONS:
+            raise NotFoundError("Action inconnue.", {"transition": transition})
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        serializer = TransitionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            req = document_request_request_info(
-                request_obj=req,
-                agent=request.user,
-                comment=serializer.validated_data["comment"],
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminValidateApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        request=None,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Valider une demande (admin)",
-        description=(
-            "Cet endpoint n'accepte AUCUN corps de requête : la validation est une simple "
-            "transition d'état. Tout payload envoyé serait ignoré silencieusement."
-        ),
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        try:
-            req = document_request_validate(request_obj=req, agent=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminRejectApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        request=RejectInputSerializer,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Rejeter une demande (admin)",
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        serializer = RejectInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        try:
-            req = document_request_reject(
-                request_obj=req,
-                agent=request.user,
-                reason=serializer.validated_data["reason"],
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminDepositApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        request=DepositDocumentInputSerializer,
-        responses={200: DocumentRequestDetailOutputSerializer},
-        tags=["documents"],
-        summary="Déposer le document final (admin)",
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        serializer = DepositDocumentInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        try:
-            req = document_request_deposit_document(
-                request_obj=req,
-                agent=request.user,
-                file_id=serializer.validated_data["file_id"],
-                label=serializer.validated_data.get("label", "Document officiel"),
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(DocumentRequestDetailOutputSerializer(req).data)
-
-
-class AdminNotesApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(
-        responses={200: InternalNoteOutputSerializer(many=True)},
-        tags=["documents"],
-        summary="Lister les notes internes (admin)",
-    )
-    def get(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        notes = document_request_internal_note_list(request_obj=req)
-        return Response(InternalNoteOutputSerializer(notes, many=True).data)
-
-    @extend_schema(
-        request=InternalNoteCreateInputSerializer,
-        responses={201: InternalNoteOutputSerializer},
-        tags=["documents"],
-        summary="Ajouter une note interne (admin)",
-    )
-    def post(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        serializer = InternalNoteCreateInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        note = document_request_add_internal_note(
-            request_obj=req,
-            author=request.user,
-            content=serializer.validated_data["content"],
+        data = serializer.validated_data
+        place_id = data.get("pickup_place_id")
+        services.document_request_process(
+            request_obj=obj,
+            actor=request.user,
+            action=_ACTIONS[transition],
+            message=data["message"],
+            pickup_place=hierarchy_selectors.place_get(place_id=place_id) if place_id else None,
+            pickup_hours=data["pickup_hours"],
         )
-        return Response(InternalNoteOutputSerializer(note).data, status=status.HTTP_201_CREATED)
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True}).data)
 
 
-class AdminLogsApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
+class RegisterRefApi(_ProcessorApi):
+    @extend_schema(tags=TAG, summary="Références du registre (jamais visibles du fidèle)", request=RegisterRefInputSerializer, responses=ProcessorOutputSerializer)
+    def put(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        serializer = RegisterRefInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.document_request_register_ref_set(request_obj=obj, actor=request.user, data=serializer.validated_data)
+        return Response(ProcessorOutputSerializer(selectors.request_get_for_processor(user=request.user, request_id=request_id)).data)
 
-    @extend_schema(
-        responses={200: StatusLogOutputSerializer(many=True)},
-        tags=["documents"],
-        summary="Historique des statuts (admin)",
-    )
-    def get(self, request, request_id: UUID):
-        req = _get_for_admin_or_404(request_id=request_id, user=request.user)
-        logs = document_request_status_log_list(request_obj=req)
-        return Response(StatusLogOutputSerializer(logs, many=True).data)
+
+class NotesApi(_ProcessorApi):
+    @extend_schema(tags=TAG, summary="Notes internes (jamais visibles du fidèle)", responses=NoteOutputSerializer(many=True))
+    def get(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(NoteOutputSerializer(selectors.internal_notes(request_obj=obj), many=True).data)
+
+    @extend_schema(tags=TAG, summary="Ajouter une note interne", request=NoteInputSerializer, responses={201: NoteOutputSerializer})
+    def post(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        serializer = NoteInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        note = services.document_request_add_internal_note(request_obj=obj, author=request.user, **serializer.validated_data)
+        return Response(NoteOutputSerializer(note).data, status=status.HTTP_201_CREATED)
+
+
+class LogsApi(_ProcessorApi):
+    @extend_schema(tags=TAG, summary="Journal des statuts", responses=StatusLogSerializer(many=True))
+    def get(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(StatusLogSerializer(selectors.status_logs(request_obj=obj), many=True).data)
+

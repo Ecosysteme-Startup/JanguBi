@@ -31,12 +31,21 @@ class DocumentRequest(BaseModel):
         OTHER = "other", _("Autre")
 
     class Status(models.TextChoices):
+        # Cycle V1 (SRS §8.1). VALIDATED et DOCUMENT_DEPOSITED sont historiques : la
+        # migration 0011 les convertit en READY_FOR_PICKUP ; ils ne sont plus produits.
         SUBMITTED = "submitted", _("Soumise")
         UNDER_VERIFICATION = "under_verification", _("En vérification")
         INFO_REQUESTED = "info_requested", _("Complément demandé")
-        VALIDATED = "validated", _("Validée")
+        READY_FOR_PICKUP = "ready_for_pickup", _("Prête à retirer")
+        COLLECTED = "collected", _("Retirée")
         REJECTED = "rejected", _("Rejetée")
-        DOCUMENT_DEPOSITED = "document_deposited", _("Document déposé")
+        CANCELLED = "cancelled", _("Annulée")
+        VALIDATED = "validated", _("Validée (historique)")
+        DOCUMENT_DEPOSITED = "document_deposited", _("Document déposé (historique)")
+
+    class PickupMode(models.TextChoices):
+        SECRETARIAT = "secretariat", _("Au secrétariat de la paroisse du sacrement")
+        TRANSFER = "transfer_to_followed_parish", _("Transmis à ma paroisse")
 
     class AttachmentType(models.TextChoices):
         USER_SUPPORTING = "user_supporting", _("Justificatif fidèle")
@@ -92,6 +101,37 @@ class DocumentRequest(BaseModel):
         blank=True,
         related_name="document_requests",
     )
+    # --- V1 (L5) ---------------------------------------------------------------
+    # Paroisse du sacrement (RG-02) : nœud qui tient les registres. target_parish
+    # (org.Parish) reste lisible jusqu'en L9.
+    target_node = models.ForeignKey(
+        "hierarchy.Node",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="document_requests",
+        verbose_name=_("paroisse du sacrement"),
+    )
+    pickup_mode = models.CharField(
+        max_length=40,
+        choices=PickupMode.choices,
+        default=PickupMode.SECRETARIAT,
+        db_default=PickupMode.SECRETARIAT,
+    )
+    pickup_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    pickup_hours = models.CharField(max_length=255, blank=True, default="", db_default="")
+    pickup_message = models.TextField(blank=True, default="", db_default="")
+    # Références du registre (EF-ACT-05) — jamais renvoyées au fidèle.
+    register_volume = models.CharField(max_length=40, blank=True, default="", db_default="")
+    register_page = models.CharField(max_length=20, blank=True, default="", db_default="")
+    register_number = models.CharField(max_length=40, blank=True, default="", db_default="")
+    register_marginal_notes = models.TextField(blank=True, default="", db_default="")
+    closed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_reminded_at = models.DateTimeField(null=True, blank=True)
+    attachments_purged_at = models.DateTimeField(null=True, blank=True)
+
     sacrament_approximate_date = models.CharField(max_length=20)
     sacrament_location = models.CharField(max_length=200)
     additional_info = models.TextField(blank=True, default="")
@@ -108,6 +148,7 @@ class DocumentRequest(BaseModel):
             models.Index(fields=["requester", "-created_at"], name="docreq_requester_idx"),
             models.Index(fields=["status", "-created_at"], name="docreq_status_idx"),
             models.Index(fields=["document_type", "status"], name="docreq_type_status_idx"),
+            models.Index(fields=["target_node", "status", "-created_at"], name="docreq_node_status_idx"),
         ]
 
     def __str__(self) -> str:
@@ -194,3 +235,19 @@ class InternalNote(BaseModel):
 
     def __str__(self) -> str:
         return f"Note — {self.request.reference} par {self.author_id}"
+
+
+class DocumentSlaSetting(BaseModel):
+    """Seuils de relance d'un nœud (EF-ACT-08). Le plus proche ancêtre réglé s'applique."""
+
+    node = models.OneToOneField("hierarchy.Node", on_delete=models.CASCADE, related_name="document_sla")
+    escalate_days = models.PositiveSmallIntegerField(_("relance de la paroisse (jours)"), default=7)
+    requester_reminder_days = models.PositiveSmallIntegerField(_("relance du fidèle (jours)"), default=5)
+    pickup_reminder_days = models.PositiveSmallIntegerField(_("rappel de retrait (jours)"), default=3)
+
+    class Meta:
+        verbose_name = _("Délais de traitement")
+        verbose_name_plural = _("Délais de traitement")
+
+    def __str__(self) -> str:
+        return f"Délais — {self.node}"

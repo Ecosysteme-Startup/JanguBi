@@ -1,250 +1,139 @@
+from typing import Any
+
 from rest_framework import serializers
 
-from apps.documents import sla
-from apps.documents.models import (
-    DocumentRequest,
-    DocumentRequestAttachment,
-    DocumentRequestStatusLog,
-    InternalNote,
-)
+from apps.documents.models import DocumentRequest, DocumentRequestStatusLog, InternalNote
+
+V1_STATUS_CHOICES = [
+    (value, label)
+    for value, label in DocumentRequest.Status.choices
+    if value not in (DocumentRequest.Status.VALIDATED, DocumentRequest.Status.DOCUMENT_DEPOSITED)
+]
 
 
-def _user_display_name(user) -> str:
-    profile = getattr(user, "profile", None)
-    if profile:
-        name = f"{profile.first_name} {profile.last_name}".strip()
-        if name:
-            return name
-    return user.email
+# --- Entrées -------------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Input serializers
-# ---------------------------------------------------------------------------
-
-
-class DocumentRequestCreateInputSerializer(serializers.Serializer):
+class RequestCreateInputSerializer(serializers.Serializer):
+    target_node_id = serializers.UUIDField(help_text="Paroisse où le sacrement a été célébré (RG-02)")
     document_type = serializers.ChoiceField(choices=DocumentRequest.DocumentType.choices)
-    # Précision libre exigée quand le choix est « Autre » — l'obligation est portée
-    # par le service (apps.documents.services), qui est aussi la voie d'appel des
-    # tests et de toute future intégration.
-    document_type_free = serializers.CharField(
-        max_length=255, required=False, allow_blank=True, default=""
-    )
+    document_type_free = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     reason = serializers.ChoiceField(choices=DocumentRequest.RequestReason.choices)
     reason_free = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
-
-    # Identité
     requester_last_name = serializers.CharField(max_length=100)
     requester_first_names = serializers.CharField(max_length=200)
     date_of_birth = serializers.DateField()
     place_of_birth = serializers.CharField(max_length=200)
-
-    # Contact
     contact_phone = serializers.CharField(max_length=30)
     contact_email = serializers.EmailField()
-
-    # Recherche
     registered_last_name = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
     registered_first_names = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
     father_last_name = serializers.CharField(max_length=100)
     mother_last_name = serializers.CharField(max_length=100)
-    # B5c — Paroisse du registre : FK OBLIGATOIRE (le front l'émet via le picker).
-    # parish_name/diocese ne sont plus acceptés en entrée : le nom et le diocèse sont
-    # dérivés de target_parish (C4). Les extras éventuels du front sont ignorés par DRF.
-    parish_id = serializers.IntegerField()
     sacrament_approximate_date = serializers.CharField(max_length=20)
     sacrament_location = serializers.CharField(max_length=200)
     additional_info = serializers.CharField(required=False, allow_blank=True, default="")
-
-    # Champs dynamiques + consentement
-    document_details = serializers.DictField(
-        child=serializers.CharField(allow_blank=True), required=False, default=dict
+    document_details = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False, default=dict)
+    pickup_mode = serializers.ChoiceField(
+        choices=DocumentRequest.PickupMode.choices, default=DocumentRequest.PickupMode.SECRETARIAT
     )
     consent_given = serializers.BooleanField()
-
-    # Pièce jointe initiale (optionnelle)
     attachment_file_id = serializers.IntegerField(required=False, allow_null=True)
 
-    def validate_consent_given(self, value):
-        if not value:
-            raise serializers.ValidationError(
-                "Le consentement est obligatoire pour soumettre une demande."
-            )
-        return value
+
+class SupplementInputSerializer(serializers.Serializer):
+    additional_info = serializers.CharField(required=False, allow_blank=True, default="")
+    document_details = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False)
+    attachment_file_id = serializers.IntegerField(required=False, allow_null=True)
 
 
-class DocumentRequestSupplementInputSerializer(serializers.Serializer):
-    additional_info = serializers.CharField(required=False, allow_blank=True)
-    document_details = serializers.DictField(
-        child=serializers.CharField(allow_blank=True), required=False
+class TransitionInputSerializer(serializers.Serializer):
+    message = serializers.CharField(
+        required=False, allow_blank=True, default="", help_text="Motif (rejet), complément attendu, ou message de retrait"
     )
+    pickup_place_id = serializers.IntegerField(required=False, allow_null=True, help_text="mark-ready : lieu de retrait")
+    pickup_hours = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
 
-class StatusActionWithCommentInputSerializer(serializers.Serializer):
-    comment = serializers.CharField(allow_blank=True, default="")
+class RegisterRefInputSerializer(serializers.Serializer):
+    register_volume = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    register_page = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    register_number = serializers.CharField(max_length=40, required=False, allow_blank=True)
+    register_marginal_notes = serializers.CharField(required=False, allow_blank=True)
 
 
-class RejectInputSerializer(serializers.Serializer):
-    reason = serializers.CharField()
-
-
-class DepositDocumentInputSerializer(serializers.Serializer):
-    file_id = serializers.IntegerField()
-    label = serializers.CharField(  # type: ignore[assignment]  # drf-stubs : collision avec l'attribut Field.label
-        max_length=255, required=False, allow_blank=True, default="Document officiel"
-    )
-
-
-class InternalNoteCreateInputSerializer(serializers.Serializer):
+class NoteInputSerializer(serializers.Serializer):
     content = serializers.CharField()
 
 
-# ---------------------------------------------------------------------------
-# Output serializers
-# ---------------------------------------------------------------------------
+class QueueFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(required=False)
+    status = serializers.ChoiceField(choices=V1_STATUS_CHOICES, required=False)
+    document_type = serializers.ChoiceField(choices=DocumentRequest.DocumentType.choices, required=False)
+    search = serializers.CharField(required=False, help_text="Référence ou nom du demandeur")
+    overdue = serializers.BooleanField(required=False, default=False)
 
 
-class _FkParishDisplayMixin:
-    """B5c — nom de paroisse + diocèse affichés depuis la FK target_parish ; repli sur
-    le texte stocké pour les demandes orphelines legacy (FK NULL)."""
-
-    def get_parish_name(self, obj) -> str:
-        if obj.target_parish_id:
-            return obj.target_parish.name
-        return obj.parish_name
-
-    def get_diocese(self, obj) -> str:
-        if obj.target_parish_id:
-            return obj.target_parish.diocese.name
-        return obj.diocese
+class RequesterFilterSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=V1_STATUS_CHOICES, required=False)
 
 
-class DocumentRequestListOutputSerializer(_FkParishDisplayMixin, serializers.ModelSerializer):
-    requester_email = serializers.EmailField(source="requester.email", read_only=True)
-    document_type_label = serializers.CharField(source="get_document_type_display", read_only=True)
-    status_label = serializers.CharField(source="get_status_display", read_only=True)
-    parish_name = serializers.SerializerMethodField()
-    diocese = serializers.SerializerMethodField()
-    # Délais : calculés côté serveur (apps.documents.sla) pour que le client
-    # n'ait pas à dupliquer les seuils ni la façon de mesurer l'ancienneté.
-    sla_days = serializers.SerializerMethodField()
-    sla_threshold_days = serializers.SerializerMethodField()
-    is_escalated = serializers.SerializerMethodField()
-    # Document final déposé : exposé dès la liste pour que le coffre-fort n'ait
-    # pas à charger le détail de chaque demande juste pour obtenir ce lien.
-    final_document_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DocumentRequest
-        fields = [
-            "id",
-            "reference",
-            "document_type",
-            "document_type_label",
-            "document_type_free",
-            "reason",
-            "status",
-            "status_label",
-            "requester_last_name",
-            "requester_first_names",
-            "requester_email",
-            "parish_name",
-            "diocese",
-            "target_parish",
-            "created_at",
-            "updated_at",
-            "sla_days",
-            "sla_threshold_days",
-            "is_escalated",
-            "final_document_url",
-        ]
-
-    def get_sla_days(self, obj) -> int | None:
-        return sla.sla_days(obj)
-
-    def get_sla_threshold_days(self, obj) -> int | None:
-        return sla.sla_threshold_days(obj.status)
-
-    def get_is_escalated(self, obj) -> bool:
-        return sla.is_escalated(obj)
-
-    def get_final_document_url(self, obj) -> str | None:
-        # `obj.attachments` est préchargé par le selector : on filtre en Python
-        # pour ne pas relancer une requête par demande (N+1).
-        for attachment in obj.attachments.all():
-            if attachment.attachment_type != DocumentRequest.AttachmentType.PARISH_FINAL:
-                continue
-            if not attachment.file_id or not attachment.file.file:
-                continue
-            return attachment.file.url
-        return None
+class NodeQuerySerializer(serializers.Serializer):
+    node = serializers.UUIDField(required=False)
 
 
-class DocumentRequestStatusCountsOutputSerializer(serializers.Serializer):
-    """Comptages par statut sur le périmètre d'autorité du demandeur."""
-
-    counts = serializers.DictField(child=serializers.IntegerField())
-    total = serializers.IntegerField()
+# --- Sorties -------------------------------------------------------------------------------
 
 
-class StatusLogOutputSerializer(serializers.ModelSerializer):
-    changed_by_name = serializers.SerializerMethodField()
+class NodeBriefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
 
+
+class PickupSerializer(serializers.Serializer):
+    mode = serializers.CharField()
+    place_name = serializers.CharField(allow_null=True)
+    place_address = serializers.CharField(allow_null=True)
+    hours = serializers.CharField()
+    message = serializers.CharField()
+    original_notice = serializers.CharField()
+
+
+class StatusLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = DocumentRequestStatusLog
-        fields = ["id", "from_status", "to_status", "changed_by_name", "comment", "created_at"]
-
-    def get_changed_by_name(self, obj) -> str | None:
-        if obj.changed_by is None:
-            return "Système"
-        return _user_display_name(obj.changed_by)
+        fields = ["from_status", "to_status", "comment", "created_at"]
 
 
-class AttachmentOutputSerializer(serializers.ModelSerializer):
-    file_url = serializers.SerializerMethodField()
-    file_name = serializers.CharField(source="file.original_file_name", read_only=True)
-    attachment_type_label = serializers.CharField(source="get_attachment_type_display", read_only=True)
+def _pickup(obj: DocumentRequest) -> dict[str, Any]:
+    from apps.documents.services import ORIGINAL_NOTICE
 
-    class Meta:
-        model = DocumentRequestAttachment
-        fields = [
-            "id",
-            "attachment_type",
-            "attachment_type_label",
-            "label",
-            "file_url",
-            "file_name",
-            "created_at",
-        ]
-
-    def get_file_url(self, obj) -> str | None:
-        if not obj.file_id or not obj.file.file:
-            return None
-        return obj.file.url
+    return {
+        "mode": obj.pickup_mode,
+        "place_name": obj.pickup_place.name if obj.pickup_place else None,
+        "place_address": obj.pickup_place.address if obj.pickup_place else None,
+        "hours": obj.pickup_hours,
+        "message": obj.pickup_message,
+        "original_notice": ORIGINAL_NOTICE,
+    }
 
 
-class InternalNoteOutputSerializer(serializers.ModelSerializer):
-    author_name = serializers.SerializerMethodField()
-
-    class Meta:
-        model = InternalNote
-        fields = ["id", "author_name", "content", "created_at"]
-
-    def get_author_name(self, obj) -> str:
-        return _user_display_name(obj.author)
-
-
-class DocumentRequestDetailOutputSerializer(_FkParishDisplayMixin, serializers.ModelSerializer):
-    requester_email = serializers.EmailField(source="requester.email", read_only=True)
+class _BaseOutputSerializer(serializers.ModelSerializer):
+    target_node = serializers.SerializerMethodField()
     document_type_label = serializers.CharField(source="get_document_type_display", read_only=True)
-    reason_label = serializers.CharField(source="get_reason_display", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
-    assigned_to_name = serializers.SerializerMethodField()
-    parish_name = serializers.SerializerMethodField()
-    diocese = serializers.SerializerMethodField()
-    status_logs = StatusLogOutputSerializer(many=True, read_only=True)
-    attachments = AttachmentOutputSerializer(many=True, read_only=True)
+
+    def get_target_node(self, obj: DocumentRequest) -> dict[str, Any] | None:
+        node = obj.target_node
+        return {"id": node.pk, "name": node.name} if node else None
+
+
+class RequesterOutputSerializer(_BaseOutputSerializer):
+    """Vue du fidèle : jamais les notes internes ni les références du registre (EF-ACT-02, -05)."""
+
+    pickup = serializers.SerializerMethodField()
+    history = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
 
     class Meta:
         model = DocumentRequest
@@ -255,15 +144,12 @@ class DocumentRequestDetailOutputSerializer(_FkParishDisplayMixin, serializers.M
             "document_type_label",
             "document_type_free",
             "reason",
-            "reason_label",
             "reason_free",
             "status",
             "status_label",
-            "rejection_reason",
-            "assigned_to_name",
+            "target_node",
             "requester_last_name",
             "requester_first_names",
-            "requester_email",
             "date_of_birth",
             "place_of_birth",
             "contact_phone",
@@ -272,52 +158,103 @@ class DocumentRequestDetailOutputSerializer(_FkParishDisplayMixin, serializers.M
             "registered_first_names",
             "father_last_name",
             "mother_last_name",
-            "parish_name",
-            "diocese",
             "sacrament_approximate_date",
             "sacrament_location",
             "additional_info",
             "document_details",
-            "consent_given",
-            "status_logs",
-            "attachments",
+            "rejection_reason",
+            "pickup",
+            "history",
+            "can_cancel",
+            "created_at",
+            "updated_at",
+            "closed_at",
+        ]
+
+    def get_pickup(self, obj: DocumentRequest) -> dict[str, Any] | None:
+        return PickupSerializer(_pickup(obj)).data if obj.status == DocumentRequest.Status.READY_FOR_PICKUP else None
+
+    def get_history(self, obj: DocumentRequest) -> list[dict[str, Any]]:
+        if not self.context.get("with_history"):
+            return []
+        return list(StatusLogSerializer(obj.status_logs.all(), many=True).data)
+
+    def get_can_cancel(self, obj: DocumentRequest) -> bool:
+        return obj.status in (DocumentRequest.Status.SUBMITTED, DocumentRequest.Status.INFO_REQUESTED)
+
+
+class QueueItemSerializer(_BaseOutputSerializer):
+    requester_name = serializers.SerializerMethodField()
+    age_days = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    assigned_to_id = serializers.UUIDField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = DocumentRequest
+        fields = [
+            "id",
+            "reference",
+            "document_type",
+            "document_type_label",
+            "status",
+            "status_label",
+            "target_node",
+            "requester_name",
+            "assigned_to_id",
+            "age_days",
+            "is_overdue",
             "created_at",
             "updated_at",
         ]
 
-    def get_assigned_to_name(self, obj) -> str | None:
-        if obj.assigned_to is None:
-            return None
-        return _user_display_name(obj.assigned_to)
+    def get_requester_name(self, obj: DocumentRequest) -> str:
+        return f"{obj.requester_last_name} {obj.requester_first_names}".strip()
+
+    def get_age_days(self, obj: DocumentRequest) -> int | None:
+        from apps.documents.selectors import age_days
+
+        return age_days(obj)
+
+    def get_is_overdue(self, obj: DocumentRequest) -> bool:
+        from apps.documents.selectors import is_overdue
+
+        return is_overdue(obj)
 
 
-class DocumentRequestReasonOptionSerializer(serializers.Serializer):
-    """Un motif de demande : valeur technique + libellé affichable."""
+class ProcessorOutputSerializer(RequesterOutputSerializer):
+    """Vue de la paroisse : identité complète, registre, lieu de retrait."""
 
-    value = serializers.CharField(help_text="Valeur à renvoyer dans le champ `reason`.")
-    label = serializers.CharField(  # type: ignore[assignment]  # drf-stubs : collision avec l'attribut Field.label
-        help_text="Libellé affichable (français)."
-    )
+    register = serializers.SerializerMethodField()
+    assigned_to_id = serializers.UUIDField(read_only=True, allow_null=True)
 
+    class Meta(RequesterOutputSerializer.Meta):
+        fields = [*RequesterOutputSerializer.Meta.fields, "register", "assigned_to_id", "pickup_mode"]
 
-class DocumentRequestTypeOptionSerializer(serializers.Serializer):
-    """Un type de document, avec les motifs recevables pour ce type."""
+    def get_register(self, obj: DocumentRequest) -> dict[str, str]:
+        return {
+            "volume": obj.register_volume,
+            "page": obj.register_page,
+            "number": obj.register_number,
+            "marginal_notes": obj.register_marginal_notes,
+        }
 
-    value = serializers.CharField(help_text="Valeur à renvoyer dans le champ `document_type`.")
-    label = serializers.CharField(  # type: ignore[assignment]  # drf-stubs : collision avec l'attribut Field.label
-        help_text="Libellé affichable (français)."
-    )
-    requires_precision = serializers.BooleanField(
-        help_text="Si vrai, `document_type_free` est obligatoire (cas « Autre document »)."
-    )
-    allowed_reasons = serializers.ListField(
-        child=serializers.CharField(),
-        help_text="Valeurs de `reason` recevables avec ce type de document.",
-    )
+    def get_pickup(self, obj: DocumentRequest) -> dict[str, Any] | None:
+        return PickupSerializer(_pickup(obj)).data
 
 
-class DocumentRequestOptionsOutputSerializer(serializers.Serializer):
-    """Référentiel du formulaire de demande — source unique de la règle type ↔ motif."""
+class NoteOutputSerializer(serializers.ModelSerializer):
+    author_id = serializers.UUIDField(read_only=True, allow_null=True)
 
-    document_types = DocumentRequestTypeOptionSerializer(many=True)
-    reasons = DocumentRequestReasonOptionSerializer(many=True)
+    class Meta:
+        model = InternalNote
+        fields = ["id", "author_id", "content", "created_at"]
+
+
+class CountsOutputSerializer(serializers.Serializer):
+    counts = serializers.DictField(child=serializers.IntegerField())
+    total = serializers.IntegerField()
+
+
+class StatsOutputSerializer(CountsOutputSerializer):
+    median_days_to_collect = serializers.FloatField(allow_null=True)
+    overdue = serializers.IntegerField()

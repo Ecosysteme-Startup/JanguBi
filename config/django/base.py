@@ -67,6 +67,10 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.hierarchy.tasks.assignments_sync_task",
         "schedule": crontab(hour=0, minute=15),
     },
+    "document_attachments_purge": {
+        "task": "apps.documents.tasks.document_attachments_purge_task",
+        "schedule": crontab(hour=2, minute=30),
+    },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
         "schedule": crontab(hour=8, minute=0),

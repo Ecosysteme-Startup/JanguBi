@@ -15,5 +15,12 @@ SPECTACULAR_SETTINGS = {
         'DegreOrdreEnum': 'apps.hierarchy.enums.DegreOrdre',
         'RequiredOrderEnum': 'apps.hierarchy.enums.RequiredOrder',
         'CardinalityEnum': 'apps.hierarchy.enums.Cardinality',
+        'ArticleStatusEnum': 'apps.news.models.Article.Status',
+        'ArticleContentTypeEnum': 'apps.news.models.Article.ContentType',
+        'ArticleV1TypeEnum': 'apps.news.serializers.V1_TYPES',
+        'DocumentRequestStatusEnum': 'apps.documents.models.DocumentRequest.Status',
+        'DocumentRequestV1StatusEnum': 'apps.documents.serializers.V1_STATUS_CHOICES',
+        'PickupModeEnum': 'apps.documents.models.DocumentRequest.PickupMode',
+        'EventTypeEnum': 'apps.agenda.models.Event.EventType',
     },
 }

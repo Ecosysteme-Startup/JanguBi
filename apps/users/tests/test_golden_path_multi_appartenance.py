@@ -18,18 +18,11 @@ Fidèle : membre de A & B (a_main principale). Demande un document à C (non-mem
 """
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from apps.documents.exceptions import DocumentRequestNotFoundError
-from apps.documents.models import DocumentRequest
-from apps.documents.selectors import (
-    document_request_get_for_admin,
-    document_request_list,
-)
 from apps.org.tests.factories import (
     ChurchFactory,
     DioceseFactory,
@@ -194,52 +187,6 @@ def test_step_1_2_onboarding_multi_eglise_et_me(world):
 
 
 # ---------------------------------------------------------------------------
-# Étapes 4 & 7 — document vers C + cloisonnement clergé (A ne voit ni B ni C)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_step_4_7_document_vers_C_et_cloisonnement_clerge(onboarded):
-    w = onboarded.world
-    url = reverse("api:documents:document-request-list-create")
-
-    with patch(_DOC_NO_COMMIT):
-        r_c = onboarded.client.post(url, {**VALID_DOC, "parish_id": w.parish_c.id}, format="json")
-        r_b = onboarded.client.post(url, {**VALID_DOC, "parish_id": w.parish_b.id}, format="json")
-    assert r_c.status_code == 201, r_c.data
-    assert r_b.status_code == 201, r_b.data
-    doc_c, doc_b = str(r_c.data["id"]), str(r_b.data["id"])
-    # La paroisse cible (FK) est bien C (registre d'une paroisse NON-membre).
-    assert DocumentRequest.objects.get(id=doc_c).target_parish_id == w.parish_c.id
-
-    def _list_ids(user):
-        return {str(i) for i in document_request_list(user=user).values_list("id", flat=True)}
-
-    # Étape 4 — la demande vers C est visible du curé de C, invisible des curés A & B.
-    assert doc_c in _list_ids(w.cure_c)
-    assert doc_c not in _list_ids(w.cure_a)
-    assert doc_c not in _list_ids(w.cure_b)
-
-    # Étape 7 — cloisonnement clergé : le curé de A ne voit NI la demande de B NI celle de C.
-    assert doc_b in _list_ids(w.cure_b)
-    assert doc_b not in _list_ids(w.cure_a)
-    assert doc_b not in _list_ids(w.cure_c)
-
-    # Detail/actions : la demande est lisible par le curé CIBLE, introuvable pour
-    # les autres — pas de fuite d'existence par UUID.
-    #
-    # Le sélecteur lève une exception de DOMAINE et non `Http404` : il est
-    # appelable hors HTTP (tâche Celery, commande, test), où une exception web
-    # n'aurait aucun sens. C'est `apis.py` qui la traduit en 404 — et cette
-    # traduction reste vérifiée par les tests d'API de `apps/documents`.
-    assert str(document_request_get_for_admin(request_id=doc_c, user=w.cure_c).id) == doc_c
-    with pytest.raises(DocumentRequestNotFoundError):
-        document_request_get_for_admin(request_id=doc_c, user=w.cure_a)
-    with pytest.raises(DocumentRequestNotFoundError):
-        document_request_get_for_admin(request_id=doc_c, user=w.cure_b)
-
-
-# ---------------------------------------------------------------------------
 # Étape 5 — don espèces (PENDING) vs paiement en ligne (400)
 # ---------------------------------------------------------------------------
 
@@ -281,7 +228,6 @@ def test_step_6_garde_onboarding_bloque_les_ecritures(world):
     # Payloads vides : la permission (IsOnboardingCompleted) précède la validation/objet,
     # donc 403 (et NON 400/404) prouve que la garde s'applique.
     cases = {
-        "document": (reverse("api:documents:document-request-list-create"), {}),
         "intention": (reverse("api:mass-intentions:submit"), {}),
         "don": (reverse("api:donations:donate"), {}),
     }

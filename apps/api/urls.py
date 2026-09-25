@@ -22,6 +22,7 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     # /messaging/notifications/ restent pour compatibilité.
     ("notifications", "notifications/", "apps.messaging.urls_notifications", "notifications"),
     ("documents", "documents/", "apps.documents.urls", "documents"),
+    ("documents", "staff/documents/", "apps.documents.urls_staff", "staff-documents"),
     ("news", "news/", "apps.news.urls", "news"),
     ("news", "staff/news/", "apps.news.urls_staff", "staff-news"),
     ("news", "me/", "apps.news.urls_me", "me-news"),
