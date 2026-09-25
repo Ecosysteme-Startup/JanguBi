@@ -50,21 +50,12 @@ def _check_capability(capability: str) -> None:
 
 
 def is_platform_admin(user: Any) -> bool:
-    """Administrateur Numerisen : rôle de realm Keycloak ``platform_admin`` (ADR-004).
-
-    Pour une requête authentifiée par l'ancien JWT (transition), le super-admin legacy compte
-    encore, tant que ``LEGACY_JWT_ENABLED`` est vrai ; après la bascule, plus jamais.
-    """
+    """Administrateur Numerisen : rôle de realm Keycloak ``platform_admin`` (ADR-004), et rien
+    d'autre (ni ``is_superuser`` ni l'ancien rôle ``super_admin``)."""
     if not getattr(user, "is_authenticated", False):
         return False
     identity = getattr(user, "keycloak_identity", None)
-    if identity is not None:
-        return settings.KEYCLOAK_PLATFORM_ADMIN_ROLE in identity.realm_roles
-    if not settings.LEGACY_JWT_ENABLED:
-        return False
-    from apps.users.enums import UserRole
-
-    return bool(getattr(user, "is_superuser", False) or getattr(user, "role", None) == UserRole.SUPER_ADMIN)
+    return identity is not None and settings.KEYCLOAK_PLATFORM_ADMIN_ROLE in identity.realm_roles
 
 
 def mfa_satisfied(user: Any) -> bool:

@@ -34,10 +34,10 @@ class BaseUserAdmin(admin.ModelAdmin):
     fieldsets = (
         (_("Identité & Rôle"), {"fields": ("email", "phone_number", "role")}),
         (_("Statutation & Validation"), {"fields": ("is_active", "is_verified", "is_staff", "is_admin", "is_superuser")}),
-        (_("Données Techniques"), {"fields": ("jwt_key", "created_at", "updated_at"), "classes": ("collapse",)}),
+        (_("Données Techniques"), {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
 
-    readonly_fields = ("jwt_key", "created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at")
 
     def full_name(self, obj):
         if hasattr(obj, "profile"):

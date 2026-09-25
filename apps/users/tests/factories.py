@@ -33,12 +33,35 @@ class BaseUserFactory(DjangoModelFactory):
         return user
 
 
+def platform_identity(user, *, roles=("fidele", "platform_admin")):
+    """Identité Keycloak de test : seul le rôle de realm ``platform_admin`` fait l'administrateur
+    plateforme (ADR-004). Portée par l'instance, comme le fait l'authentification réelle."""
+    from apps.authentication.keycloak import KeycloakIdentity
+
+    user.keycloak_identity = KeycloakIdentity(
+        sub=f"kc-{user.pk}",
+        email=user.email,
+        email_verified=True,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(roles),
+        amr=frozenset({"pwd", "otp"}),
+        acr="1",
+        claims={},
+    )
+    return user
+
+
 class SuperAdminFactory(BaseUserFactory):
-    """Crée un compte super_admin (accès total)."""
+    """Administrateur plateforme : compte avec le rôle de realm Keycloak ``platform_admin``."""
 
     role = UserRole.SUPER_ADMIN
     is_staff = True
     is_admin = True
+
+    @factory.post_generation
+    def keycloak_platform_admin(obj, create, extracted, **kwargs):  # noqa: N805
+        platform_identity(obj)
 
 
 # Alias large utilisé dans tous les tests existants

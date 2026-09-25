@@ -8,8 +8,6 @@ from apps.core.modules import is_module_active
 # (module, préfixe d'URL, urlconf, namespace). Les modules gelés (ADR-006,
 # réglage JANGUBI_MODULES) ne sont pas inclus : leurs routes renvoient 404.
 API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
-    ("authentication", "auth/", "apps.authentication.urls", "authentication"),
-    ("users", "users/", "apps.users.urls", "users"),
     ("errors", "errors/", "apps.errors.urls", "errors"),
     ("files", "files/", "apps.files.urls", "files"),
     ("bible", "bible/", "apps.bible.urls", "bible"),

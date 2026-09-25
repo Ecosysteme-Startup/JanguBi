@@ -1,13 +1,14 @@
 """Authentification Keycloak (ADR-004, lot L3).
 
-La bascule est un réglage : KEYCLOAK_ENABLED active la validation des jetons
-Keycloak ; LEGACY_JWT_ENABLED garde SimpleJWT pendant la transition du front.
+Keycloak est la seule authentification de l'API et du WebSocket (bascule du 25/09/2026 :
+SimpleJWT et les parcours d'inscription, d'activation, de mot de passe et d'e-mail maison
+sont retirés ; ils relèvent de Keycloak). KEYCLOAK_ENABLED ne commande plus que la
+synchronisation avec l'API d'administration Keycloak (rôle staff, suppression de compte).
 """
 
 from config.env import env
 
-KEYCLOAK_ENABLED = env.bool("KEYCLOAK_ENABLED", default=False)
-LEGACY_JWT_ENABLED = env.bool("LEGACY_JWT_ENABLED", default=True)
+KEYCLOAK_ENABLED = env.bool("KEYCLOAK_ENABLED", default=True)
 
 KEYCLOAK_SERVER_URL = env.str("KEYCLOAK_SERVER_URL", default="http://localhost:8180").rstrip("/")
 # URL interne (conteneur → conteneur) pour le JWKS et l'API d'administration ; l'émetteur

@@ -11,7 +11,8 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin
 from apps.api.v1 import V1ApiMixin
 from apps.users import selectors_privacy, services_privacy
-from apps.users.apis import UserMeDetailApi
+from apps.users.enums import Title
+from apps.users.services_me import me_profile_update
 
 TAG = ["Conformité"]
 
@@ -76,8 +77,67 @@ class MeExportApi(V1ApiMixin, ApiAuthMixin, APIView):
         return response
 
 
-class MeApi(V1ApiMixin, UserMeDetailApi):
-    """/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03)."""
+class MeProfileSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    title = serializers.ChoiceField(choices=Title.choices, required=False, allow_blank=True)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+
+
+class NodeRefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class MeOutputSerializer(serializers.Serializer):
+    """EF-PER-01. Les capacités s'obtiennent par /me/capacites/."""
+
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    profile = serializers.SerializerMethodField()
+    etat_de_vie = serializers.CharField()
+    degre_ordre = serializers.CharField()
+    statut_verification = serializers.CharField()
+    incardination = NodeRefSerializer(source="incardination_node", allow_null=True)
+    institut = NodeRefSerializer(source="institut_node", allow_null=True)
+    paroisse_suivie = NodeRefSerializer(allow_null=True)
+    consent = serializers.SerializerMethodField()
+
+    def get_profile(self, user) -> dict:
+        profile = getattr(user, "profile", None)
+        return {
+            "first_name": getattr(profile, "first_name", ""),
+            "last_name": getattr(profile, "last_name", ""),
+            "title": getattr(profile, "title", ""),
+            "date_of_birth": profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
+            "phone": str(profile.phone) if profile and profile.phone else None,
+        }
+
+    def get_consent(self, user) -> dict:
+        return _consent_status(user)
+
+
+class MeApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03)."""
+
+    permission_classes = (IsAuthenticated,)
+
+    @extend_schema(tags=["Profil"], summary="Mon profil", responses=MeOutputSerializer)
+    def get(self, request: Request) -> Response:
+        return Response(MeOutputSerializer(request.user).data)
+
+    @extend_schema(
+        tags=["Profil"],
+        summary="Modifier mon profil (e-mail et mot de passe : dans Keycloak)",
+        request=MeProfileSerializer,
+        responses=MeOutputSerializer,
+    )
+    def patch(self, request: Request) -> Response:
+        serializer = MeProfileSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        user = me_profile_update(user=request.user, data=dict(serializer.validated_data))
+        return Response(MeOutputSerializer(user).data)
 
     @extend_schema(
         tags=TAG,

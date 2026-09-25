@@ -58,9 +58,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -84,9 +81,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -110,9 +104,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -136,9 +127,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -188,234 +176,12 @@ paths:
       - audit
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedAuditEventOutputList'
-          description: ''
-  /api/v1/auth/jwt/login/:
-    post:
-      operationId: v1_auth_jwt_login_create
-      description: |-
-        Authentifie l'utilisateur et retourne un access token (30 min par défaut, réglable via JWT_ACCESS_TOKEN_LIFETIME_MINUTES) et un refresh token (7 jours). Le compte doit être actif ET l'email vérifié.
-
-        Avec l'en-tête `X-Auth-Transport: cookie`, le refresh token est posé dans un cookie HttpOnly et **omis du corps de réponse** — il devient alors illisible depuis JavaScript.
-      summary: Connexion JWT
-      parameters:
-      - in: header
-        name: X-Auth-Transport
-        schema:
-          type: string
-          enum:
-          - cookie
-        description: Transport souhaité pour le refresh token. Avec la valeur `cookie`
-          (clients navigateur), le jeton est posé dans un cookie HttpOnly et **omis
-          du corps de réponse**. Sans cet en-tête (clients natifs / mobile), le jeton
-          est renvoyé dans le corps comme auparavant.
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserJwtLoginInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserJwtLoginInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserJwtLoginInput'
-        required: true
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserJwtLoginOutput'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/auth/jwt/logout/:
-    post:
-      operationId: v1_auth_jwt_logout_create
-      description: Blackliste le refresh token, lu **en priorité dans le cookie HttpOnly**
-        avec repli sur le corps de requête, puis efface le cookie. L'access token
-        reste valide jusqu'à son expiration naturelle (30 min max par défaut). Pour
-        révoquer tous les appareils, utiliser /logout-all/.
-      summary: Déconnexion (appareil courant)
-      parameters:
-      - in: header
-        name: X-Auth-Transport
-        schema:
-          type: string
-          enum:
-          - cookie
-        description: Transport souhaité pour le refresh token. Avec la valeur `cookie`
-          (clients navigateur), le jeton est posé dans un cookie HttpOnly et **omis
-          du corps de réponse**. Sans cet en-tête (clients natifs / mobile), le jeton
-          est renvoyé dans le corps comme auparavant.
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserJwtLogoutInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserJwtLogoutInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserJwtLogoutInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: Déconnexion réussie
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/auth/jwt/logout-all/:
-    post:
-      operationId: v1_auth_jwt_logout_all_create
-      description: Invalide TOUS les JWT actifs de l'utilisateur via rotation du jwt_key,
-        et efface le cookie de refresh de l'appareil courant. Utile en cas de suspicion
-        de compromission.
-      summary: Déconnexion de tous les appareils
-      parameters:
-      - in: header
-        name: X-Auth-Transport
-        schema:
-          type: string
-          enum:
-          - cookie
-        description: Transport souhaité pour le refresh token. Avec la valeur `cookie`
-          (clients navigateur), le jeton est posé dans un cookie HttpOnly et **omis
-          du corps de réponse**. Sans cet en-tête (clients natifs / mobile), le jeton
-          est renvoyé dans le corps comme auparavant.
-      tags:
-      - Authentification
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: Tous les appareils déconnectés
-  /api/v1/auth/jwt/refresh/:
-    post:
-      operationId: v1_auth_jwt_refresh_create
-      description: |-
-        Échange un refresh token valide contre un nouveau access token.
-
-        Le jeton est lu **en priorité dans le cookie HttpOnly**, avec repli sur le champ `refresh` du corps (clients natifs / mobile). La rotation étant active (`ROTATE_REFRESH_TOKENS`), le nouveau jeton remplace le cookie.
-      summary: Renouvellement du access token
-      parameters:
-      - in: header
-        name: X-Auth-Transport
-        schema:
-          type: string
-          enum:
-          - cookie
-        description: Transport souhaité pour le refresh token. Avec la valeur `cookie`
-          (clients navigateur), le jeton est posé dans un cookie HttpOnly et **omis
-          du corps de réponse**. Sans cet en-tête (clients natifs / mobile), le jeton
-          est renvoyé dans le corps comme auparavant.
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserJwtRefreshInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserJwtRefreshInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserJwtRefreshInput'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserJwtRefreshOutput'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/auth/me/:
-    get:
-      operationId: v1_auth_me_retrieve
-      description: Retourne les données complètes de l'utilisateur authentifié (ID,
-        email, rôle, etc.).
-      summary: Profil utilisateur connecté
-      tags:
-      - Authentification
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MonProfil'
-              examples:
-                ExempleFidèle:
-                  value:
-                    id: 1
-                    email: jean.dupont@example.com
-                    role: fidele
-                    pastoral_role: null
-                    onboarding_state: completed
-                    is_active: true
-                    is_verified: true
-                    is_admin: false
-                    is_staff: false
-                    diocese:
-                      id: 2
-                      name: Diocèse de Thiès
-                    province:
-                      id: 1
-                      name: Province de Dakar
-                    profile:
-                      first_name: Jean
-                      last_name: Dupont
-                      title: MR
-                      phone: '+221770000000'
-                      primary_parish:
-                        id: 5
-                        name: Paroisse Saint-Pierre
-                      avatar: null
-                  summary: Exemple Fidèle
           description: ''
   /api/v1/bible/books/:
     get:
@@ -448,9 +214,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -481,9 +244,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -507,9 +267,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -565,9 +322,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -586,9 +340,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -617,9 +368,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -641,9 +389,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -675,9 +420,6 @@ paths:
               $ref: '#/components/schemas/PatchedHomilieNoteInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -698,9 +440,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -725,9 +464,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '202':
           description: 'Import enqueued — `{"status": ...}`'
@@ -747,9 +483,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -777,9 +510,6 @@ paths:
               $ref: '#/components/schemas/LectioDivinaInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -795,9 +525,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -826,9 +553,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -850,9 +574,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -877,9 +598,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -903,9 +621,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -930,9 +645,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -958,9 +670,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -986,9 +695,6 @@ paths:
       - Bible — Avancé
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1046,9 +752,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -1069,9 +772,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -1097,9 +797,6 @@ paths:
       - Bible
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -1139,9 +836,6 @@ paths:
       - clergy-accounts
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1170,9 +864,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -1194,9 +885,6 @@ paths:
       - clergy-accounts
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1218,9 +906,6 @@ paths:
       - clergy-accounts
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1248,9 +933,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1275,9 +957,6 @@ paths:
       - clergy-accounts
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -1307,9 +986,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -1332,9 +1008,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1379,9 +1052,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1423,9 +1093,6 @@ paths:
       - dashboards
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1444,9 +1111,6 @@ paths:
       - dashboards
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1496,9 +1160,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1526,9 +1187,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -1552,9 +1210,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1578,9 +1233,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1615,9 +1267,6 @@ paths:
               $ref: '#/components/schemas/SupplementInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1634,9 +1283,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1669,9 +1315,6 @@ paths:
               $ref: '#/components/schemas/DonationConfirmInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1696,9 +1339,6 @@ paths:
       - donations
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1727,9 +1367,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -1757,9 +1394,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -1784,9 +1418,6 @@ paths:
       - donations
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1804,9 +1435,6 @@ paths:
       - errors
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1824,9 +1452,6 @@ paths:
       - errors
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '500':
           description: Lève systématiquement une exception non gérée (test du reporting
@@ -1851,9 +1476,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1884,9 +1506,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1917,9 +1536,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -1946,9 +1562,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2011,9 +1624,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2042,9 +1652,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2067,9 +1674,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2102,9 +1706,6 @@ paths:
               $ref: '#/components/schemas/PatchedAssignmentUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2141,9 +1742,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2160,9 +1758,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2192,9 +1787,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2217,9 +1809,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -2250,9 +1839,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2287,9 +1873,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2311,9 +1894,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2396,9 +1976,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2432,9 +2009,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2463,9 +2037,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2505,9 +2076,6 @@ paths:
               $ref: '#/components/schemas/PatchedNodeUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2536,9 +2104,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2570,9 +2135,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2604,9 +2166,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2649,9 +2208,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2668,9 +2224,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2700,9 +2253,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2741,9 +2291,6 @@ paths:
               $ref: '#/components/schemas/PatchedPlaceUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2771,9 +2318,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2815,9 +2359,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -2850,9 +2391,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -2876,9 +2414,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -2920,9 +2455,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2952,9 +2484,6 @@ paths:
       - hierarchy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -2990,9 +2519,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3015,9 +2541,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -3041,9 +2564,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3061,9 +2581,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -3093,9 +2610,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3123,9 +2637,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3153,9 +2664,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3183,9 +2691,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3213,9 +2718,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3243,9 +2745,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3273,9 +2772,6 @@ paths:
       - Liturgy
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3297,9 +2793,6 @@ paths:
       - mass-intentions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3335,9 +2828,6 @@ paths:
               $ref: '#/components/schemas/MassIntentionCelebrateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3362,9 +2852,6 @@ paths:
       - mass-intentions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3397,9 +2884,6 @@ paths:
               $ref: '#/components/schemas/MassIntentionDeclineInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3433,9 +2917,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3459,9 +2940,6 @@ paths:
       - mass-intentions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3486,9 +2964,6 @@ paths:
       - mass-intentions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3515,9 +2990,6 @@ paths:
       - mass-intentions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3547,9 +3019,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -3560,61 +3029,53 @@ paths:
   /api/v1/me/:
     get:
       operationId: v1_me_retrieve
-      description: '/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03).'
+      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
       summary: Mon profil
       tags:
       - Profil
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MonProfil'
-              examples:
-                ExempleFidèle:
-                  value:
-                    id: 1
-                    email: jean.dupont@example.com
-                    role: fidele
-                    pastoral_role: null
-                    onboarding_state: completed
-                    is_active: true
-                    is_verified: true
-                    is_admin: false
-                    is_staff: false
-                    diocese:
-                      id: 2
-                      name: Diocèse de Thiès
-                    province:
-                      id: 1
-                      name: Province de Dakar
-                    profile:
-                      first_name: Jean
-                      last_name: Dupont
-                      title: MR
-                      phone: '+221770000000'
-                      primary_parish:
-                        id: 5
-                        name: Paroisse Saint-Pierre
-                      avatar: null
-                  summary: Exemple Fidèle
+                $ref: '#/components/schemas/MeOutput'
+          description: ''
+    patch:
+      operationId: v1_me_partial_update
+      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
+      summary: 'Modifier mon profil (e-mail et mot de passe : dans Keycloak)'
+      tags:
+      - Profil
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedMeProfile'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedMeProfile'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedMeProfile'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeOutput'
           description: ''
     delete:
       operationId: v1_me_destroy
-      description: '/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03).'
+      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
       summary: Supprimer mon compte (anonymisation, purge des conversations ; irréversible)
       tags:
       - Conformité
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -3631,9 +3092,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3663,9 +3121,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3682,9 +3137,6 @@ paths:
       - Conformité
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3712,9 +3164,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3731,9 +3180,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3762,9 +3208,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3781,9 +3224,6 @@ paths:
       - Conformité
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3812,9 +3252,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3831,9 +3268,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3860,9 +3294,6 @@ paths:
               $ref: '#/components/schemas/NotificationPreference'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3879,9 +3310,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3909,9 +3337,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3928,9 +3353,6 @@ paths:
       - me
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3946,9 +3368,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3975,9 +3394,6 @@ paths:
               $ref: '#/components/schemas/Availability'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -3993,9 +3409,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4024,9 +3437,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4049,9 +3459,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -4065,9 +3472,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4084,9 +3488,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4114,9 +3515,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4138,9 +3536,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4167,9 +3562,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4198,9 +3590,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4224,9 +3613,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4251,9 +3637,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4275,9 +3658,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -4296,9 +3676,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4321,9 +3698,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4346,9 +3720,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4372,9 +3743,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4408,9 +3776,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4447,9 +3812,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4472,9 +3834,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           description: No response body
@@ -4498,9 +3857,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4523,9 +3879,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -4556,9 +3909,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           description: No response body
@@ -4576,9 +3926,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -4596,9 +3943,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4623,9 +3967,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4641,9 +3982,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4702,9 +4040,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -4730,9 +4065,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -4769,9 +4101,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4795,9 +4124,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4815,9 +4141,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -4842,9 +4165,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4869,9 +4189,6 @@ paths:
       - messaging
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4900,9 +4217,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -4918,9 +4232,6 @@ paths:
       - notifications
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -4932,9 +4243,6 @@ paths:
       - notifications
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4950,9 +4258,6 @@ paths:
       - notifications
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -4984,9 +4289,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5013,9 +4315,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5037,9 +4336,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5071,9 +4367,6 @@ paths:
               $ref: '#/components/schemas/PatchedChurchUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5094,9 +4387,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -5114,9 +4404,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5145,9 +4432,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5169,9 +4453,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5203,9 +4484,6 @@ paths:
               $ref: '#/components/schemas/PatchedDeaneryUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5226,9 +4504,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -5256,9 +4531,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5285,9 +4557,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5309,9 +4578,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5343,9 +4609,6 @@ paths:
               $ref: '#/components/schemas/PatchedDioceseUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5366,9 +4629,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -5406,9 +4666,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5435,9 +4692,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5459,9 +4713,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5493,9 +4744,6 @@ paths:
               $ref: '#/components/schemas/PatchedParishUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5516,9 +4764,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -5541,9 +4786,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5570,9 +4812,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5594,9 +4833,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5628,9 +4864,6 @@ paths:
               $ref: '#/components/schemas/PatchedProvinceUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5651,9 +4884,6 @@ paths:
       - org
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -5710,9 +4940,6 @@ paths:
       - public
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -5749,9 +4976,6 @@ paths:
       - public
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -5780,9 +5004,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5798,9 +5019,6 @@ paths:
       - Chapelet
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5828,9 +5046,6 @@ paths:
               $ref: '#/components/schemas/CommunityRosaryInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -5852,9 +5067,6 @@ paths:
       - Chapelet
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5889,9 +5101,6 @@ paths:
       - Chapelet
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5924,9 +5133,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           description: No response body
@@ -5944,9 +5150,6 @@ paths:
       - Chapelet
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -5974,9 +5177,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -5999,9 +5199,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6035,9 +5232,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6063,9 +5257,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6085,9 +5276,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6112,9 +5300,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6142,9 +5327,6 @@ paths:
       - Rosary
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       - {}
       responses:
         '200':
@@ -6172,9 +5354,6 @@ paths:
       - spiritual
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6201,9 +5380,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -6226,9 +5402,6 @@ paths:
       - spiritual
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6264,9 +5437,6 @@ paths:
               $ref: '#/components/schemas/PatchedReflectionUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6288,9 +5458,6 @@ paths:
       - spiritual
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -6302,9 +5469,6 @@ paths:
       - spiritual
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6320,9 +5484,6 @@ paths:
       - spiritual
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6360,9 +5521,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6390,9 +5548,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -6415,9 +5570,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6450,9 +5602,6 @@ paths:
               $ref: '#/components/schemas/PatchedEventUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6474,9 +5623,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -6505,9 +5651,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6530,9 +5673,6 @@ paths:
       - agenda
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6567,9 +5707,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -6595,9 +5732,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6616,9 +5750,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6648,9 +5779,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -6673,9 +5801,6 @@ paths:
       - confessions
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -6705,9 +5830,6 @@ paths:
               $ref: '#/components/schemas/SlotCancelInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6791,9 +5913,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6817,9 +5936,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6860,9 +5976,6 @@ paths:
               $ref: '#/components/schemas/TransitionInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6886,9 +5999,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6914,9 +6024,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -6953,9 +6060,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -6990,9 +6094,6 @@ paths:
               $ref: '#/components/schemas/RegisterRefInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7015,9 +6116,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7040,9 +6138,6 @@ paths:
       - documents
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7103,9 +6198,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7135,9 +6227,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -7163,9 +6252,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7201,9 +6287,6 @@ paths:
               $ref: '#/components/schemas/PatchedArticleUpdateInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7228,9 +6311,6 @@ paths:
       - news
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -7263,9 +6343,6 @@ paths:
               $ref: '#/components/schemas/ArticlePublishInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7302,9 +6379,6 @@ paths:
               $ref: '#/components/schemas/ArticleUnpublishInput'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7332,9 +6406,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -7356,9 +6427,6 @@ paths:
       - transfers
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7380,9 +6448,6 @@ paths:
       - transfers
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7416,9 +6481,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7443,9 +6505,6 @@ paths:
       - transfers
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7461,9 +6520,6 @@ paths:
       - transfers
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7489,9 +6545,6 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7521,9 +6574,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -7548,9 +6598,6 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7586,9 +6633,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7621,9 +6665,6 @@ paths:
               $ref: '#/components/schemas/PatchedCategory'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7645,9 +6686,6 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
@@ -7690,9 +6728,6 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7722,9 +6757,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '201':
           content:
@@ -7747,9 +6779,6 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7785,9 +6814,6 @@ paths:
         required: true
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7820,9 +6846,6 @@ paths:
               $ref: '#/components/schemas/PatchedVideoCreateUpdate'
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '200':
           content:
@@ -7844,1192 +6867,11 @@ paths:
       - TV
       security:
       - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
       responses:
         '204':
           description: No response body
         '404':
           description: Not found
-  /api/v1/users/:
-    get:
-      operationId: v1_users_retrieve
-      description: Accessible aux staff et admin uniquement.
-      summary: Liste des utilisateurs
-      parameters:
-      - in: query
-        name: email
-        schema:
-          type: string
-        description: Filtrer par email
-      - in: query
-        name: is_active
-        schema:
-          type: boolean
-        description: Filtrer par statut actif
-      - in: query
-        name: is_verified
-        schema:
-          type: boolean
-        description: Filtrer par statut de vérification email
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre d'éléments par page
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Index de début
-      - in: query
-        name: role
-        schema:
-          type: string
-        description: Filtrer par rôle (super_admin, province_admin, diocese_admin,
-          parish_admin, church_admin, fidele)
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserListPaginatedResponse'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/:
-    get:
-      operationId: v1_users_retrieve_2
-      description: Fiche complète d'un compte. Accessible aux administrateurs.
-      summary: Détail d'un utilisateur
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Output'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/audit-logs/:
-    get:
-      operationId: v1_users_audit_logs_retrieve
-      description: 'Historique des événements de sécurité, du plus récent au plus
-        ancien. Paginé : un compte ancien peut porter des milliers d''entrées.'
-      summary: Journal d'audit d'un utilisateur (paginé)
-      parameters:
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre d'éléments par page (défaut 50)
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Index de début
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuditLogPaginatedResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/delete/:
-    delete:
-      operationId: v1_users_delete_destroy
-      description: Désactive et anonymise le compte. Les commandes sont conservées.
-      summary: Suppression soft d'un utilisateur
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: Compte supprimé (soft)
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/hard-delete/:
-    delete:
-      operationId: v1_users_hard_delete_destroy
-      description: IRRÉVERSIBLE. Réservé aux administrateurs. L'audit log est conservé.
-      summary: Suppression définitive d'un utilisateur
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: Compte supprimé définitivement
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/reject-account/:
-    post:
-      operationId: v1_users_reject_account_create
-      description: 'Refuse une auto-déclaration clergé. Le motif est obligatoire et
-        notifié au demandeur par email. Le rôle pastoral revendiqué est retiré : le
-        compte redevient un compte fidèle ordinaire.'
-      summary: Refuser un compte clergé en attente
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClergyAccountRejectInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ClergyAccountRejectInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ClergyAccountRejectInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClergyDecisionOutput'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/toggle-active/:
-    patch:
-      operationId: v1_users_toggle_active_partial_update
-      description: Bascule le statut d'activation d'un compte, dans le périmètre de
-        l'appelant.
-      summary: Activer ou désactiver un compte
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Output'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/{user_id}/validate-account/:
-    post:
-      operationId: v1_users_validate_account_create
-      description: 'Approuve une auto-déclaration clergé : le compte devient actif
-        et vérifié. Réservé au super_admin (tous rôles) et à l''évêque/archevêque
-        pour le clergé de son propre périmètre (prêtre, diacre, religieux).'
-      summary: Valider un compte clergé en attente
-      parameters:
-      - in: path
-        name: user_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClergyDecisionOutput'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '404':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/admin/create/:
-    post:
-      operationId: v1_users_admin_create_create
-      description: Crée un compte immédiatement actif et vérifié. Un mot de passe
-        temporaire est généré et envoyé par email. Accessible aux administrateurs
-        uniquement.
-      summary: Créer un compte staff ou admin
-      tags:
-      - Admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Output'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/email/change/confirm/:
-    post:
-      operationId: v1_users_email_change_confirm_create
-      description: '**Paramètres d''entrée (JSON Body)** : `otp_code`. Valide le code
-        OTP reçu sur la nouvelle adresse. En cas de succès : l''email est mis à jour,
-        tous les tokens JWT sont rotés (déconnexion de tous les appareils), et une
-        notification est envoyée à l''ancienne adresse avec un lien de réversion.'
-      summary: Confirmation du changement d'email (OTP)
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          description: Email officiellement changé, reconnexion requise
-        '400':
-          description: Code incorrect ou expiré
-        '429':
-          description: Compte/IP verrouillé suite à trop d'échecs
-  /api/v1/users/email/change/request/:
-    post:
-      operationId: v1_users_email_change_request_create
-      description: 'Initie le changement d''adresse email. **Paramètres d''entrée
-        (JSON Body)** : `new_email`, `current_password`. Exige la vérification du
-        mot de passe actuel (Sudo Mode). Envoie un code OTP à 6 chiffres à la **nouvelle**
-        adresse uniquement. Le code expire après 10 minutes.'
-      summary: Demande de changement d'email (Sudo Mode)
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          description: OTP envoyé à la nouvelle adresse
-        '400':
-          description: Mot de passe incorrect ou email déjà utilisé
-        '429':
-          description: Trop de tentatives (Rate limiting IP/User)
-  /api/v1/users/email/change/revert/:
-    post:
-      operationId: v1_users_email_change_revert_create
-      description: Accessible sans authentification (l'attaquant a pu changer le mot
-        de passe). Restaure l'ancienne adresse, invalide le mot de passe, révoque
-        toutes les sessions. Lien valable 7 jours.
-      summary: Réversion d'urgence du changement d'email
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          description: Email restauré, réinitialisation du mot de passe requise
-        '400':
-          description: Lien invalide ou expiré
-  /api/v1/users/me/:
-    get:
-      operationId: v1_users_me_retrieve
-      summary: Mon profil
-      tags:
-      - Profil
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MonProfil'
-              examples:
-                ExempleFidèle:
-                  value:
-                    id: 1
-                    email: jean.dupont@example.com
-                    role: fidele
-                    pastoral_role: null
-                    onboarding_state: completed
-                    is_active: true
-                    is_verified: true
-                    is_admin: false
-                    is_staff: false
-                    diocese:
-                      id: 2
-                      name: Diocèse de Thiès
-                    province:
-                      id: 1
-                      name: Province de Dakar
-                    profile:
-                      first_name: Jean
-                      last_name: Dupont
-                      title: MR
-                      phone: '+221770000000'
-                      primary_parish:
-                        id: 5
-                        name: Paroisse Saint-Pierre
-                      avatar: null
-                  summary: Exemple Fidèle
-          description: ''
-  /api/v1/users/me/clergy-declaration/:
-    get:
-      operationId: v1_users_me_clergy_declaration_retrieve
-      description: Renvoie la dernière auto-déclaration du compte connecté (en attente,
-        approuvée, ou refusée avec son motif), ou `null` si aucune demande n'a jamais
-        été déposée.
-      summary: Consulter ma demande de compte clergé
-      tags:
-      - Users
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClergyDeclarationOutput'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-    post:
-      operationId: v1_users_me_clergy_declaration_create
-      description: 'Revendique un rôle pastoral, en joignant un justificatif et un
-        territoire de rattachement. Le compte entre en file d''attente : la revendication
-        n''accorde **aucun droit** tant que l''autorité compétente ne l''a pas approuvée.
-        Une seule demande peut être en cours à la fois ; après un refus, une nouvelle
-        demande est possible.'
-      summary: Déposer une auto-déclaration de compte clergé
-      tags:
-      - Users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClergyDeclarationCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ClergyDeclarationCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ClergyDeclarationCreateInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ClergyDeclarationOutput'
-          description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/me/delete/:
-    delete:
-      operationId: v1_users_me_delete_destroy
-      description: Désactive et anonymise le compte. Les données de commandes sont
-        conservées.
-      summary: Supprimer mon compte (soft)
-      tags:
-      - Profil
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: Compte supprimé
-  /api/v1/users/me/memberships/:
-    post:
-      operationId: v1_users_me_memberships_create
-      summary: Ajouter une ou plusieurs appartenances (onboarding « set d'églises
-        »)
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MembershipCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/MembershipCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/MembershipCreateInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MembershipMe'
-          description: ''
-  /api/v1/users/me/memberships/{membership_id}/:
-    delete:
-      operationId: v1_users_me_memberships_destroy
-      summary: Retirer une de mes appartenances
-      parameters:
-      - in: path
-        name: membership_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - users
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: No response body
-  /api/v1/users/me/memberships/{membership_id}/set-primary/:
-    patch:
-      operationId: v1_users_me_memberships_set_primary_partial_update
-      summary: Définir une de mes appartenances comme principale
-      parameters:
-      - in: path
-        name: membership_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - users
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MembershipMe'
-          description: ''
-  /api/v1/users/me/update/:
-    patch:
-      operationId: v1_users_me_update_partial_update
-      description: 'Met à jour les informations du profil de l''utilisateur connecté.
-        Note : Les données du compte (email, rôle, mot de passe) ne peuvent PAS être
-        modifiées ici. Le schéma des champs acceptés pour `profile` varie selon le
-        rôle (Particulier ou Pro).'
-      summary: Mettre à jour mon profil
-      tags:
-      - Profil
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedMeUpdateInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MonProfil'
-              examples:
-                ExempleFidèle:
-                  value:
-                    id: 1
-                    email: jean.dupont@example.com
-                    role: fidele
-                    pastoral_role: null
-                    onboarding_state: completed
-                    is_active: true
-                    is_verified: true
-                    is_admin: false
-                    is_staff: false
-                    diocese:
-                      id: 2
-                      name: Diocèse de Thiès
-                    province:
-                      id: 1
-                      name: Province de Dakar
-                    profile:
-                      first_name: Jean
-                      last_name: Dupont
-                      title: MR
-                      phone: '+221770000000'
-                      primary_parish:
-                        id: 5
-                        name: Paroisse Saint-Pierre
-                      avatar: null
-                  summary: Exemple Fidèle
-          description: ''
-  /api/v1/users/password/change/:
-    post:
-      operationId: v1_users_password_change_create
-      description: 'Change le mot de passe de l''utilisateur connecté. **Paramètres
-        d''entrée (JSON Body)** : `current_password`, `new_password`. Exige le mot
-        de passe actuel (Sudo Mode). En cas de succès, TOUS les tokens JWT actifs
-        sont invalidés (déconnexion globale).'
-      summary: Changement de mot de passe (Sud Mode)
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          description: Mot de passe changé
-        '400':
-          description: Mot de passe actuel incorrect ou nouveau trop faible
-  /api/v1/users/password/reset/confirm/:
-    post:
-      operationId: v1_users_password_reset_confirm_create
-      description: 'Applique le nouveau mot de passe. **Paramètres d''entrée (JSON
-        Body)** : `token`, `new_password`. Le token est à usage unique et expire après
-        20 minutes.'
-      summary: Confirmation de la réinitialisation
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          description: Mot de passe réinitialisé
-        '400':
-          description: Token invalide / expiré ou mot de passe trop faible
-  /api/v1/users/password/reset/request/:
-    post:
-      operationId: v1_users_password_reset_request_create
-      description: 'Initie la procédure de récupération de compte. **Paramètres d''entrée
-        (JSON Body)** : `email`. Envoie un lien de réinitialisation si l''email est
-        enregistré. La réponse est identique que l''email existe ou non (anti-énumération)
-        et inclut un délai factice pour prévenir les Timing Attacks.'
-      summary: Demande de réinitialisation de mot de passe
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          description: Email envoyé si l'adresse est connue
-  /api/v1/users/pending-validation/:
-    get:
-      operationId: v1_users_pending_validation_retrieve
-      description: 'File d''attente des auto-déclarations clergé, restreinte au périmètre
-        territorial de l''appelant (fail-closed : sans affectation territoriale, un
-        validateur non global ne voit aucun dossier). Les comptes créés par invitation
-        n''apparaissent jamais ici — accepter l''invitation vaut validation.'
-      summary: Lister les comptes clergé en attente de validation
-      parameters:
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre d'éléments par page (défaut 50)
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Index de début
-      tags:
-      - Admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PendingClergyPaginatedResponse'
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-        '403':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-          description: ''
-  /api/v1/users/register/:
-    post:
-      operationId: v1_users_register_create
-      description: Crée un compte fidèle (auto-inscription publique). Le compte est
-        inactif jusqu'à la vérification de l'email. Un email de vérification est envoyé
-        immédiatement.
-      summary: Inscription fidèle
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '201':
-          description: Compte créé, email de vérification envoyé
-        '400':
-          description: Données invalides (mot de passe trop faible…)
-        '429':
-          description: Trop d'inscriptions depuis cette adresse
-  /api/v1/users/role-assignments/:
-    get:
-      operationId: v1_users_role_assignments_list
-      summary: Lister les affectations de rôle (scopé au périmètre de l'appelant)
-      parameters:
-      - in: query
-        name: user
-        schema:
-          type: string
-          format: uuid
-        description: Filtrer par utilisateur
-      tags:
-      - users
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RoleAssignmentOutput'
-          description: ''
-    post:
-      operationId: v1_users_role_assignments_create
-      summary: Attribuer un rôle scopé à un utilisateur (dans son propre périmètre)
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RoleAssignmentCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RoleAssignmentCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RoleAssignmentCreateInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoleAssignmentOutput'
-          description: ''
-  /api/v1/users/role-assignments/{assignment_id}/revoke/:
-    post:
-      operationId: v1_users_role_assignments_revoke_create
-      summary: Révoquer une affectation de rôle
-      parameters:
-      - in: path
-        name: assignment_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - users
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoleAssignmentOutput'
-          description: ''
-  /api/v1/users/verify-email/:
-    post:
-      operationId: v1_users_verify_email_create
-      description: Valide le token reçu par email et active le compte. Le token est
-        à usage unique (anti-replay) et expire après 24h.
-      summary: Activer le compte via le lien email
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Input'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Input'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Input'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          description: Compte activé avec succès
-        '400':
-          description: Token invalide ou expiré
-  /api/v1/users/verify-email/resend/:
-    post:
-      operationId: v1_users_verify_email_resend_create
-      description: 'Renvoie l''email de vérification à un compte encore inactif. **Paramètres
-        d''entrée (JSON Body)** : `email`. La réponse est identique que le compte
-        existe, soit déjà vérifié ou non (anti-énumération).'
-      summary: Renvoyer le lien d'activation du compte
-      tags:
-      - Authentification
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResendInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ResendInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ResendInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          description: Demande prise en compte
-        '429':
-          description: Trop de demandes
 components:
   schemas:
     ActionEnum:
@@ -9417,53 +7259,6 @@ components:
       - node_id
       - target_id
       - target_type
-    AuditLogItem:
-      type: object
-      properties:
-        event:
-          type: string
-        ip_address:
-          type: string
-          nullable: true
-        metadata:
-          type: object
-          additionalProperties: {}
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - created_at
-      - event
-      - ip_address
-      - metadata
-    AuditLogPaginatedResponse:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-        count:
-          type: integer
-        next:
-          type: string
-          format: uri
-          nullable: true
-        previous:
-          type: string
-          format: uri
-          nullable: true
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/AuditLogItem'
-      required:
-      - count
-      - limit
-      - next
-      - offset
-      - previous
-      - results
     Availability:
       type: object
       properties:
@@ -9493,6 +7288,9 @@ components:
       required:
       - filename
       - source
+    BlankEnum:
+      enum:
+      - ''
     BlockCreateInput:
       type: object
       properties:
@@ -9952,20 +7750,6 @@ components:
         * `succursale` - Succursale
         * `chapelle` - Chapelle
         * `station` - Station / Mission
-    ClaimedPastoralRoleEnum:
-      enum:
-      - archeveque
-      - diacre
-      - eveque
-      - pretre
-      - religieux
-      type: string
-      description: |-
-        * `archeveque` - archeveque
-        * `diacre` - diacre
-        * `eveque` - eveque
-        * `pretre` - pretre
-        * `religieux` - religieux
     ClergicalMessageOutput:
       type: object
       properties:
@@ -10032,111 +7816,6 @@ components:
       - body
       - recipient_scope
       - subject
-    ClergyAccountRejectInput:
-      type: object
-      description: |-
-        Motif de refus. Nommée au niveau module pour la même raison que
-        ``ClergyDeclarationCreateInputSerializer`` : une classe imbriquée
-        ``InputSerializer`` collisionne sur le composant OpenAPI générique ``Input``,
-        et le client ne peut alors plus dériver son payload du contrat.
-      properties:
-        reason:
-          type: string
-          maxLength: 500
-      required:
-      - reason
-    ClergyDecisionOutput:
-      type: object
-      properties:
-        detail:
-          type: string
-        id:
-          type: string
-          format: uuid
-        clergy_validation_status:
-          type: string
-      required:
-      - clergy_validation_status
-      - detail
-      - id
-    ClergyDeclarationCreateInput:
-      type: object
-      description: |-
-        Corps de la demande d'auto-déclaration.
-
-        Déclaré au niveau module, et NON imbriqué dans la vue : drf-spectacular nomme
-        le composant OpenAPI d'après la classe, donc une classe imbriquée
-        ``InputSerializer`` produit un composant générique ``Input`` — déjà occupé par
-        un tout autre endpoint (``{file_id}``). Le client qui dériverait son payload
-        de ce nom se retrouverait typé sur la mauvaise forme : exactement la dérive
-        de contrat silencieuse que ce projet a déjà payée.
-      properties:
-        claimed_pastoral_role:
-          allOf:
-          - $ref: '#/components/schemas/ClaimedPastoralRoleEnum'
-          description: |-
-            Rôle pastoral revendiqué (sans effet avant approbation).
-
-            * `archeveque` - archeveque
-            * `diacre` - diacre
-            * `eveque` - eveque
-            * `pretre` - pretre
-            * `religieux` - religieux
-        parish_id:
-          type: integer
-          minimum: 1
-          description: Paroisse de rattachement revendiquée.
-        justification_file_id:
-          type: integer
-          minimum: 1
-          description: ID du fichier justificatif téléversé via /v1/files/upload/standard/.
-        message:
-          type: string
-          description: Précisions facultatives pour l'autorité validante.
-          maxLength: 2000
-      required:
-      - claimed_pastoral_role
-      - justification_file_id
-      - parish_id
-    ClergyDeclarationOutput:
-      type: object
-      description: État de MA demande — ce que le demandeur suit dans l'application.
-      properties:
-        id:
-          type: integer
-        claimed_pastoral_role:
-          type: string
-        status:
-          type: string
-        parish_id:
-          type: integer
-        parish_name:
-          type: string
-          nullable: true
-        message:
-          type: string
-        rejection_reason:
-          type: string
-        justification_file_url:
-          type: string
-          nullable: true
-        submitted_at:
-          type: string
-          nullable: true
-        reviewed_at:
-          type: string
-          nullable: true
-      required:
-      - claimed_pastoral_role
-      - id
-      - justification_file_url
-      - message
-      - parish_id
-      - parish_name
-      - rejection_reason
-      - reviewed_at
-      - status
-      - submitted_at
     CommunityRosaryInput:
       type: object
       properties:
@@ -10587,13 +8266,6 @@ components:
         * `mass_intention_offering` - Offrande de messe
         * `special_project` - Projet spécial
         * `free_donation` - Don libre
-    ErrorResponse:
-      type: object
-      properties:
-        detail:
-          type: string
-      required:
-      - detail
     EtatDeVieEnum:
       enum:
       - laic
@@ -11225,49 +8897,53 @@ components:
       required:
       - intention_text
       - intention_type
-    MembershipCreateInput:
+    MeOutput:
       type: object
-      properties:
-        church_ids:
-          type: array
-          items:
-            type: integer
-          description: Lot d'IDs d'églises (cascade onboarding). La 1re devient principale.
-        church_id:
-          type: integer
-          description: ID d'une seule église.
-        is_primary:
-          type: boolean
-          default: false
-    MembershipMe:
-      type: object
-      description: 'Appartenance exposée dans /me : église + paroisse + diocèse +
-        flag principal.'
+      description: EF-PER-01. Les capacités s'obtiennent par /me/capacites/.
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        profile:
+          type: object
+          additionalProperties: {}
           readOnly: true
-        church:
+        etat_de_vie:
+          type: string
+        degre_ordre:
+          type: string
+        statut_verification:
+          type: string
+        incardination:
           allOf:
-          - $ref: '#/components/schemas/OrgRef'
-          readOnly: true
-        parish:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        institut:
           allOf:
-          - $ref: '#/components/schemas/OrgRef'
-          readOnly: true
-        diocese:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        paroisse_suivie:
           allOf:
-          - $ref: '#/components/schemas/OrgRef'
-          readOnly: true
-        is_primary:
-          type: boolean
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        consent:
+          type: object
+          additionalProperties: {}
           readOnly: true
       required:
-      - church
-      - diocese
+      - consent
+      - degre_ordre
+      - email
+      - etat_de_vie
       - id
-      - is_primary
-      - parish
+      - incardination
+      - institut
+      - paroisse_suivie
+      - profile
+      - statut_verification
     MessageAttachmentOutput:
       type: object
       properties:
@@ -11401,100 +9077,6 @@ components:
       required:
       - accepted
       - accepted_at
-    MonProfil:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        email:
-          type: string
-          format: email
-          readOnly: true
-        phone_number:
-          type: string
-          readOnly: true
-        role:
-          type: string
-          readOnly: true
-        pastoral_role:
-          type: string
-          readOnly: true
-          nullable: true
-          description: Rôle pastoral (clergé) ou null.
-        onboarding_state:
-          type: string
-          readOnly: true
-          description: pending_email | pending_parish | completed.
-        is_active:
-          type: boolean
-          readOnly: true
-        is_verified:
-          type: boolean
-          readOnly: true
-        is_admin:
-          type: boolean
-          readOnly: true
-        is_staff:
-          type: boolean
-          readOnly: true
-        diocese:
-          allOf:
-          - $ref: '#/components/schemas/OrgRef'
-          readOnly: true
-          nullable: true
-        province:
-          allOf:
-          - $ref: '#/components/schemas/OrgRef'
-          readOnly: true
-          nullable: true
-        profile:
-          type: object
-          additionalProperties: {}
-          description: Objet profil. `primary_parish` y est exposé en {id, name} |
-            null.
-        memberships:
-          type: array
-          items:
-            $ref: '#/components/schemas/MembershipMe'
-          readOnly: true
-          description: Toutes les appartenances (principale en tête).
-        church_ids:
-          type: array
-          items:
-            type: integer
-          readOnly: true
-          description: IDs des églises.
-        parish_ids:
-          type: array
-          items:
-            type: integer
-          readOnly: true
-          description: IDs des paroisses (distincts).
-        diocese_ids:
-          type: array
-          items:
-            type: integer
-          readOnly: true
-          description: IDs des diocèses (distincts).
-      required:
-      - church_ids
-      - diocese
-      - diocese_ids
-      - email
-      - id
-      - is_active
-      - is_admin
-      - is_staff
-      - is_verified
-      - memberships
-      - onboarding_state
-      - parish_ids
-      - pastoral_role
-      - phone_number
-      - profile
-      - province
-      - role
     Mystery:
       type: object
       properties:
@@ -11946,61 +9528,6 @@ components:
       - code
       - label
       - node_types
-    OrgRef:
-      type: object
-      description: Référence légère {id, name} vers une entité territoriale.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          readOnly: true
-      required:
-      - id
-      - name
-    Output:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        phone_number:
-          type: string
-        role:
-          type: string
-        is_active:
-          type: boolean
-        is_verified:
-          type: boolean
-        is_admin:
-          type: boolean
-        is_staff:
-          type: boolean
-        date_joined:
-          type: string
-          readOnly: true
-        user_profile:
-          type: string
-          readOnly: true
-        address:
-          type: string
-          readOnly: true
-      required:
-      - address
-      - date_joined
-      - email
-      - id
-      - is_active
-      - is_admin
-      - is_staff
-      - is_verified
-      - phone_number
-      - role
-      - user_profile
     PaginatedArticleListOutputList:
       type: object
       properties:
@@ -12707,12 +10234,7 @@ components:
           nullable: true
         content:
           type: string
-    PatchedInput:
-      type: object
-      properties:
-        is_active:
-          type: boolean
-    PatchedMeUpdateInput:
+    PatchedMeProfile:
       type: object
       properties:
         first_name:
@@ -12722,21 +10244,17 @@ components:
           type: string
           maxLength: 50
         title:
-          $ref: '#/components/schemas/TitleEnum'
+          oneOf:
+          - $ref: '#/components/schemas/TitleEnum'
+          - $ref: '#/components/schemas/BlankEnum'
         date_of_birth:
           type: string
           format: date
           nullable: true
         phone:
           type: string
-          maxLength: 20
-        primary_parish:
-          type: integer
           nullable: true
-        avatar:
-          type: string
-          format: uri
-          nullable: true
+          maxLength: 30
     PatchedNodeUpdateInput:
       type: object
       properties:
@@ -12871,90 +10389,6 @@ components:
         * `orange_money` - Orange Money
         * `free_money` - Free Money
         * `cash` - Espèces
-    PendingClergyItem:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        pastoral_role:
-          type: string
-          nullable: true
-          readOnly: true
-        first_name:
-          type: string
-          nullable: true
-          readOnly: true
-        last_name:
-          type: string
-          nullable: true
-          readOnly: true
-        diocese_name:
-          type: string
-          nullable: true
-          readOnly: true
-        parish_name:
-          type: string
-          nullable: true
-          readOnly: true
-        date_joined:
-          type: string
-          nullable: true
-          readOnly: true
-        justification_file_url:
-          type: string
-          nullable: true
-          readOnly: true
-        declaration_message:
-          type: string
-          readOnly: true
-        submitted_at:
-          type: string
-          nullable: true
-          readOnly: true
-      required:
-      - date_joined
-      - declaration_message
-      - diocese_name
-      - email
-      - first_name
-      - id
-      - justification_file_url
-      - last_name
-      - parish_name
-      - pastoral_role
-      - submitted_at
-    PendingClergyPaginatedResponse:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-        count:
-          type: integer
-        next:
-          type: string
-          format: uri
-          nullable: true
-        previous:
-          type: string
-          format: uri
-          nullable: true
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PendingClergyItem'
-      required:
-      - count
-      - limit
-      - next
-      - offset
-      - previous
-      - results
     PersonRef:
       type: object
       properties:
@@ -13954,133 +11388,6 @@ components:
         * `diacre` - Diacre
         * `pretre` - Prêtre
         * `eveque` - Évêque
-    ResendInput:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-      required:
-      - email
-    RoleAssignmentCreateInput:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-        role:
-          $ref: '#/components/schemas/RoleEnum'
-        scope:
-          $ref: '#/components/schemas/ScopeEnum'
-        province_id:
-          type: integer
-          nullable: true
-        diocese_id:
-          type: integer
-          nullable: true
-        parish_id:
-          type: integer
-          nullable: true
-        church_id:
-          type: integer
-          nullable: true
-        is_principal:
-          type: boolean
-          default: false
-        note:
-          type: string
-          default: ''
-      required:
-      - role
-      - scope
-      - user_id
-    RoleAssignmentOutput:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        user:
-          type: string
-          format: uuid
-          title: Utilisateur
-        user_email:
-          type: string
-          format: email
-          readOnly: true
-        role:
-          allOf:
-          - $ref: '#/components/schemas/RoleEnum'
-          title: Rôle / capacité
-        scope:
-          allOf:
-          - $ref: '#/components/schemas/ScopeEnum'
-          title: Niveau de portée
-        province:
-          type: integer
-          nullable: true
-        diocese:
-          type: integer
-          nullable: true
-          title: Diocèse
-        parish:
-          type: integer
-          nullable: true
-          title: Paroisse
-        church:
-          type: integer
-          nullable: true
-          title: Église
-        scope_target_id:
-          type: integer
-          nullable: true
-          readOnly: true
-        is_principal:
-          type: boolean
-          title: Titulaire principal
-          description: Curé principal de la paroisse / responsable principal de l'église.
-        is_active:
-          type: boolean
-          title: Active
-        start_date:
-          type: string
-          format: date
-          nullable: true
-          title: Date de début
-        end_date:
-          type: string
-          format: date
-          nullable: true
-          title: Date de fin
-        note:
-          type: string
-          maxLength: 255
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - id
-      - role
-      - scope
-      - scope_target_id
-      - user
-      - user_email
-    RoleEnum:
-      enum:
-      - super_admin
-      - province_admin
-      - diocese_admin
-      - parish_admin
-      - church_admin
-      - fidele
-      type: string
-      description: |-
-        * `super_admin` - Super Admin
-        * `province_admin` - Admin Province
-        * `diocese_admin` - Admin Diocèse
-        * `parish_admin` - Admin Paroisse
-        * `church_admin` - Admin Église
-        * `fidele` - Fidèle
     RosaryDay:
       type: object
       properties:
@@ -14306,20 +11613,6 @@ components:
           description: 'Semaine type complète : remplace les horaires existants.'
       required:
       - items
-    ScopeEnum:
-      enum:
-      - global
-      - province
-      - diocese
-      - parish
-      - church
-      type: string
-      description: |-
-        * `global` - Global
-        * `province` - Province
-        * `diocese` - Diocèse
-        * `parish` - Paroisse
-        * `church` - Église
     ScopeTypeEnum:
       enum:
       - global
@@ -14647,8 +11940,8 @@ components:
       - MRS
       type: string
       description: |-
-        * `MR` - MR
-        * `MRS` - MRS
+        * `MR` - M.
+        * `MRS` - Mme
     TodayRosaryOutput:
       type: object
       properties:
@@ -14765,145 +12058,6 @@ components:
         * `HOLY_QUEEN` - Hail Holy Queen
         * `FINAL_PRAYER` - Final Prayer
         * `OTHER` - Other
-    UserJwtLoginInput:
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          writeOnly: true
-      required:
-      - email
-      - password
-    UserJwtLoginOutput:
-      type: object
-      properties:
-        access:
-          type: string
-        refresh:
-          type: string
-          description: Absent quand le transport par cookie est demandé.
-        user:
-          $ref: '#/components/schemas/UserJwtLoginUser'
-      required:
-      - access
-      - user
-    UserJwtLoginUser:
-      type: object
-      properties:
-        id:
-          type: integer
-        email:
-          type: string
-          format: email
-        role:
-          type: string
-        pastoral_role:
-          type: string
-          nullable: true
-        onboarding_state:
-          type: string
-        is_admin:
-          type: boolean
-      required:
-      - email
-      - id
-      - is_admin
-      - onboarding_state
-      - pastoral_role
-      - role
-    UserJwtLogoutInput:
-      type: object
-      properties:
-        refresh:
-          type: string
-          description: Refresh token à blacklister. Inutile si porté par le cookie
-            HttpOnly.
-    UserJwtRefreshInput:
-      type: object
-      properties:
-        refresh:
-          type: string
-          description: Inutile si le refresh token est porté par le cookie HttpOnly.
-    UserJwtRefreshOutput:
-      type: object
-      properties:
-        access:
-          type: string
-        refresh:
-          type: string
-          description: Absent quand le transport par cookie est demandé.
-      required:
-      - access
-    UserListItem:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        email:
-          type: string
-          format: email
-        phone_number:
-          type: string
-        role:
-          type: string
-        pastoral_role:
-          type: string
-          nullable: true
-        is_active:
-          type: boolean
-        is_verified:
-          type: boolean
-        is_admin:
-          type: boolean
-        date_joined:
-          type: string
-          readOnly: true
-        user_profile:
-          type: string
-          readOnly: true
-      required:
-      - date_joined
-      - email
-      - id
-      - is_active
-      - is_admin
-      - is_verified
-      - pastoral_role
-      - phone_number
-      - role
-      - user_profile
-    UserListPaginatedResponse:
-      type: object
-      properties:
-        limit:
-          type: integer
-        offset:
-          type: integer
-        count:
-          type: integer
-        next:
-          type: string
-          format: uri
-          nullable: true
-        previous:
-          type: string
-          format: uri
-          nullable: true
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/UserListItem'
-      required:
-      - count
-      - limit
-      - next
-      - offset
-      - previous
-      - results
     VerificationDecisionInput:
       type: object
       properties:
@@ -15026,16 +12180,3 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Jeton d'accès Keycloak (realm jangubi, audience jangubi-api).
-    legacyJwt:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Ancien JWT (transition).
-    session:
-      type: apiKey
-      in: cookie
-      name: sessionid
-    sessionHeader:
-      type: apiKey
-      in: header
-      name: Authorization

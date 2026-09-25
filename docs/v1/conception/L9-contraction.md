@@ -25,8 +25,8 @@ Les modules gelés (ADR-006) gardent leur code et leurs migrations : supprimer `
 
 ## 3. Ordre proposé, une PR par étape
 
-1. Retirer les anciennes vues d'administration de `users` (listes, rôles, adhésions) et leurs routes ; garder `/me/`.
-2. Retirer le repli JWT historique (`is_platform_admin` par `is_superuser`/`UserRole`, SimpleJWT, `jwt_key`, routes `/auth/jwt/*`, authentification WebSocket par JWT).
+1. ~~Retirer les anciennes vues d'administration de `users` et leurs routes~~ : fait (ADR-015).
+2. ~~Retirer le repli JWT historique~~ : fait (ADR-015).
 3. Supprimer les apps gelées retenues (étape 1 des décisions).
 4. Migrations « contract » : `users` (champs `role`, `pastoral_role`, `primary_parish`, `church`, `community`, `jwt_key` ; modèles `RoleAssignment`, `Membership`, `ClergySelfDeclaration`), `messaging` (`PriestProfile`), `news` et `agenda` (anciennes colonnes de portée `scope_parish`, `scope_diocese`, `scope_church`), `documents` (`parish_name`, `diocese`, statuts historiques), puis `org`.
 5. Chaque migration : relue par `database-reviewer`, testée aller-retour sur une copie de la base de production.

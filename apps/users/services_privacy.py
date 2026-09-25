@@ -176,12 +176,11 @@ def _anonymize_identity(user: Any) -> str | None:
     user.last_seen_on = None
     user.last_mfa_on = None
     user.set_unusable_password()
-    user.rotate_jwt_key()
     user.save(
         update_fields=[
             "is_active", "email", "phone_number", "keycloak_sub", "paroisse_suivie", "last_seen_on",
             "last_mfa_on", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
-            "password", "jwt_key", "updated_at",
+            "password", "updated_at",
         ]
     )  # fmt: skip
     profile = getattr(user, "profile", None)

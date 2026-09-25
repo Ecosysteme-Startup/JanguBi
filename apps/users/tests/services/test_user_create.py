@@ -2,7 +2,6 @@
 Tests de base sur le modèle BaseUser et le manager.
 """
 
-import uuid
 
 from django.test import TestCase
 
@@ -77,12 +76,3 @@ class BaseUserFactoryTests(TestCase):
         u2 = BaseUserFactory()
         self.assertNotEqual(u1.email, u2.email)
 
-    def test_jwt_key_is_uuid(self):
-        user = BaseUserFactory()
-        self.assertIsInstance(user.jwt_key, uuid.UUID)
-
-    def test_rotate_jwt_key_changes_value(self):
-        user = BaseUserFactory()
-        old_key = user.jwt_key
-        user.rotate_jwt_key()
-        self.assertNotEqual(user.jwt_key, old_key)

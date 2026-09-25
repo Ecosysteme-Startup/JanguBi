@@ -132,12 +132,6 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         default=False,
     )
 
-    # UUID rotatif : invalide TOUS les JWT actifs de l'utilisateur en une mise à jour
-    jwt_key = models.UUIDField(
-        default=uuid.uuid4,
-        help_text=_("Rotation invalide tous les tokens JWT actifs."),
-    )
-
     # Dimension pastorale (clergé/fidèle — orthogonale au rôle admin)
     pastoral_role = models.CharField(
         _("rôle pastoral"),
@@ -298,11 +292,6 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
 
     def __str__(self) -> str:
         return self.email
-
-    def rotate_jwt_key(self) -> None:
-        """Invalide tous les JWT actifs. Appelé après password change / email change revert."""
-        self.jwt_key = uuid.uuid4()
-        self.save(update_fields=["jwt_key", "updated_at"])
 
     def get_scope_ids(self) -> dict:
         """IDs territoriaux pour le scoping du contenu, dérivés des appartenances

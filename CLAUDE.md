@@ -44,11 +44,13 @@ tasks.py       → Tâches Celery. Import des services dans le corps de la fonct
 
 ## 4. Authentification — Keycloak (ADR-004, livré en L3)
 
-- OIDC : le front obtient le jeton (Auth.js, PKCE, client `jangubi-web`), l'API le valide via JWKS (`apps/authentication/keycloak.py`, audience `jangubi-api`), le WebSocket valide le même jeton au handshake (`?token=`, fermeture 4401 si invalide).
+- **Keycloak est la seule authentification** (ADR-015, 25/09/2026). OIDC : le front obtient le jeton (Auth.js, PKCE, client `jangubi-web`), l'API le valide via JWKS (`apps/authentication/keycloak.py`, audience `jangubi-api`). WebSocket : ticket à usage unique obtenu par `POST /api/v1/me/ws-ticket/`, puis `?ticket=` (fermeture 4401 si invalide) ; jamais de jeton dans l'URL.
+- Inscription, activation, mot de passe, changement d'e-mail : **dans Keycloak**. Il n'y a plus de parcours maison ni de routes `auth/` et `users/`.
 - Rôles de realm : `fidele`, `staff` (synchronisé depuis les nominations, MFA exigée), `platform_admin` (à la main, MFA exigée). **Aucune hiérarchie dans Keycloak.** L'API exige `amr ∋ otp` pour tout endpoint à capacité.
 - Realm versionné : `infra/keycloak/realm-jangubi.json` ; `make kc-up` (http://localhost:8180), `make kc-export`, `make kc-test` (intégration réelle, hors CI).
 - En tests : clé RSA et JWKS locaux, jamais de Keycloak réel en CI.
-- **Bascule par réglage** : `KEYCLOAK_ENABLED=true` active Keycloak ; SimpleJWT reste accepté tant que `LEGACY_JWT_ENABLED=true` (transition du front). Ne pas étendre SimpleJWT ; `jwt_key` et les routes `/api/v1/auth/jwt/*` partent en L9.
+- SimpleJWT, `jwt_key` et les routes `/api/v1/auth/jwt/*` sont supprimés. `KEYCLOAK_ENABLED` ne commande plus que la synchronisation avec l'API d'administration Keycloak (rôle staff, suppression de compte).
+- Administrateur plateforme : rôle de realm `platform_admin` uniquement (ni `is_superuser`, ni l'ancien `super_admin`). En test : `SuperAdminFactory` ou `platform_identity(user)`.
 - Migration des comptes : `manage.py migrate_users_to_keycloak [--apply]` (hachages pbkdf2 importés, pas de réinitialisation).
 
 ## 5. Règles métier à ne jamais enfreindre

@@ -74,7 +74,7 @@ def test_frozen_route_returns_404_with_v1_defaults(url):
 
 
 @pytest.mark.parametrize(
-    "prefix", ["auth/", "users/", "bible/", "liturgy/", "rosary/", "messaging/", "documents/", "news/", "agenda/", "org/"]
+    "prefix", ["me/", "bible/", "liturgy/", "rosary/", "messaging/", "documents/", "news/", "agenda/", "org/"]
 )
 def test_v1_routes_stay_exposed(prefix):
     from apps.api.urls import build_v1_patterns

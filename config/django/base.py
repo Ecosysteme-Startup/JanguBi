@@ -37,10 +37,6 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.liturgy.tasks.daily_sync",
         "schedule": crontab(hour=3, minute=0),
     },
-    "purge_expired_admin_accounts": {
-        "task": "apps.users.tasks.purge_expired_unactivated_admin_accounts",
-        "schedule": crontab(hour=4, minute=0),
-    },
     "purge_expired_conversations": {
         "task": "apps.messaging.tasks.purge_expired_conversations",
         "schedule": crontab(hour=3, minute=0),
@@ -143,8 +139,6 @@ THIRD_PARTY_APPS = [
     "treebeard",
     "corsheaders",
     "django_extensions",
-    "rest_framework_simplejwt",
-    "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
     "channels",
 ]
@@ -278,12 +272,8 @@ REST_FRAMEWORK = {
     # retombe sur le défaut DRF (Session+Basic) et IGNORE le Bearer JWT — c'était
     # la cause du 401 systématique de la Liturgie des Heures côté SPA/mobile.
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        # Keycloak d'abord (inactif tant que KEYCLOAK_ENABLED=false) ; SimpleJWT ensuite,
-        # tant que LEGACY_JWT_ENABLED=true (transition du front, ADR-004).
+        # Keycloak seul (ADR-004).
         'apps.authentication.keycloak.KeycloakJWTAuthentication',
-        'apps.authentication.authentication.JwtKeyEnforcingJWTAuthentication',
-        'apps.api.mixins.CsrfExemptedSessionAuthentication',
-        'apps.api.mixins.SessionAsHeaderAuthentication',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_FILTER_BACKENDS': [
@@ -371,7 +361,6 @@ from config.settings.cors import *  # noqa
 from config.settings.email_sending import *  # noqa
 from config.settings.files_and_storages import *  # noqa
 #from config.settings.google_oauth2 import *  # noqa
-from config.settings.jwt import *  # noqa
 from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa

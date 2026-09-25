@@ -1,9 +1,7 @@
 """Validation des jetons d'accès Keycloak (OIDC) et provisioning des personnes (EF-AUTH-01, -02, -05).
 
-Un jeton est « Keycloak » si son émetteur (``iss``) est celui du realm. Sinon la classe
-d'authentification s'efface et l'ancienne authentification (SimpleJWT) peut prendre la
-main tant que ``LEGACY_JWT_ENABLED`` est vrai. Un jeton Keycloak invalide n'est jamais
-rattrapé par l'ancienne authentification : 401.
+Seule authentification de l'API : tout jeton Bearer est validé ici (émetteur, signature
+JWKS, audience, expiration) ; un jeton invalide donne 401.
 """
 
 import logging
@@ -240,14 +238,10 @@ class KeycloakJWTAuthentication(BaseAuthentication):
     www_authenticate_realm = "jangubi"
 
     def authenticate(self, request: Any) -> tuple[Any, KeycloakIdentity] | None:
-        if not settings.KEYCLOAK_ENABLED:
-            return None
         parts = get_authorization_header(request).split()
         if len(parts) != 2 or parts[0].lower() != b"bearer":
             return None
         token = parts[1].decode("latin-1")
-        if not is_keycloak_token(token):
-            return None  # jeton SimpleJWT : l'ancienne authentification décide
         try:
             return authenticate_token(token)
         except KeycloakTokenError as exc:

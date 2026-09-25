@@ -133,9 +133,10 @@ def test_platform_dashboard(world):
 
 
 @freeze_time(NOW)
-def test_api_platform_dashboard_reserved_to_platform(world, settings):
-    settings.LEGACY_JWT_ENABLED = True
-    admin = person("admin@numerisen.sn", is_superuser=True)
+def test_api_platform_dashboard_reserved_to_platform(world):
+    from apps.users.tests.factories import platform_identity
+
+    admin = platform_identity(person("admin@numerisen.sn"))
     assert client_for(admin).get("/api/v1/dashboards/platform/").status_code == 200
     assert client_for(world.cure).get("/api/v1/dashboards/platform/").status_code == 403
 

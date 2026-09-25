@@ -9,13 +9,6 @@ DEBUG = env.bool("DJANGO_DEBUG", default=False)
 # Pas de MFA sur l'admin Django (revue de sécurité L9) : fermée sauf décision explicite.
 DJANGO_ADMIN_ENABLED = env.bool("DJANGO_ADMIN_ENABLED", default=False)
 
-import logging as _logging  # noqa: E402
-
-if env.bool("LEGACY_JWT_ENABLED", default=True):
-    _logging.getLogger(__name__).warning(
-        "LEGACY_JWT_ENABLED=true : l'ancien JWT reste accepté (repli super-admin, jeton WebSocket "
-        "dans l'URL). À désactiver dès la bascule du front sur Keycloak (ADR-004)."
-    )
 
 SECRET_KEY = env("SECRET_KEY")
 
@@ -96,10 +89,6 @@ WS_ALLOWED_ORIGINS = env.list(
 
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
 
-# Le cookie porteur du refresh token (7 jours) ne doit JAMAIS transiter en clair.
-# Cf. config/settings/jwt.py pour la contrainte SameSite si le front change de
-# domaine enregistrable.
-JWT_REFRESH_COOKIE_SECURE = env.bool("JWT_REFRESH_COOKIE_SECURE", default=True)
 # Le cookie CSRF doit lui aussi être réservé à HTTPS : sans ce réglage il partait
 # en clair, ce qui annule l'intérêt d'un cookie de session sécurisé.
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)

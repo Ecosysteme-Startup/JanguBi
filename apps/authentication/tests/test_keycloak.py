@@ -235,31 +235,20 @@ def test_platform_admin_comes_from_the_realm_role(keys):
     assert legacy_super.role == "super_admin"
 
 
-def test_legacy_jwt_is_refused_after_the_switch(keys):
-    from rest_framework_simplejwt.tokens import AccessToken
-
-    user = BaseUserFactory.create()
-    legacy = AccessToken.for_user(user)
-    legacy["jwt_key"] = str(user.jwt_key)
-
-    assert api(str(legacy)).get(ME).status_code == 200
-    with override_settings(LEGACY_JWT_ENABLED=False):
-        assert api(str(legacy)).get(ME).status_code == 401
-
-
-def test_disabled_keycloak_ignores_its_tokens(keys):
-    with override_settings(KEYCLOAK_ENABLED=False):
-        assert api(keys.token()).get(ME).status_code == 401
+def test_non_keycloak_bearer_token_is_refused(keys):
+    """Keycloak est la seule authentification : un ancien JWT (ou tout autre jeton) donne 401."""
+    forged = jwt.encode({"user_id": str(BaseUserFactory.create().pk)}, "une-autre-cle", algorithm="HS256")
+    assert api(forged).get(ME).status_code == 401
 
 
 # --- WebSocket (EF-AUTH-03) --------------------------------------------------------------
 
 
 @pytest.mark.django_db(transaction=True)
-async def test_websocket_closes_4401_on_invalid_token(keys):
+async def test_websocket_closes_4401_on_invalid_ticket(keys):
     from config.asgi import application
 
-    communicator = WebsocketCommunicator(application, "/ws/notifications/?token=pas-un-jeton", headers=[(b"origin", b"http://localhost:3000")])
+    communicator = WebsocketCommunicator(application, "/ws/notifications/?ticket=pas-un-ticket", headers=[(b"origin", b"http://localhost:3000")])
     connected, code = await communicator.connect()
     assert not connected
     assert code == 4401
@@ -267,13 +256,14 @@ async def test_websocket_closes_4401_on_invalid_token(keys):
 
 
 @pytest.mark.django_db(transaction=True)
-async def test_websocket_accepts_a_keycloak_token(keys):
+async def test_websocket_ignores_a_token_in_the_url(keys):
+    """Le jeton ne passe jamais dans l'URL (journaux) : seul le ticket authentifie la socket."""
     from config.asgi import application
 
     token = keys.token(email="ws@test.sn")
     communicator = WebsocketCommunicator(application, f"/ws/notifications/?token={token}", headers=[(b"origin", b"http://localhost:3000")])
     connected, _ = await communicator.connect()
-    assert connected
+    assert not connected
     await communicator.disconnect()
 
 
