@@ -1527,7 +1527,7 @@ paths:
           description: ''
   /api/v1/hierarchy/assignments/:
     get:
-      operationId: v1_hierarchy_assignments_retrieve
+      operationId: hierarchy_assignments_list
       description: À placer en premier dans les bases des vues V1.
       summary: Nominations visibles (celles des nœuds où j'ai offices.nommer, et les
         miennes)
@@ -1610,7 +1610,7 @@ paths:
           description: ''
   /api/v1/hierarchy/assignments/{assignment_id}/:
     get:
-      operationId: v1_hierarchy_assignments_retrieve_2
+      operationId: v1_hierarchy_assignments_retrieve
       description: À placer en premier dans les bases des vues V1.
       summary: Détail d'une nomination
       parameters:
@@ -1838,7 +1838,7 @@ paths:
           description: ''
   /api/v1/hierarchy/nodes/:
     get:
-      operationId: v1_hierarchy_nodes_retrieve
+      operationId: hierarchy_nodes_list
       description: |-
         Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
@@ -1947,7 +1947,7 @@ paths:
           description: ''
   /api/v1/hierarchy/nodes/{node_id}/:
     get:
-      operationId: v1_hierarchy_nodes_retrieve_2
+      operationId: v1_hierarchy_nodes_retrieve
       description: |-
         Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 

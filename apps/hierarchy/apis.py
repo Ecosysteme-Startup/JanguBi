@@ -122,6 +122,7 @@ class NodeListCreateApi(HierarchyBaseApi):
 
     @extend_schema(
         tags=TAG,
+        operation_id="hierarchy_nodes_list",
         summary="Lister les nœuds (filtres type, parent, within, q, city, status, on_platform)",
         parameters=[
             NodeFilterSerializer,

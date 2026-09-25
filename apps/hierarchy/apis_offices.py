@@ -64,6 +64,7 @@ class OfficeTypeListApi(AuthedV1Api):
 class AssignmentListCreateApi(AuthedV1Api):
     @extend_schema(
         tags=TAG,
+        operation_id="hierarchy_assignments_list",
         summary="Nominations visibles (celles des nœuds où j'ai offices.nommer, et les miennes)",
         parameters=[AssignmentFilterSerializer, *_PAGINATION],
         responses=paginated_response_serializer(AssignmentOutputSerializer),
