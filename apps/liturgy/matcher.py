@@ -1,6 +1,7 @@
 import re
 from typing import List
 
+from apps.bible.editions import edition_filter
 from apps.bible.models import Book, Verse
 
 
@@ -96,11 +97,13 @@ class CitationMatcher:
         max_v = max(verse_numbers)
 
         # 5. Bring it together into a Verse QuerySet
-        qs = Verse.objects.filter(
-            chapter__book=matched_book,
-            chapter__number=chapter_num,
-            number__gte=min_v,
-            number__lte=max_v
+        qs = edition_filter(
+            Verse.objects.filter(
+                chapter__book=matched_book,
+                chapter__number=chapter_num,
+                number__gte=min_v,
+                number__lte=max_v,
+            )
         ).order_by("number")
         
         return list(qs)

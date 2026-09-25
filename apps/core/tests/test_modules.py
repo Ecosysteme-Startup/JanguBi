@@ -96,7 +96,7 @@ def test_frozen_route_is_404_over_http(client, settings):
 @pytest.mark.parametrize(
     ("module", "submodule", "url", "kept_url"),
     [
-        ("apps.liturgy.urls", "liturgy.heures", "/v1/laudes/", "/v1/lectures/"),
+        ("apps.liturgy.urls", "liturgy.heures", "/v1/lectures/", "/today/"),
         ("apps.bible.urls", "bible.avance", "/lectio/", "/books/"),
         ("apps.rosary.urls", "rosary.communautaire", "/community/", "/today/"),
     ],

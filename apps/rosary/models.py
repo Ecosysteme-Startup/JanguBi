@@ -21,6 +21,8 @@ class Mystery(BaseModel):
     order = models.PositiveSmallIntegerField()  # 1 to 5
     title = models.CharField(max_length=255)
     meditation = models.TextField(null=True, blank=True, help_text="Scripture reading or meditation for the mystery")
+    # Provenance du texte de méditation (audit L7, ADR-008) : œuvre, auteur, licence.
+    meditation_source = models.CharField(max_length=255, blank=True, default="", db_default="")
     audio_file = models.FileField(storage=RosaryAudioStorage(), upload_to="", null=True, blank=True)
     audio_duration = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in seconds")
 
@@ -49,6 +51,8 @@ class Prayer(BaseModel):
     type = models.CharField(max_length=50, choices=Type.choices)
     text = models.TextField()
     language = models.CharField(max_length=10, default="FR")
+    # Provenance (audit L7) : prières traditionnelles du domaine public, ou source et licence.
+    source = models.CharField(max_length=255, blank=True, default="", db_default="")
     
     # Text Search Field (populated via triggers/SQL)
     tsv = SearchVectorField(null=True, blank=True)

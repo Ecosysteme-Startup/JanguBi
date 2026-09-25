@@ -1,7 +1,6 @@
 import datetime
 
 from asgiref.sync import async_to_sync
-from django.core.cache import cache
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -13,11 +12,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
-from apps.liturgy.models import LiturgicalDate, Office, Reading
+from apps.liturgy import selectors
+from apps.liturgy.models import LiturgicalDate, Office
 from apps.liturgy.serializers import (
-    LiturgicalDateSerializer,
     OfficeSerializer,
-    ReadingSerializer,
 )
 from apps.liturgy.services import AelfService
 
@@ -129,174 +127,34 @@ class _OfficeBase(_DailyLiturgyBase):
         return Response(OfficeSerializer(office).data)
 
 
-def _strip_offices_if_not_clergy(data: dict, user) -> dict:
-    """
-    Le payload complet (cache partagé) contient messe + offices ; les offices
-    (Liturgie des Heures) sont réservés au clergé/religieux. Copie sans
-    mutation de l'entrée en cache.
-    """
-    if user_can_access_hours(user):
-        return data
-    return {**data, "offices": []}
-
-
 # ---------------------------------------------------------------------------
 # Public endpoints — informations + messes
 # ---------------------------------------------------------------------------
 
-class LiturgyInformationsApi(_DailyLiturgyBase):
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("date", OpenApiTypes.STR, description="Date YYYY-MM-DD"),
-            OpenApiParameter("zone", OpenApiTypes.STR, description="Zone liturgique"),
-        ],
-        responses={200: LiturgicalDateSerializer},
-        tags=["Liturgy"],
-        summary="Informations sur la date liturgique",
-    )
-    def get(self, request):
-        date_str, zone = self._get_params(request)
-        date_obj, valid = self._ensure_data(date_str, zone)
-        if not valid:
-            return Response(
-                {"detail": "Format de date invalide."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not date_obj:
-            return Response({"detail": "Données non disponibles."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(LiturgicalDateSerializer(date_obj).data)
-
-
-class LiturgyMessesApi(_DailyLiturgyBase):
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("date", OpenApiTypes.STR, description="Date YYYY-MM-DD"),
-            OpenApiParameter("zone", OpenApiTypes.STR, description="Zone liturgique"),
-        ],
-        responses={200: ReadingSerializer(many=True)},
-        tags=["Liturgy"],
-        summary="Lectures de la Messe du jour",
-    )
-    def get(self, request):
-        date_str, zone = self._get_params(request)
-        date_obj, valid = self._ensure_data(date_str, zone)
-        if not valid:
-            return Response(
-                {"detail": "Format de date invalide."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not date_obj:
-            return Response({"detail": "Données non disponibles."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(ReadingSerializer(date_obj.readings.all(), many=True).data)
-
-
 class LiturgyTodayApi(ApiAuthMixin, APIView):
-    # Jour liturgique complet : les LECTURES DE MESSE sont pour tout utilisateur
-    # connecté (c'est l'onglet « Aujourd'hui » du fidèle) ; seuls les OFFICES
-    # relèvent de la Liturgie des Heures (clergé/religieux) et sont retirés du
-    # payload pour les autres. NB : l'ancien gate clergé sur tout l'endpoint ne
-    # « marchait » pour les fidèles que par une fuite de @cache_page.
-    permission_classes = [IsAuthenticated]
+    """Jour liturgique V1, public (EF-PAR-01, -02, -05)."""
 
-    @extend_schema(
-        responses={200: LiturgicalDateSerializer},
-        tags=["Liturgy"],
-        summary="Liturgie du jour complet (lectures pour tous, offices clergé)",
-    )
-    def get(self, request):
-        # Cache manuel APRÈS la permission (l'ancien @cache_page servait la même
-        # entrée à tous — y compris des réponses d'erreur mises en cache — sans
-        # re-passer par le gate clergé).
-        today = timezone.localtime().date()
-        cache_key = f"liturgy_today_api_{today.isoformat()}"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response(_strip_offices_if_not_clergy(cached_data, request.user))
-
-        date_obj = (
-            LiturgicalDate.objects.filter(date=today, zone="afrique")
-            .prefetch_related("readings__matched_verses", "offices")
-            .first()
-        )
-        if not date_obj:
-            async_to_sync(AelfService.sync_daily_data)(today.isoformat(), "afrique")
-            date_obj = (
-                LiturgicalDate.objects.filter(date=today, zone="afrique")
-                .prefetch_related("readings__matched_verses", "offices")
-                .first()
-            )
-        if not date_obj:
-            return Response(
-                {"detail": "Données liturgiques du jour non encore synchronisées."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        data = LiturgicalDateSerializer(date_obj).data
-        cache.set(cache_key, data, timeout=60 * 60)
-        return Response(_strip_offices_if_not_clergy(data, request.user))
-
-
-class LiturgyDateApi(ApiAuthMixin, APIView):
-    # Même contrat que /today/ : lectures de messe pour tout utilisateur
-    # connecté, offices réservés au clergé (strippés du payload sinon).
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        responses={200: LiturgicalDateSerializer},
-        tags=["Liturgy"],
-        summary="Liturgie pour une date (lectures pour tous, offices clergé)",
-    )
-    def get(self, request, date_str):
-        cache_key = f"liturgy_date_api_v2_{date_str}"
-        cached_data = cache.get(cache_key)
-        if cached_data:
-            return Response(_strip_offices_if_not_clergy(cached_data, request.user))
-
-        try:
-            target_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return Response(
-                {"detail": "Format de date invalide. Utilisez YYYY-MM-DD."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        date_obj = (
-            LiturgicalDate.objects.filter(date=target_date, zone="afrique")
-            .prefetch_related("readings__matched_verses", "offices")
-            .first()
-        )
-        if not date_obj:
-            async_to_sync(AelfService.sync_daily_data)(date_str, "afrique")
-            date_obj = (
-                LiturgicalDate.objects.filter(date=target_date, zone="afrique")
-                .prefetch_related("readings__matched_verses", "offices")
-                .first()
-            )
-        if not date_obj:
-            return Response(
-                {"detail": f"Données liturgiques pour {date_str} introuvables."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        data = LiturgicalDateSerializer(date_obj).data
-        cache.set(cache_key, data, timeout=60 * 60 * 24)
-        return Response(_strip_offices_if_not_clergy(data, request.user))
-
-
-class ReadingDetailApi(ApiAuthMixin, APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses={200: ReadingSerializer},
+        responses={200: OpenApiTypes.OBJECT},
         tags=["Liturgy"],
-        summary="Détail d'une lecture de messe",
+        summary="Aujourd'hui : calendrier (calcul local), lectures selon LITURGY_SOURCE, méditation",
     )
-    @method_decorator(cache_page(60 * 60 * 24))
-    def get(self, request, pk):
-        try:
-            reading = Reading.objects.prefetch_related("matched_verses").get(pk=pk)
-        except Reading.DoesNotExist:
-            return Response({"detail": "Lecture introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(ReadingSerializer(reading).data)
+    def get(self, request):
+        return Response(selectors.liturgy_day(day=timezone.localdate(), user=request.user))
+
+
+class LiturgyDateApi(ApiAuthMixin, APIView):
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        responses={200: OpenApiTypes.OBJECT},
+        tags=["Liturgy"],
+        summary="Jour liturgique d'une date (YYYY-MM-DD)",
+    )
+    def get(self, request, day):
+        return Response(selectors.liturgy_day(day=day, user=request.user))
 
 
 class OfficeDetailApi(ApiAuthMixin, APIView):

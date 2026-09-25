@@ -578,39 +578,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/VerseOutput'
           description: ''
-  /api/v1/bible/daily-texts/:
-    get:
-      operationId: v1_bible_daily_texts_list
-      description: Returns AELF daily texts.
-      summary: Get paginated list of AELF daily texts
-      parameters:
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Number of results to return per page.
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: The initial index from which to return the results.
-      tags:
-      - Bible
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DailyTextOutput'
-          description: ''
   /api/v1/bible/homilenotes/:
     get:
       operationId: v1_bible_homilenotes_list
@@ -740,7 +707,7 @@ paths:
   /api/v1/bible/import/:
     post:
       operationId: v1_bible_import_create
-      description: Admin-only endpoint to trigger a background import.
+      description: Import en tâche de fond, réservé à la plateforme (capacité plateforme.admin).
       summary: Trigger background import of Bible texts
       tags:
       - Bible
@@ -768,7 +735,7 @@ paths:
           description: 'Nom de fichier invalide (chemin de répertoire interdit) —
             `{"error": ...}`'
         '403':
-          description: 'Réservé aux super-utilisateurs — `{"error": ...}`'
+          description: Réservé à la plateforme (plateforme.admin)
         '404':
           description: 'Fichier introuvable dans le dossier d''importation — `{"error":
             ...}`'
@@ -3033,15 +3000,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonStatusOutput'
           description: ''
-  /api/v1/liturgy/date/{date_str}/:
+  /api/v1/liturgy/{day}/:
     get:
-      operationId: v1_liturgy_date_retrieve
-      summary: Liturgie pour une date (lectures pour tous, offices clergé)
+      operationId: v1_liturgy_retrieve
+      summary: Jour liturgique d'une date (YYYY-MM-DD)
       parameters:
       - in: path
-        name: date_str
+        name: day
         schema:
           type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
         required: true
       tags:
       - Liturgy
@@ -3050,12 +3018,14 @@ paths:
       - legacyJwt: []
       - session: []
       - sessionHeader: []
+      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LiturgicalDate'
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/liturgy/offices/{id}/:
     get:
@@ -3081,16 +3051,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Office'
           description: ''
-  /api/v1/liturgy/readings/{id}/:
+  /api/v1/liturgy/today/:
     get:
-      operationId: v1_liturgy_readings_retrieve
-      summary: Détail d'une lecture de messe
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        required: true
+      operationId: v1_liturgy_today_retrieve
+      description: Jour liturgique V1, public (EF-PAR-01, -02, -05).
+      summary: 'Aujourd''hui : calendrier (calcul local), lectures selon LITURGY_SOURCE,
+        méditation'
       tags:
       - Liturgy
       security:
@@ -3104,25 +3070,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Reading'
-          description: ''
-  /api/v1/liturgy/today/:
-    get:
-      operationId: v1_liturgy_today_retrieve
-      summary: Liturgie du jour complet (lectures pour tous, offices clergé)
-      tags:
-      - Liturgy
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LiturgicalDate'
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/liturgy/v1/complies/:
     get:
@@ -3153,42 +3102,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Office'
-          description: ''
-  /api/v1/liturgy/v1/informations/:
-    get:
-      operationId: v1_liturgy_v1_informations_retrieve
-      description: |-
-        Common date/zone parsing and AELF auto-sync for liturgy endpoints.
-
-        ApiAuthMixin est INDISPENSABLE : sans lui, le Bearer JWT n'était pas lu
-        (pas de JWTAuthentication) et les endpoints clergé renvoyaient 401 à tout
-        client SPA/mobile authentifié. Les vues publiques gardent AllowAny.
-      summary: Informations sur la date liturgique
-      parameters:
-      - in: query
-        name: date
-        schema:
-          type: string
-        description: Date YYYY-MM-DD
-      - in: query
-        name: zone
-        schema:
-          type: string
-        description: Zone liturgique
-      tags:
-      - Liturgy
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LiturgicalDate'
           description: ''
   /api/v1/liturgy/v1/laudes/:
     get:
@@ -3249,44 +3162,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Office'
-          description: ''
-  /api/v1/liturgy/v1/messes/:
-    get:
-      operationId: v1_liturgy_v1_messes_list
-      description: |-
-        Common date/zone parsing and AELF auto-sync for liturgy endpoints.
-
-        ApiAuthMixin est INDISPENSABLE : sans lui, le Bearer JWT n'était pas lu
-        (pas de JWTAuthentication) et les endpoints clergé renvoyaient 401 à tout
-        client SPA/mobile authentifié. Les vues publiques gardent AllowAny.
-      summary: Lectures de la Messe du jour
-      parameters:
-      - in: query
-        name: date
-        schema:
-          type: string
-        description: Date YYYY-MM-DD
-      - in: query
-        name: zone
-        schema:
-          type: string
-        description: Zone liturgique
-      tags:
-      - Liturgy
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      - {}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Reading'
           description: ''
   /api/v1/liturgy/v1/none/:
     get:
@@ -9075,30 +8950,18 @@ components:
       description: |-
         * `terminer` - terminer
         * `annuler` - annuler
-    AelfResource:
-      type: object
-      description: Serializer for external AELF resources (audio/youtube).
-      properties:
-        audio_url:
-          type: string
-          format: uri
-          nullable: true
-          maxLength: 500
-        youtube_url:
-          type: string
-          format: uri
-          nullable: true
-          maxLength: 500
     ArticleContentTypeEnum:
       enum:
       - announcement
       - article
       - pastoral_letter
+      - meditation
       type: string
       description: |-
         * `announcement` - Annonce
         * `article` - Article
         * `pastoral_letter` - Lettre Pastorale
+        * `meditation` - Méditation du jour
     ArticleCreateInput:
       type: object
       properties:
@@ -10318,30 +10181,6 @@ components:
       required:
       - counts
       - total
-    DailyTextOutput:
-      type: object
-      properties:
-        date:
-          type: string
-          format: date
-        category:
-          type: string
-          maxLength: 64
-        title:
-          type: string
-          maxLength: 255
-        content:
-          type: string
-        source_url:
-          type: string
-          format: uri
-          nullable: true
-          maxLength: 200
-        local_matches: {}
-      required:
-      - category
-      - content
-      - date
     DeaneryCreateInput:
       type: object
       properties:
@@ -11132,53 +10971,6 @@ components:
       - passage_id
       - session_date
       - updated_at
-    LiturgicalDate:
-      type: object
-      description: |-
-        Main serializer aggregating all data for a specific liturgical date.
-        Includes nested resources, readings, and offices if prefetched.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        date:
-          type: string
-          format: date
-        zone:
-          type: string
-          maxLength: 50
-        day_name:
-          type: string
-          maxLength: 255
-        season:
-          type: string
-          maxLength: 255
-        mystery:
-          type: string
-          maxLength: 255
-        notes:
-          type: string
-        resource:
-          allOf:
-          - $ref: '#/components/schemas/AelfResource'
-          readOnly: true
-        readings:
-          type: array
-          items:
-            $ref: '#/components/schemas/Reading'
-          readOnly: true
-        offices:
-          type: array
-          items:
-            $ref: '#/components/schemas/Office'
-          readOnly: true
-      required:
-      - date
-      - id
-      - offices
-      - readings
-      - resource
-      - zone
     MassIntentionCelebrateInput:
       type: object
       description: |-
@@ -11603,6 +11395,9 @@ components:
           type: string
           nullable: true
           description: Scripture reading or meditation for the mystery
+        meditation_source:
+          type: string
+          maxLength: 255
         audio_file:
           type: string
           format: uri
@@ -13279,6 +13074,9 @@ components:
           maxLength: 10
         text:
           type: string
+        source:
+          type: string
+          maxLength: 255
       required:
       - id
       - text
@@ -13628,32 +13426,6 @@ components:
           type: boolean
       required:
       - first_read
-    Reading:
-      type: object
-      description: Serializer for Mass readings.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        type:
-          type: string
-          maxLength: 100
-        citation:
-          type: string
-          maxLength: 255
-        text:
-          type: string
-        raw_metadata: {}
-        matched_verses:
-          type: array
-          items:
-            $ref: '#/components/schemas/VerseOutput'
-          readOnly: true
-      required:
-      - id
-      - matched_verses
-      - text
-      - type
     ReadingPlanInput:
       type: object
       properties:
@@ -14507,6 +14279,9 @@ components:
           maxLength: 10
         text:
           type: string
+        source:
+          type: string
+          maxLength: 255
         rank:
           type: number
           format: double

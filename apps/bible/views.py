@@ -12,11 +12,13 @@ from drf_spectacular.utils import (
     extend_schema_serializer,
 )
 from rest_framework import serializers, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response
+from apps.bible.editions import edition_filter
 from apps.bible.models import Book, Chapter, DailyText, Testament, Verse
 from apps.bible.serializers import (
     BookMetadataOutputSerializer,
@@ -28,6 +30,7 @@ from apps.bible.serializers import (
 )
 from apps.bible.services.search_service import SearchService
 from apps.bible.tasks import import_file_task
+from apps.hierarchy.authz import HasCapability
 
 
 class TestamentListApi(APIView):
@@ -180,9 +183,7 @@ class VerseListApi(APIView):
             chapter__book_id=book_id, chapter__number=chapter_number
         ).order_by("number")
 
-        source_param = filters_serializer.validated_data.get("source")
-        if source_param:
-            qs = qs.filter(source_file=source_param)
+        qs = edition_filter(qs, requested=filters_serializer.validated_data.get("source"))
         
         verses_param = filters_serializer.validated_data.get("verses")
         if verses_param:
@@ -257,7 +258,7 @@ class SearchApi(APIView):
             testament_slug=data.get("testament"),
             book_slug=data.get("book_slug"),
             chapter_number=data.get("chapter_number"),
-            source_file=data.get("source"),
+            source_file=settings.BIBLE_EDITION or data.get("source"),
             limit=data["limit"],
             use_hybrid=data["hybrid"]
         )
@@ -293,7 +294,9 @@ class DailyTextListApi(APIView):
 
 
 class ImportApi(ApiAuthMixin, APIView):
-    """Admin-only endpoint to trigger a background import."""
+    """Import en tâche de fond, réservé à la plateforme (capacité plateforme.admin)."""
+
+    permission_classes = (IsAuthenticated, HasCapability("plateforme.admin"))
 
     # `component_name` explicite : sans lui, drf-spectacular nomme le composant
     # « Input » comme les serializers imbriqués de apps/files — collision de
@@ -308,16 +311,13 @@ class ImportApi(ApiAuthMixin, APIView):
         responses={
             202: OpenApiResponse(description="Import enqueued — `{\"status\": ...}`"),
             400: OpenApiResponse(description="Nom de fichier invalide (chemin de répertoire interdit) — `{\"error\": ...}`"),
-            403: OpenApiResponse(description="Réservé aux super-utilisateurs — `{\"error\": ...}`"),
+            403: OpenApiResponse(description="Réservé à la plateforme (plateforme.admin)"),
             404: OpenApiResponse(description="Fichier introuvable dans le dossier d'importation — `{\"error\": ...}`"),
         },
         tags=["Bible"],
         summary="Trigger background import of Bible texts",
     )
     def post(self, request):
-        if not request.user.is_superuser:
-            return Response({"error": "Admin only"}, status=status.HTTP_403_FORBIDDEN)
-            
         serializer = self.InputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         

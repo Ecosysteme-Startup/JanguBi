@@ -39,6 +39,7 @@ class Article(BaseModel):
         ANNOUNCEMENT = "announcement", _("Annonce")
         ARTICLE = "article", _("Article")
         PASTORAL_LETTER = "pastoral_letter", _("Lettre Pastorale")
+        MEDITATION = "meditation", _("Méditation du jour")
 
     class ScopeType(models.TextChoices):
         GLOBAL = "global", _("Global (toute l'Église du Sénégal)")

@@ -31,10 +31,6 @@ JANGUBI_MODULES = env.list("JANGUBI_MODULES", default=list(V1_DEFAULT_MODULES))
 SECRET_KEY = "=ug_ucl@yi6^mrcjyz%(u0%&g2adt#bz3@yos%#@*t#t!ypx=a"
 
 _CELERY_BEAT_SCHEDULE_ALL = {
-    "fetch_aelf_daily_readings": {
-        "task": "apps.bible.tasks.fetch_aelf_daily",
-        "schedule": crontab(hour=2, minute=0),
-    },
     "sync_aelf_liturgy_data_daily": {
         "task": "apps.liturgy.tasks.daily_sync",
         "schedule": crontab(hour=3, minute=0),
@@ -371,6 +367,7 @@ from config.settings.files_and_storages import *  # noqa
 #from config.settings.google_oauth2 import *  # noqa
 from config.settings.jwt import *  # noqa
 from config.settings.keycloak import *  # noqa
+from config.settings.parole import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
