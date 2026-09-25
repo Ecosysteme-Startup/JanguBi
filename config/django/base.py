@@ -28,7 +28,9 @@ JANGUBI_MODULES = env.list("JANGUBI_MODULES", default=list(V1_DEFAULT_MODULES))
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "=ug_ucl@yi6^mrcjyz%(u0%&g2adt#bz3@yos%#@*t#t!ypx=a"
+# Clé de développement seulement : production.py exige SECRET_KEY dans l'environnement.
+# L'ancienne clé codée en dur est dans l'historique Git : ne jamais la réutiliser.
+SECRET_KEY = env("SECRET_KEY", default="dev-insecure-ne-pas-utiliser-en-production")
 
 _CELERY_BEAT_SCHEDULE_ALL = {
     "sync_aelf_liturgy_data_daily": {
@@ -368,6 +370,7 @@ from config.settings.files_and_storages import *  # noqa
 from config.settings.jwt import *  # noqa
 from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
+from config.settings.conformite import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa

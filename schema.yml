@@ -3560,6 +3560,7 @@ paths:
   /api/v1/me/:
     get:
       operationId: v1_me_retrieve
+      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
       summary: Mon profil
       tags:
       - Profil
@@ -3603,6 +3604,20 @@ paths:
                       avatar: null
                   summary: Exemple Fidèle
           description: ''
+    delete:
+      operationId: v1_me_destroy
+      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
+      summary: Supprimer mon compte (anonymisation, purge des conversations ; irréversible)
+      tags:
+      - Conformité
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/me/capacites/:
     get:
       operationId: v1_me_capacites_list
@@ -3654,6 +3669,55 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedBookingOutputList'
           description: ''
+  /api/v1/me/consent/:
+    get:
+      operationId: v1_me_consent_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: État de mon consentement
+      tags:
+      - Conformité
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentStatus'
+          description: ''
+    post:
+      operationId: v1_me_consent_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Donner mon consentement explicite (version en vigueur)
+      tags:
+      - Conformité
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConsentInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsentInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentStatus'
+          description: ''
   /api/v1/me/declaration/:
     get:
       operationId: v1_me_declaration_retrieve
@@ -3703,6 +3767,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PersonStatusOutput'
+          description: ''
+  /api/v1/me/export/:
+    get:
+      operationId: v1_me_export_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Exporter mes données personnelles (JSON)
+      tags:
+      - Conformité
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
           description: ''
   /api/v1/me/feed/:
     get:
@@ -10084,6 +10168,33 @@ components:
       - mystery_group_name
       - started_at
       - status
+    ConsentInput:
+      type: object
+      properties:
+        version:
+          type: string
+          description: Version des CGU et de la politique acceptée
+          maxLength: 20
+      required:
+      - version
+    ConsentStatus:
+      type: object
+      properties:
+        current_version:
+          type: string
+        given_version:
+          type: string
+        given_at:
+          type: string
+          format: date-time
+          nullable: true
+        required:
+          type: boolean
+      required:
+      - current_version
+      - given_at
+      - given_version
+      - required
     ContentFormatEnum:
       enum:
       - text

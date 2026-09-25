@@ -25,3 +25,19 @@ def keycloak_staff_reconcile_task() -> dict[str, int]:
     from apps.authentication.services_keycloak import keycloak_staff_reconcile
 
     return keycloak_staff_reconcile()
+
+
+@shared_task(bind=True, max_retries=10, default_retry_delay=60)
+def keycloak_user_delete_task(self, keycloak_sub: str) -> str:
+    """Supprime le compte Keycloak d'une personne qui a supprimé son compte (EF-CONF-03)."""
+    from django.conf import settings
+
+    from apps.authentication.keycloak_admin import KeycloakAdmin  # import local (HackSoft)
+
+    if not settings.KEYCLOAK_ENABLED:
+        return "skipped"
+    try:
+        KeycloakAdmin().user_delete(keycloak_sub)
+    except (httpx.HTTPError, KeycloakAdminError) as exc:
+        raise self.retry(exc=exc) from exc
+    return "deleted"

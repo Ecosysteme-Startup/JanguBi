@@ -90,6 +90,13 @@ class KeycloakAdmin:
         if action not in actions:
             self._request("PUT", f"/users/{user_id}", json={"requiredActions": sorted(actions | {action})})
 
+    def user_delete(self, user_id: str) -> None:
+        """Suppression du compte Keycloak (EF-CONF-03). Absent (404) : déjà supprimé."""
+        url = f"{self.base}/admin/realms/{self.realm}/users/{user_id}"
+        response = self._client.request("DELETE", url, headers={"Authorization": f"Bearer {self._access_token()}"})
+        if response.status_code >= 400 and response.status_code != 404:
+            raise KeycloakAdminError(f"DELETE /users/{user_id} → {response.status_code}")
+
     def user_id_by_email(self, email: str) -> str | None:
         users = self._request("GET", "/users", params={"email": email, "exact": "true"}).json()
         return users[0]["id"] if users else None
