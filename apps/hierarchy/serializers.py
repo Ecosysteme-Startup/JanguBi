@@ -343,6 +343,7 @@ class CapaciteOutputSerializer(serializers.Serializer):
     capacite = serializers.CharField()
     node_id = serializers.UUIDField(allow_null=True)
     node_name = serializers.CharField()
+    node_type = serializers.CharField(help_text="Code du type de nœud ; « plateforme » hors arbre.")
     herite = serializers.BooleanField()
     office = serializers.CharField()
 

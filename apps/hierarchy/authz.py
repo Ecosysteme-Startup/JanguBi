@@ -39,6 +39,7 @@ class Grant:
     path: str  # "" = racine de tout l'arbre
     inherits: bool
     office: str
+    node_type: str = ""  # code du type de nœud ("plateforme" hors arbre), pour grouper les contextes
 
     def covers(self, path: str) -> bool:
         return path == self.path or (self.inherits and path.startswith(self.path))
@@ -80,14 +81,14 @@ def active_assignments(*, user: Any, on: Any = None) -> QuerySet[OfficeAssignmen
     return (
         OfficeAssignment.objects.filter(person=user, status=AssignmentStatus.ACTIVE, start_date__lte=day)
         .filter(Q(end_date__isnull=True) | Q(end_date__gte=day))
-        .select_related("node", "office_type")
+        .select_related("node", "node__type", "office_type")
     )
 
 
 def _grants_compute(user: Any) -> list[Grant]:
     grants: list[Grant] = []
     if is_platform_admin(user):
-        grants += [Grant(c, None, "Plateforme", "", True, "plateforme") for c in sorted(PLATFORM_ADMIN_CAPABILITIES)]
+        grants += [Grant(c, None, "Plateforme", "", True, "plateforme", "plateforme") for c in sorted(PLATFORM_ADMIN_CAPABILITIES)]
 
     assignments = list(active_assignments(user=user).prefetch_related("office_type__capabilities"))
     if not assignments:
@@ -103,7 +104,15 @@ def _grants_compute(user: Any) -> list[Grant]:
             if override.office_type_id == a.office_type_id and a.node.path.startswith(override.diocese_node.path):
                 capabilities.discard(override.capability_id)
         grants += [
-            Grant(c, str(a.node_id), a.node.name, a.node.path, a.office_type.inherits_down, a.office_type.code)
+            Grant(
+                c,
+                str(a.node_id),
+                a.node.name,
+                a.node.path,
+                a.office_type.inherits_down,
+                a.office_type.code,
+                a.node.type.code,
+            )
             for c in sorted(capabilities)
         ]
     return grants
@@ -113,7 +122,7 @@ def _cache_key(user: Any) -> str:
     global_version = cache.get_or_set(_GLOBAL_VERSION_KEY, 1, None)
     user_version = cache.get_or_set(f"authz:uv:{user.pk}", 1, None)
     platform = int(is_platform_admin(user))  # le rôle vient du jeton : il fait partie de la clé
-    return f"authz:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{platform}:{user.pk}"
+    return f"authz:v2:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{platform}:{user.pk}"
 
 
 def grants(user: Any) -> list[Grant]:
@@ -176,9 +185,9 @@ def noeuds_autorises(user: Any, capacite: str) -> QuerySet[Node]:
 
 
 def capacites(user: Any) -> list[dict[str, Any]]:
-    """``[{capacite, node_id, node_name, herite, office}]`` pour ``GET /me/capacites/`` (EF-PER-10)."""
+    """``[{capacite, node_id, node_name, node_type, herite, office}]`` pour ``GET /me/capacites/`` (EF-PER-10)."""
     return [
-        {"capacite": g.capability, "node_id": g.node_id, "node_name": g.node_name, "herite": g.inherits, "office": g.office}
+        {"capacite": g.capability, "node_id": g.node_id, "node_name": g.node_name, "herite": g.inherits, "office": g.office, "node_type": g.node_type}
         for g in grants(user)
     ]
 
