@@ -202,11 +202,28 @@ def user_attach_identity(user: Any, identity: KeycloakIdentity) -> Any:
     return user
 
 
+def activity_stamp(user: Any, *, mfa: bool) -> None:
+    """Dernière activité (et connexion MFA) au jour près ; au plus une écriture par jour."""
+    from django.utils import timezone
+
+    today = timezone.localdate()
+    fields = {}
+    if user.last_seen_on != today:
+        fields["last_seen_on"] = today
+    if mfa and user.last_mfa_on != today:
+        fields["last_mfa_on"] = today
+    if fields:
+        get_user_model().objects.filter(pk=user.pk).update(**fields)
+        for name, value in fields.items():
+            setattr(user, name, value)
+
+
 def authenticate_token(token: str) -> tuple[Any, KeycloakIdentity]:
     identity = token_validate(token)
     user = person_from_identity(identity)
     if not user.is_active:
         raise KeycloakTokenError("Compte désactivé.", code="user_inactive")
+    activity_stamp(user, mfa=identity.mfa)
     return user_attach_identity(user, identity), identity
 
 

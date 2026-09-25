@@ -259,6 +259,9 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         _("version du consentement"), max_length=20, blank=True, default="", db_default=""
     )
     consent_at = models.DateTimeField(_("consentement le"), null=True, blank=True)
+    # Activité au jour près (tableaux de bord, EF-DASH-01/03) : une écriture par jour au plus.
+    last_seen_on = models.DateField(_("dernière activité le"), null=True, blank=True)
+    last_mfa_on = models.DateField(_("dernière connexion MFA le"), null=True, blank=True)
 
     groups = models.ManyToManyField(  # type: ignore[assignment]  # django-stubs : redéclaration M2M de PermissionsMixin (related_name custom)
         Group,

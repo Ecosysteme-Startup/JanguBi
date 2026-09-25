@@ -1422,111 +1422,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedSlotOutputList'
           description: ''
-  /api/v1/dashboards/analytics/:
+  /api/v1/dashboards/nodes/{node_id}/:
     get:
-      operationId: v1_dashboards_analytics_retrieve
-      description: |-
-        Analytique adaptative au rôle (curé→paroisse, évêque→diocèse, archevêque→
-        province). Flux de dons + fidèles, filtres spatio-temporels, bornée au périmètre.
-      summary: Analytique scopée (dons + fidèles) — curé / évêque / archevêque
+      operationId: v1_dashboards_nodes_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Tableau de bord d'un nœud, agrégé sur son sous-arbre (aucune donnée
+        nominative)
       parameters:
-      - in: query
-        name: diocese
-        schema:
-          type: integer
-        description: 'Drill-down : diocèse (dans le périmètre)'
-      - in: query
-        name: from
+      - in: path
+        name: node_id
         schema:
           type: string
-          format: date-time
-        description: Début (ISO) — prioritaire sur period
-      - in: query
-        name: granularity
-        schema:
-          type: string
-        description: day|week|month (défaut month)
-      - in: query
-        name: parish
-        schema:
-          type: integer
-        description: 'Drill-down : paroisse (dans le périmètre)'
+          format: uuid
+        required: true
       - in: query
         name: period
         schema:
-          type: string
-        description: today|week|month|quarter|year (défaut year)
-      - in: query
-        name: provider
-        schema:
-          type: string
-        description: wave|orange_money|free_money|cash
-      - in: query
-        name: status
-        schema:
-          type: string
-        description: Statut don (défaut confirmed)
-      - in: query
-        name: to
-        schema:
-          type: string
-          format: date-time
-        description: Fin (ISO)
-      - in: query
-        name: type
-        schema:
-          type: string
-        description: Type de don (church_tithe, sunday_collection, …)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/analytics/activity/:
-    get:
-      operationId: v1_dashboards_analytics_activity_retrieve
-      description: |-
-        Matrice d'activité par sous-entité (paroisse/diocèse/église) + files en
-        souffrance (documents/intentions). Même résolution de périmètre que /analytics/.
-      summary: Matrice d'activité + files en souffrance (par périmètre)
-      parameters:
-      - in: query
-        name: diocese
-        schema:
+          enum:
+          - 7
+          - 30
+          - 90
+          - 365
           type: integer
-        description: Drill-down diocèse
-      - in: query
-        name: from
-        schema:
-          type: string
-          format: date-time
-        description: Début (ISO)
-      - in: query
-        name: parish
-        schema:
-          type: integer
-        description: Drill-down paroisse
-      - in: query
-        name: period
-        schema:
-          type: string
-        description: today|week|month|quarter|year
-      - in: query
-        name: to
-        schema:
-          type: string
-          format: date-time
-        description: Fin (ISO)
+          default: 30
+        description: |-
+          Fenêtre en jours
+
+          * `7` - 7
+          * `30` - 30
+          * `90` - 90
+          * `365` - 365
       tags:
       - dashboards
       security:
@@ -1542,136 +1467,12 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
-  /api/v1/dashboards/diocese/{diocese_id}/:
+  /api/v1/dashboards/platform/:
     get:
-      operationId: v1_dashboards_diocese_retrieve
-      summary: Tableau de bord diocésain (évêque)
-      parameters:
-      - in: path
-        name: diocese_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/global/:
-    get:
-      operationId: v1_dashboards_global_retrieve
-      summary: Vue d'ensemble plateforme (super-admin uniquement)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/me/:
-    get:
-      operationId: v1_dashboards_me_retrieve
-      summary: Tableau de bord du fidèle (vue personnelle)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/my-diocese/:
-    get:
-      operationId: v1_dashboards_my_diocese_retrieve
-      summary: Tableau de bord de mon diocèse (évêque connecté)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/my-parish/:
-    get:
-      operationId: v1_dashboards_my_parish_retrieve
-      summary: Tableau de bord de ma paroisse (curé connecté)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/my-province/:
-    get:
-      operationId: v1_dashboards_my_province_retrieve
-      summary: Tableau de bord de ma province (archevêque connecté)
-      tags:
-      - dashboards
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/dashboards/parish/{parish_id}/:
-    get:
-      operationId: v1_dashboards_parish_retrieve
-      summary: Tableau de bord d'une paroisse (total fidèles, flux de dons, files)
-      parameters:
-      - in: path
-        name: parish_id
-        schema:
-          type: integer
-        required: true
+      operationId: v1_dashboards_platform_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Tableau de bord plateforme : comptes, MFA du staff, santé des files
+        et de Beat'
       tags:
       - dashboards
       security:
