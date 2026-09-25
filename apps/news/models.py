@@ -48,6 +48,7 @@ class Article(BaseModel):
 
     class Status(models.TextChoices):
         DRAFT = "draft", _("Brouillon")
+        SCHEDULED = "scheduled", _("Programmé")
         PUBLISHED = "published", _("Publié")
         UNPUBLISHED = "unpublished", _("Dépublié")
 
@@ -149,6 +150,30 @@ class Article(BaseModel):
         verbose_name=_("Église de portée"),
     )
 
+    # --- Portée V1 (L4) : un nœud de l'arbre, ou rien (global Numerisen) ---
+    # Les champs scope_type/diocese/parish/church ci-dessus restent lisibles jusqu'en L9.
+    scope_node = models.ForeignKey(
+        "hierarchy.Node",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="articles",
+        verbose_name=_("Nœud de portée"),
+    )
+    scope_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="articles",
+        verbose_name=_("Lieu de culte"),
+    )
+    is_sunday_notice = models.BooleanField(
+        _("annonce du dimanche"), default=False, db_default=False
+    )
+    sunday_date = models.DateField(_("dimanche concerné"), null=True, blank=True)
+    publish_at = models.DateTimeField(_("publication programmée"), null=True, blank=True)
+
     # --- Statut & workflow ---
     status = models.CharField(
         max_length=20,
@@ -199,6 +224,13 @@ class Article(BaseModel):
                 name="article_church_idx",
             ),
             models.Index(fields=["category", "status"], name="article_category_idx"),
+            models.Index(fields=["scope_node", "status", "-published_at"], name="article_node_pub_idx"),
+            models.Index(
+                fields=["sunday_date"], condition=models.Q(is_sunday_notice=True), name="article_sunday_idx"
+            ),
+            models.Index(
+                fields=["publish_at"], condition=models.Q(status="scheduled"), name="article_scheduled_idx"
+            ),
             models.Index(fields=["author", "-created_at"], name="article_author_idx"),
         ]
 
@@ -273,3 +305,19 @@ class ArticleReaction(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user_id} → {self.get_reaction_type_display()} sur {self.article_id}"
+
+
+class ArticleRead(models.Model):
+    """Lecture d'un article par une personne — une seule par personne (EF-PAROI-05)."""
+
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="reads")
+    user = models.ForeignKey(BaseUser, on_delete=models.CASCADE, related_name="article_reads")
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Lecture d'un article")
+        verbose_name_plural = _("Lectures d'articles")
+        constraints = [models.UniqueConstraint(fields=["article", "user"], name="unique_article_read_per_user")]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} a lu {self.article_id}"

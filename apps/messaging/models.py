@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 from django.db import models
@@ -283,6 +284,25 @@ class Notification(BaseModel):
 
     def __str__(self) -> str:
         return f"Notification({self.user_id}, {self.event_type})"
+
+
+class NotificationPreference(BaseModel):
+    """Préférences de notification d'une personne (EF-PAROI-08). Absente = valeurs par défaut."""
+
+    user = models.OneToOneField(BaseUser, on_delete=models.CASCADE, related_name="notification_preference")
+    in_app = models.BooleanField(_("dans l'application"), default=True)
+    email = models.BooleanField(_("par e-mail"), default=True)
+    topic_annonces = models.BooleanField(_("annonces de ma paroisse"), default=True)
+    topic_evenements = models.BooleanField(_("rappels d'événements"), default=True)
+    quiet_start = models.TimeField(_("début du silence"), default=datetime.time(22, 0))
+    quiet_end = models.TimeField(_("fin du silence"), default=datetime.time(6, 0))
+
+    class Meta:
+        verbose_name = _("Préférences de notification")
+        verbose_name_plural = _("Préférences de notification")
+
+    def __str__(self) -> str:
+        return f"Préférences({self.user_id})"
 
 
 class PushDevice(BaseModel):

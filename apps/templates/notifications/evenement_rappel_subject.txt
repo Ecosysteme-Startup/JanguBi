@@ -1,0 +1,1 @@
+Rappel : {{ title }} — {{ start_at|date:"l j F à H\hi" }}

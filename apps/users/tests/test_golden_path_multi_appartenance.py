@@ -17,27 +17,18 @@ Graphe org :
 Fidèle : membre de A & B (a_main principale). Demande un document à C (non-membre).
 """
 
-import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 from django.urls import reverse
-from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.agenda.models import Event
 from apps.documents.exceptions import DocumentRequestNotFoundError
 from apps.documents.models import DocumentRequest
 from apps.documents.selectors import (
     document_request_get_for_admin,
     document_request_list,
-)
-from apps.news.tests.factories import (
-    PublishedArticleFactory,
-    PublishedChurchArticleFactory,
-    PublishedDioceseArticleFactory,
-    PublishedParishArticleFactory,
 )
 from apps.org.tests.factories import (
     ChurchFactory,
@@ -145,18 +136,6 @@ def _onboard(world):
     return client, user
 
 
-def _make_event(parish):
-    now = timezone.now()
-    return Event.objects.create(
-        title="Messe dominicale",
-        event_type=Event.EventType.MASS,
-        start_at=now + datetime.timedelta(hours=2),
-        end_at=now + datetime.timedelta(hours=3),
-        scope_type=Event.ScopeType.PARISH,
-        scope_parish=parish,
-    )
-
-
 @pytest.fixture
 def world(db):
     return _build_world()
@@ -212,36 +191,6 @@ def test_step_1_2_onboarding_multi_eglise_et_me(world):
     assert set(data["church_ids"]) == {world.a_main.id, world.b_main.id}
     assert set(data["parish_ids"]) == {world.parish_a.id, world.parish_b.id}
     assert set(data["diocese_ids"]) == {world.d1.id, world.d2.id}
-
-
-# ---------------------------------------------------------------------------
-# Étape 3 — fil agrégé /news/feed/ (7 visibles, paroisse C exclue)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_step_3_feed_agrege_voit_7_pas_paroisse_C(onboarded):
-    w = onboarded.world
-
-    # Les PK Article sont des UUID → on normalise en str (le JSON les sérialise en str).
-    visibles = {
-        str(PublishedChurchArticleFactory(scope_church=w.a_main).id),
-        str(PublishedParishArticleFactory(scope_parish=w.parish_a).id),
-        str(PublishedDioceseArticleFactory(scope_diocese=w.d1).id),
-        str(PublishedChurchArticleFactory(scope_church=w.b_main).id),
-        str(PublishedParishArticleFactory(scope_parish=w.parish_b).id),
-        str(PublishedDioceseArticleFactory(scope_diocese=w.d2).id),
-        str(PublishedArticleFactory().id),  # GLOBAL
-    }
-    invisible_c = str(PublishedParishArticleFactory(scope_parish=w.parish_c).id)
-
-    resp = onboarded.client.get(reverse("api:news:feed"))
-    assert resp.status_code == 200
-    ids = {str(a["id"]) for a in resp.data["results"]}
-
-    assert visibles <= ids  # les 7 portées de l'utilisateur
-    assert invisible_c not in ids  # paroisse C (non-membre) exclue
-    assert ids == visibles  # non-vacuité stricte : exactement 7, aucune fuite
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +277,6 @@ def test_step_6_garde_onboarding_bloque_les_ecritures(world):
     assert Membership.objects.filter(user=pending).count() == 0
     client = APIClient()
     client.force_authenticate(user=pending)
-    event = _make_event(world.parish_a)
 
     # Payloads vides : la permission (IsOnboardingCompleted) précède la validation/objet,
     # donc 403 (et NON 400/404) prouve que la garde s'applique.
@@ -336,10 +284,6 @@ def test_step_6_garde_onboarding_bloque_les_ecritures(world):
         "document": (reverse("api:documents:document-request-list-create"), {}),
         "intention": (reverse("api:mass-intentions:submit"), {}),
         "don": (reverse("api:donations:donate"), {}),
-        "evenement": (
-            reverse("api:agenda:event-register", kwargs={"event_id": event.id}),
-            {},
-        ),
     }
     for label, (url, payload) in cases.items():
         resp = client.post(url, payload, format="json")

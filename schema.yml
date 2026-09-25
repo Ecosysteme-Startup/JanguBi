@@ -4,36 +4,64 @@ info:
   version: 1.0.0
   description: API for JanguBi
 paths:
-  /api/v1/agenda/events/:
+  /api/v1/agenda/:
     get:
-      operationId: v1_agenda_events_retrieve
-      summary: Liste des événements (scopée aux appartenances de l'utilisateur)
+      operationId: agenda_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Événements à venir (filtres : nœud et sous-arbre, période, type)'
       parameters:
       - in: query
-        name: event_type
+        name: date_from
         schema:
           type: string
-        description: Filter by event type
+          format: date-time
+        description: 'Par défaut : maintenant'
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date-time
       - in: query
         name: limit
         schema:
           type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud (et son sous-arbre)
       - in: query
         name: offset
         schema:
           type: integer
+        description: Décalage
       - in: query
-        name: upcoming_only
+        name: type
         schema:
-          type: boolean
-        description: Only future events (default true)
+          enum:
+          - mass
+          - conference
+          - retreat
+          - ordination
+          - other
+          type: string
+          minLength: 1
+        description: |-
+          * `mass` - Messe
+          * `conference` - Conférence
+          * `retreat` - Retraite
+          * `ordination` - Ordination
+          * `other` - Autre
       tags:
-      - Agenda
+      - agenda
       security:
       - keycloakBearer: []
       - legacyJwt: []
       - session: []
       - sessionHeader: []
+      - {}
       responses:
         '200':
           content:
@@ -41,38 +69,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEventOutputList'
           description: ''
-    post:
-      operationId: v1_agenda_events_create
-      summary: Créer un événement (clergé ou admin)
-      tags:
-      - Agenda
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EventInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/EventInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/EventInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EventOutput'
-          description: ''
-  /api/v1/agenda/events/{event_id}/:
+  /api/v1/agenda/{event_id}/:
     get:
-      operationId: v1_agenda_events_retrieve_2
+      operationId: v1_agenda_retrieve
+      description: À placer en premier dans les bases des vues V1.
       summary: Détail d'un événement
       parameters:
       - in: path
@@ -81,12 +81,13 @@ paths:
           type: integer
         required: true
       tags:
-      - Agenda
+      - agenda
       security:
       - keycloakBearer: []
       - legacyJwt: []
       - session: []
       - sessionHeader: []
+      - {}
       responses:
         '200':
           content:
@@ -94,32 +95,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EventOutput'
           description: ''
-    delete:
-      operationId: v1_agenda_events_destroy
-      description: 'Annulation DOUCE : l''événement sort des feeds et n''accepte plus
-        d''inscription, mais ses inscriptions sont conservées et chaque inscrit est
-        prévenu par email.'
-      summary: Annuler un événement (organisateur ou autorité sur sa portée)
-      parameters:
-      - in: path
-        name: event_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - Agenda
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: No response body
-  /api/v1/agenda/events/{event_id}/register/:
+  /api/v1/agenda/{event_id}/register/:
     post:
-      operationId: v1_agenda_events_register_create
-      summary: S'inscrire à un événement
+      operationId: v1_agenda_register_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: S'inscrire (409 si complet ; idempotent)
       parameters:
       - in: path
         name: event_id
@@ -127,7 +107,7 @@ paths:
           type: integer
         required: true
       tags:
-      - Agenda
+      - agenda
       security:
       - keycloakBearer: []
       - legacyJwt: []
@@ -135,10 +115,17 @@ paths:
       - sessionHeader: []
       responses:
         '201':
-          description: No response body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOutput'
+          description: ''
+        '409':
+          description: Événement complet
     delete:
-      operationId: v1_agenda_events_register_destroy
-      summary: Annuler son inscription à un événement
+      operationId: v1_agenda_register_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Se désinscrire
       parameters:
       - in: path
         name: event_id
@@ -146,7 +133,7 @@ paths:
           type: integer
         required: true
       tags:
-      - Agenda
+      - agenda
       security:
       - keycloakBearer: []
       - legacyJwt: []
@@ -155,30 +142,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/v1/agenda/events/{event_id}/registrations/:
-    get:
-      operationId: v1_agenda_events_registrations_retrieve
-      summary: Liste des inscrits (autorité sur la portée de l'événement)
-      parameters:
-      - in: path
-        name: event_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - Agenda
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedRegistrationOutputList'
-          description: ''
   /api/v1/audit/:
     get:
       operationId: audit_events_list
@@ -3101,6 +3064,152 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonStatusOutput'
           description: ''
+  /api/v1/me/feed/:
+    get:
+      operationId: me_feed
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Mon flux : contenus globaux, de ma paroisse suivie et de ses ancêtres'
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedArticleListOutputList'
+          description: ''
+  /api/v1/me/notification-preferences/:
+    get:
+      operationId: v1_me_notification_preferences_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes préférences de notification
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+          description: ''
+    put:
+      operationId: v1_me_notification_preferences_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Modifier mes préférences (canaux, sujets, plage de silence)
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/NotificationPreference'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+          description: ''
+  /api/v1/me/paroisse-suivie/:
+    get:
+      operationId: v1_me_paroisse_suivie_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Ma paroisse suivie
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParoisseSuivieOutput'
+          description: ''
+    put:
+      operationId: v1_me_paroisse_suivie_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Changer de paroisse suivie (libre, sans validation — RG-01)
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParoisseSuivieInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ParoisseSuivieInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ParoisseSuivieInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParoisseSuivieOutput'
+          description: ''
+  /api/v1/me/ws-ticket/:
+    post:
+      operationId: v1_me_ws_ticket_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Ticket WebSocket à usage unique (60 s) : /ws/...?ticket=<ticket>'
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WsTicketOutput'
+          description: ''
   /api/v1/messaging/blocks/:
     get:
       operationId: v1_messaging_blocks_list
@@ -3848,38 +3957,49 @@ paths:
           description: ''
   /api/v1/news/:
     get:
-      operationId: v1_news_retrieve
-      summary: Feed global — articles publiés pour toute l'Église du Sénégal
+      operationId: news_list
+      description: Lecture publique ; un utilisateur connecté voit en plus ses propres
+        réactions.
+      summary: 'Annonces et articles publiés (filtres : nœud et sous-arbre, dimanche,
+        type, catégorie)'
       parameters:
       - in: query
         name: category
         schema:
-          type: string
-        description: Filtrer par slug de catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
+          type: integer
       - in: query
         name: limit
         schema:
           type: integer
-        description: Nombre de résultats (défaut 20)
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud (et son sous-arbre)
       - in: query
         name: offset
         schema:
           type: integer
-        description: Décalage pagination
+        description: Décalage
       - in: query
-        name: search
+        name: sunday
         schema:
           type: string
-        description: Recherche dans le titre
+          format: date
+        description: Annonces du dimanche de cette date
+      - in: query
+        name: type
+        schema:
+          enum:
+          - announcement
+          - article
+          type: string
+          minLength: 1
+        description: |-
+          * `announcement` - Annonce
+          * `article` - Article
       tags:
       - news
       security:
@@ -3897,7 +4017,9 @@ paths:
           description: ''
   /api/v1/news/{article_id}/:
     get:
-      operationId: v1_news_retrieve_2
+      operationId: v1_news_retrieve
+      description: Lecture publique ; un utilisateur connecté voit en plus ses propres
+        réactions.
       summary: Détail d'un article publié
       parameters:
       - in: path
@@ -3919,15 +4041,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
+                $ref: '#/components/schemas/ArticleOutput'
           description: ''
   /api/v1/news/{article_id}/reactions/:
-    post:
-      operationId: v1_news_reactions_create
-      description: 'Idempotent : rejouer la même requête laisse le système dans le
-        même état. Réagir exige de pouvoir lire l''article (portée + publication).
-        Renvoie les compteurs réconciliés et les réactions de l''utilisateur.'
-      summary: Poser ou retirer une réaction sur un article publié
+    put:
+      operationId: v1_news_reactions_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Poser ou retirer une réaction (idempotent)
       parameters:
       - in: path
         name: article_id
@@ -3941,13 +4061,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleReactionSetInput'
+              $ref: '#/components/schemas/ReactionInput'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ArticleReactionSetInput'
+              $ref: '#/components/schemas/ReactionInput'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ArticleReactionSetInput'
+              $ref: '#/components/schemas/ReactionInput'
         required: true
       security:
       - keycloakBearer: []
@@ -3959,139 +4079,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleReactionsOutput'
+                $ref: '#/components/schemas/ArticleOutput'
           description: ''
-        '400':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: {}
-          description: ''
-  /api/v1/news/admin/:
-    get:
-      operationId: v1_news_admin_retrieve
-      summary: '[Admin] Lister tous les articles (tous statuts)'
-      parameters:
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Filtrer par slug catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: query
-        name: scope_type
-        schema:
-          type: string
-          enum:
-          - church
-          - diocese
-          - global
-          - parish
-        description: Filtrer par portée
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche dans le titre
-      - in: query
-        name: status
-        schema:
-          type: string
-          enum:
-          - draft
-          - published
-          - unpublished
-        description: Filtrer par statut
-      tags:
-      - news-admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedArticleListOutputList'
-          description: ''
-  /api/v1/news/admin/{article_id}/:
-    get:
-      operationId: v1_news_admin_retrieve_2
-      summary: '[Admin] Détail d''un article (tous statuts)'
-      parameters:
-      - in: path
-        name: article_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - news-admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
-          description: ''
-  /api/v1/news/admin/{article_id}/delete/:
-    delete:
-      operationId: v1_news_admin_delete_destroy
-      summary: '[Admin] Supprimer un article (brouillon ou dépublié uniquement)'
-      parameters:
-      - in: path
-        name: article_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - news-admin
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '204':
-          description: No response body
-  /api/v1/news/admin/{article_id}/publish/:
+  /api/v1/news/{article_id}/read/:
     post:
-      operationId: v1_news_admin_publish_create
-      summary: '[Admin] Publier un article'
+      operationId: v1_news_read_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Marquer comme lu (une lecture par personne)
       parameters:
       - in: path
         name: article_id
@@ -4100,7 +4094,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - news-admin
+      - news
       security:
       - keycloakBearer: []
       - legacyJwt: []
@@ -4111,114 +4105,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
-          description: ''
-  /api/v1/news/admin/{article_id}/unpublish/:
-    post:
-      operationId: v1_news_admin_unpublish_create
-      summary: '[Admin] Dépublier un article'
-      parameters:
-      - in: path
-        name: article_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - news-admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ArticleUnpublishInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ArticleUnpublishInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ArticleUnpublishInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
-          description: ''
-  /api/v1/news/admin/{article_id}/update/:
-    patch:
-      operationId: v1_news_admin_update_partial_update
-      summary: '[Admin] Modifier un article'
-      parameters:
-      - in: path
-        name: article_id
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - news-admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedArticleUpdateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedArticleUpdateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedArticleUpdateInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
-          description: ''
-  /api/v1/news/admin/create/:
-    post:
-      operationId: v1_news_admin_create_create
-      summary: '[Admin] Créer un article'
-      tags:
-      - news-admin
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ArticleCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ArticleCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ArticleCreateInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ArticleDetailOutput'
+                $ref: '#/components/schemas/ReadOutput'
           description: ''
   /api/v1/news/categories/:
     get:
       operationId: v1_news_categories_list
-      summary: Lister les catégories d'articles actives
+      description: Lecture publique ; un utilisateur connecté voit en plus ses propres
+        réactions.
+      summary: Catégories d'articles
       tags:
       - news
       security:
@@ -4234,228 +4128,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ArticleCategoryOutput'
-          description: ''
-  /api/v1/news/diocese/{diocese_id}/:
-    get:
-      operationId: v1_news_diocese_retrieve
-      summary: Articles publiés d'un diocèse
-      parameters:
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Filtrer par slug de catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
-      - in: path
-        name: diocese_id
-        schema:
-          type: integer
-        required: true
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche dans le titre
-      tags:
-      - news
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedArticleListOutputList'
-          description: ''
-  /api/v1/news/feed/:
-    get:
-      operationId: v1_news_feed_retrieve
-      description: |-
-        Fil d'actualités AGRÉGÉ de l'utilisateur connecté (Chantier 7b) :
-        global ∪ église ∪ paroisse ∪ diocèse de toutes ses appartenances (C3a).
-      summary: Fil d'actualités agrégé (toutes mes portées, filtrable par portée)
-      parameters:
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Filtrer par slug de catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: query
-        name: scope_id
-        schema:
-          type: integer
-        description: ID de l'entité de portée (requis pour diocese/parish/church)
-      - in: query
-        name: scope_type
-        schema:
-          type: string
-          enum:
-          - church
-          - diocese
-          - global
-          - parish
-        description: Filtrer le fil par portée (borné aux appartenances de l'utilisateur)
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche dans le titre
-      tags:
-      - news
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedArticleListOutputList'
-          description: ''
-  /api/v1/news/my-parish/:
-    get:
-      operationId: v1_news_my_parish_retrieve
-      description: Articles de la paroisse principale du fidèle connecté.
-      summary: Articles de ma paroisse (paroisse principale du profil)
-      parameters:
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Filtrer par slug de catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche dans le titre
-      tags:
-      - news
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedArticleListOutputList'
-          description: ''
-  /api/v1/news/parish/{parish_id}/:
-    get:
-      operationId: v1_news_parish_retrieve
-      summary: Articles publiés d'une paroisse
-      parameters:
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Filtrer par slug de catégorie
-      - in: query
-        name: content_type
-        schema:
-          type: string
-          enum:
-          - announcement
-          - article
-          - pastoral_letter
-        description: Filtrer par type de contenu
-      - in: query
-        name: limit
-        schema:
-          type: integer
-        description: Nombre de résultats
-      - in: query
-        name: offset
-        schema:
-          type: integer
-        description: Décalage pagination
-      - in: path
-        name: parish_id
-        schema:
-          type: integer
-        required: true
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Recherche dans le titre
-      tags:
-      - news
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedArticleListOutputList'
+                  $ref: '#/components/schemas/CategoryOutput'
           description: ''
   /api/v1/notifications/:
     get:
@@ -5587,6 +5260,478 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TodayRosaryOutput'
+          description: ''
+  /api/v1/staff/agenda/:
+    get:
+      operationId: staff_agenda_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Événements à gérer (evenements.gerer)
+      parameters:
+      - in: query
+        name: include_past
+        schema:
+          type: boolean
+          default: false
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - agenda
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEventOutputList'
+          description: ''
+    post:
+      operationId: v1_staff_agenda_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Créer un événement
+      tags:
+      - agenda
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EventCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EventCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOutput'
+          description: ''
+  /api/v1/staff/agenda/{event_id}/:
+    get:
+      operationId: v1_staff_agenda_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Détail (staff)
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - agenda
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOutput'
+          description: ''
+    patch:
+      operationId: v1_staff_agenda_partial_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Modifier un événement
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - agenda
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEventUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEventUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEventUpdateInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOutput'
+          description: ''
+    delete:
+      operationId: v1_staff_agenda_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Annuler un événement (les inscrits sont prévenus)
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - agenda
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/staff/agenda/{event_id}/registrations/:
+    get:
+      operationId: v1_staff_agenda_registrations_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Liste des inscrits
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - agenda
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRegistrationOutputList'
+          description: ''
+  /api/v1/staff/agenda/{event_id}/registrations.csv:
+    get:
+      operationId: v1_staff_agenda_registrations.csv_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Export CSV des inscrits
+      parameters:
+      - in: path
+        name: event_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - agenda
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+          description: ''
+  /api/v1/staff/news/:
+    get:
+      operationId: staff_news_list
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Mes contenus à gérer (tous statuts, compteur de lectures)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: status
+        schema:
+          enum:
+          - draft
+          - scheduled
+          - published
+          - unpublished
+          type: string
+          minLength: 1
+        description: |-
+          * `draft` - Brouillon
+          * `scheduled` - Programmé
+          * `published` - Publié
+          * `unpublished` - Dépublié
+      - in: query
+        name: type
+        schema:
+          enum:
+          - announcement
+          - article
+          type: string
+          minLength: 1
+        description: |-
+          * `announcement` - Annonce
+          * `article` - Article
+      tags:
+      - news
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStaffArticleOutputList'
+          description: ''
+    post:
+      operationId: v1_staff_news_create
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Créer un brouillon (annonces.publier sur le nœud)
+      tags:
+      - news
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ArticleCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ArticleCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffArticleOutput'
+          description: ''
+  /api/v1/staff/news/{article_id}/:
+    get:
+      operationId: v1_staff_news_retrieve
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Détail d'un contenu (tous statuts)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - news
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffArticleOutput'
+          description: ''
+    patch:
+      operationId: v1_staff_news_partial_update
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Modifier un contenu
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - news
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedArticleUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedArticleUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedArticleUpdateInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffArticleOutput'
+          description: ''
+    delete:
+      operationId: v1_staff_news_destroy
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Supprimer un brouillon ou un contenu retiré
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - news
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/staff/news/{article_id}/publish/:
+    post:
+      operationId: v1_staff_news_publish_create
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Publier maintenant ou programmer (publish_at futur)
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - news
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticlePublishInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ArticlePublishInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ArticlePublishInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffArticleOutput'
+          description: ''
+  /api/v1/staff/news/{article_id}/unpublish/:
+    post:
+      operationId: v1_staff_news_unpublish_create
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: Retirer un contenu publié ou programmé
+      parameters:
+      - in: path
+        name: article_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - news
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArticleUnpublishInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ArticleUnpublishInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ArticleUnpublishInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffArticleOutput'
           description: ''
   /api/v1/users/:
     get:
@@ -6788,96 +6933,130 @@ components:
           format: uri
           nullable: true
           maxLength: 500
-    ArticleCategoryOutput:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          title: Nom
-          maxLength: 100
-        slug:
-          type: string
-          maxLength: 110
-          pattern: ^[-a-zA-Z0-9_]+$
-        icon:
-          type: string
-          title: Icône
-          maxLength: 50
-        color:
-          type: string
-          title: Couleur hex
-          maxLength: 7
-        display_order:
-          type: integer
-          maximum: 2147483647
-          minimum: -2147483648
-          title: Ordre d'affichage
-      required:
-      - id
-      - name
-      - slug
     ArticleCreateInput:
       type: object
       properties:
+        node_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'Vide : contenu global (plateforme)'
+        place_id:
+          type: integer
+          nullable: true
+        content_type:
+          allOf:
+          - $ref: '#/components/schemas/ContentType1e5Enum'
+          default: announcement
         title:
           type: string
           maxLength: 200
-        content:
-          type: string
-        category_id:
-          type: integer
-        content_type:
-          allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
-          default: article
-        content_format:
-          allOf:
-          - $ref: '#/components/schemas/ContentFormatEnum'
-          default: text
-          description: |-
-            'html' pour l'éditeur riche (sanitizé côté serveur), 'text' sinon.
-
-            * `text` - Texte brut
-            * `html` - HTML riche
-        announcement_date:
-          type: string
-          format: date
-          nullable: true
-          description: 'Annonces : date du jour concerné (ex. dimanche à venir).'
         excerpt:
           type: string
           default: ''
           maxLength: 400
-        cover_image_id:
-          type: integer
-          nullable: true
-        scope_type:
+        content:
+          type: string
+        content_format:
           allOf:
-          - $ref: '#/components/schemas/ScopeType349Enum'
-          default: global
-        scope_parish_id:
+          - $ref: '#/components/schemas/ContentFormatEnum'
+          default: text
+        category_id:
           type: integer
-          nullable: true
-        scope_diocese_id:
-          type: integer
-          nullable: true
-        scope_church_id:
-          type: integer
+        is_sunday_notice:
+          type: boolean
+          default: false
+        sunday_date:
+          type: string
+          format: date
           nullable: true
       required:
       - category_id
       - content
       - title
-    ArticleDetailOutput:
+    ArticleListOutput:
       type: object
+      description: 'Vue publique : jamais le compteur de lectures (réservé au staff,
+        EF-PAROI-05).'
       properties:
         id:
           type: string
           format: uuid
           readOnly: true
+        content_type:
+          allOf:
+          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          title: Type de contenu
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 220
+          pattern: ^[-a-zA-Z0-9_]+$
+        excerpt:
+          type: string
+          title: Résumé court
+          maxLength: 400
+        content_format:
+          allOf:
+          - $ref: '#/components/schemas/ContentFormatEnum'
+          title: Format du contenu
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryOutput'
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        scope:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        is_sunday_notice:
+          type: boolean
+          title: Annonce du dimanche
+        sunday_date:
+          type: string
+          format: date
+          nullable: true
+          title: Dimanche concerné
+        cover_image_url:
+          type: string
+          nullable: true
+          readOnly: true
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publié le
+        reactions:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+      required:
+      - author_name
+      - category
+      - cover_image_url
+      - id
+      - reactions
+      - scope
+      - slug
+      - title
+    ArticleOutput:
+      type: object
+      description: 'Vue publique : jamais le compteur de lectures (réservé au staff,
+        EF-PAROI-05).'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content_type:
+          allOf:
+          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          title: Type de contenu
         title:
           type: string
           title: Titre
@@ -6897,249 +7076,56 @@ components:
           allOf:
           - $ref: '#/components/schemas/ContentFormatEnum'
           title: Format du contenu
-        cover_image_url:
-          type: string
-          nullable: true
-          readOnly: true
-        reactions:
-          allOf:
-          - $ref: '#/components/schemas/ArticleReactionsOutput'
-          readOnly: true
         category:
           allOf:
-          - $ref: '#/components/schemas/ArticleCategoryOutput'
+          - $ref: '#/components/schemas/CategoryOutput'
           readOnly: true
         author_name:
           type: string
           readOnly: true
-        content_type:
-          allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
-          title: Type de contenu
-        content_type_label:
-          type: string
+        scope:
+          type: object
+          additionalProperties: {}
           readOnly: true
-        announcement_date:
+        is_sunday_notice:
+          type: boolean
+          title: Annonce du dimanche
+        sunday_date:
           type: string
           format: date
           nullable: true
-          title: Date de l'annonce
-        scope_type:
-          allOf:
-          - $ref: '#/components/schemas/ScopeType349Enum'
-          title: Portée
-        scope_type_label:
+          title: Dimanche concerné
+        cover_image_url:
           type: string
-          readOnly: true
-        scope_parish_id:
-          type: integer
-          readOnly: true
           nullable: true
-        scope_diocese_id:
-          type: integer
           readOnly: true
-          nullable: true
-        scope_church_id:
-          type: integer
-          readOnly: true
-          nullable: true
-        status:
-          allOf:
-          - $ref: '#/components/schemas/Status4b8Enum'
-          title: Statut
-        status_label:
-          type: string
-          readOnly: true
-        views_count:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          title: Nombre de vues
         published_at:
           type: string
           format: date-time
           nullable: true
           title: Publié le
-        unpublished_at:
-          type: string
-          format: date-time
-          nullable: true
-          title: Dépublié le
-        unpublished_by_name:
-          type: string
-          nullable: true
-          readOnly: true
-        unpublish_reason:
-          type: string
-          title: Motif de dépublication
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+        reactions:
+          type: object
+          additionalProperties: {}
           readOnly: true
       required:
       - author_name
       - category
       - content
-      - content_type_label
       - cover_image_url
       - id
       - reactions
-      - scope_church_id
-      - scope_diocese_id
-      - scope_parish_id
-      - scope_type_label
+      - scope
       - slug
-      - status_label
       - title
-      - unpublished_by_name
-      - updated_at
-    ArticleListOutput:
+    ArticlePublishInput:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        title:
-          type: string
-          title: Titre
-          maxLength: 200
-        slug:
-          type: string
-          maxLength: 220
-          pattern: ^[-a-zA-Z0-9_]+$
-        excerpt:
-          type: string
-          title: Résumé court
-          maxLength: 400
-        cover_image_url:
-          type: string
-          nullable: true
-          readOnly: true
-        reactions:
-          allOf:
-          - $ref: '#/components/schemas/ArticleReactionsOutput'
-          readOnly: true
-        category:
-          allOf:
-          - $ref: '#/components/schemas/ArticleCategoryOutput'
-          readOnly: true
-        author_name:
-          type: string
-          readOnly: true
-        content_type:
-          allOf:
-          - $ref: '#/components/schemas/ContentTypeD15Enum'
-          title: Type de contenu
-        content_type_label:
-          type: string
-          readOnly: true
-        announcement_date:
-          type: string
-          format: date
-          nullable: true
-          title: Date de l'annonce
-        scope_type:
-          allOf:
-          - $ref: '#/components/schemas/ScopeType349Enum'
-          title: Portée
-        scope_type_label:
-          type: string
-          readOnly: true
-        scope_parish_id:
-          type: integer
-          readOnly: true
-          nullable: true
-        scope_diocese_id:
-          type: integer
-          readOnly: true
-          nullable: true
-        scope_church_id:
-          type: integer
-          readOnly: true
-          nullable: true
-        status:
-          allOf:
-          - $ref: '#/components/schemas/Status4b8Enum'
-          title: Statut
-        status_label:
-          type: string
-          readOnly: true
-        views_count:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          title: Nombre de vues
-        published_at:
+        publish_at:
           type: string
           format: date-time
           nullable: true
-          title: Publié le
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - author_name
-      - category
-      - content_type_label
-      - cover_image_url
-      - id
-      - reactions
-      - scope_church_id
-      - scope_diocese_id
-      - scope_parish_id
-      - scope_type_label
-      - slug
-      - status_label
-      - title
-    ArticleReactionSetInput:
-      type: object
-      description: |-
-        État VOULU d'une réaction — pas une bascule.
-
-        `active` est explicite pour que rejouer la requête soit sans effet : une
-        bascule implicite ferait repartir un double-clic dans l'autre sens.
-      properties:
-        reaction_type:
-          allOf:
-          - $ref: '#/components/schemas/ReactionTypeEnum'
-          description: |-
-            pray (Je prie) · amen (Amen) · attend (Je participe).
-
-            * `pray` - Je prie
-            * `amen` - Amen
-            * `attend` - Je participe
-        active:
-          type: boolean
-          description: true pour poser la réaction, false pour la retirer.
-      required:
-      - active
-      - reaction_type
-    ArticleReactionsOutput:
-      type: object
-      description: |-
-        Bloc `reactions` embarqué dans la liste ET le détail d'article.
-
-        Le front a besoin des deux d'un coup — combien, et est-ce que MOI j'ai
-        réagi — sinon il repart chercher l'état article par article et le fil paie
-        une requête réseau par carte.
-      properties:
-        counts:
-          type: object
-          additionalProperties:
-            type: integer
-          description: 'Nombre de réactions par type : pray / amen / attend.'
-        mine:
-          type: array
-          items:
-            $ref: '#/components/schemas/MineEnum'
-          description: Types déjà posés par l'utilisateur courant (vide si anonyme).
-      required:
-      - counts
-      - mine
+          description: 'Futur : publication programmée'
     ArticleUnpublishInput:
       type: object
       properties:
@@ -7530,6 +7516,37 @@ components:
       description: |-
         * `one` - Un seul titulaire
         * `many` - Plusieurs titulaires
+    CategoryOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 100
+        slug:
+          type: string
+          maxLength: 110
+          pattern: ^[-a-zA-Z0-9_]+$
+        icon:
+          type: string
+          title: Icône
+          maxLength: 50
+        color:
+          type: string
+          title: Couleur hex
+          maxLength: 7
+        display_order:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          title: Ordre d'affichage
+      required:
+      - id
+      - name
+      - slug
     ChapterMetadataOutput:
       type: object
       properties:
@@ -7829,6 +7846,14 @@ components:
       description: |-
         * `text` - Texte brut
         * `html` - HTML riche
+    ContentType1e5Enum:
+      enum:
+      - announcement
+      - article
+      type: string
+      description: |-
+        * `announcement` - Annonce
+        * `article` - Article
     ContentTypeD15Enum:
       enum:
       - announcement
@@ -8481,9 +8506,17 @@ components:
         * `laic` - Laïc
         * `clerc` - Clerc
         * `consacre` - Consacré
-    EventInput:
+    EventCreateInput:
       type: object
       properties:
+        node_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: 'Vide : événement global (plateforme)'
+        place_id:
+          type: integer
+          nullable: true
         title:
           type: string
           maxLength: 200
@@ -8491,7 +8524,9 @@ components:
           type: string
           default: ''
         event_type:
-          $ref: '#/components/schemas/EventTypeEnum'
+          allOf:
+          - $ref: '#/components/schemas/EventTypeEnum'
+          default: other
         start_at:
           type: string
           format: date-time
@@ -8501,106 +8536,85 @@ components:
         location:
           type: string
           default: ''
-        scope_type:
-          allOf:
-          - $ref: '#/components/schemas/EventInputScopeTypeEnum'
-          default: global
-        scope_id:
-          type: integer
-          nullable: true
-        scope_church_id:
-          type: integer
-          nullable: true
+          maxLength: 300
         max_participants:
           type: integer
           minimum: 1
           nullable: true
       required:
       - end_at
-      - event_type
       - start_at
       - title
-    EventInputScopeTypeEnum:
-      enum:
-      - global
-      - diocese
-      - parish
-      - church
-      type: string
-      description: |-
-        * `global` - global
-        * `diocese` - diocese
-        * `parish` - parish
-        * `church` - church
     EventOutput:
       type: object
       properties:
         id:
           type: integer
+          readOnly: true
         title:
           type: string
+          title: Titre
+          maxLength: 200
         description:
           type: string
         event_type:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/EventTypeEnum'
+          title: Type
         start_at:
           type: string
           format: date-time
+          title: Début
         end_at:
           type: string
           format: date-time
+          title: Fin
         location:
           type: string
-        scope_type:
+          title: Lieu
+          maxLength: 300
+        node_id:
           type: string
-        scope_id:
-          type: string
+          format: uuid
           readOnly: true
-        scope_parish_id:
-          type: integer
           nullable: true
-        scope_diocese_id:
-          type: integer
+        node_name:
+          type: string
           nullable: true
-        scope_church_id:
+          readOnly: true
+        place_id:
           type: integer
+          readOnly: true
           nullable: true
         max_participants:
           type: integer
+          maximum: 2147483647
+          minimum: 0
           nullable: true
-        organizer_email:
-          type: string
-          readOnly: true
-        registration_count:
+        registrations_count:
           type: integer
+          readOnly: true
+          default: 0
+        is_full:
+          type: boolean
           readOnly: true
         is_registered:
           type: boolean
           readOnly: true
-        cancelled_at:
-          type: string
-          format: date-time
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
+          default: false
+        is_cancelled:
+          type: boolean
+          readOnly: true
       required:
-      - cancelled_at
-      - created_at
-      - description
       - end_at
-      - event_type
       - id
+      - is_cancelled
+      - is_full
       - is_registered
-      - location
-      - max_participants
-      - organizer_email
-      - registration_count
-      - scope_church_id
-      - scope_diocese_id
-      - scope_id
-      - scope_parish_id
-      - scope_type
+      - node_id
+      - node_name
+      - place_id
+      - registrations_count
       - start_at
       - title
     EventTypeEnum:
@@ -8612,11 +8626,11 @@ components:
       - other
       type: string
       description: |-
-        * `mass` - mass
-        * `conference` - conference
-        * `retreat` - retreat
-        * `ordination` - ordination
-        * `other` - other
+        * `mass` - Messe
+        * `conference` - Conférence
+        * `retreat` - Retraite
+        * `ordination` - Ordination
+        * `other` - Autre
     ExportOutput:
       type: object
       properties:
@@ -8991,16 +9005,6 @@ components:
       required:
       - accepted
       - accepted_at
-    MineEnum:
-      enum:
-      - pray
-      - amen
-      - attend
-      type: string
-      description: |-
-        * `pray` - Je prie
-        * `amen` - Amen
-        * `attend` - Je participe
     MonProfil:
       type: object
       properties:
@@ -9375,6 +9379,29 @@ components:
       required:
       - event_type
       - id
+    NotificationPreference:
+      type: object
+      properties:
+        in_app:
+          type: boolean
+          title: Dans l'application
+        email:
+          type: boolean
+          title: Par e-mail
+        topic_annonces:
+          type: boolean
+          title: Annonces de ma paroisse
+        topic_evenements:
+          type: boolean
+          title: Rappels d'événements
+        quiet_start:
+          type: string
+          format: time
+          title: Début du silence
+        quiet_end:
+          type: string
+          format: time
+          title: Fin du silence
     NotificationUnreadCount:
       type: object
       properties:
@@ -9860,6 +9887,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedStaffArticleOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/StaffArticleOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     ParishCreateInput:
       type: object
       properties:
@@ -9914,9 +9967,30 @@ components:
       - name
       - province_id
       - province_name
+    ParoisseSuivieInput:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Paroisse à suivre ; null pour ne plus en suivre
+      required:
+      - node_id
+    ParoisseSuivieOutput:
+      type: object
+      properties:
+        node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+      required:
+      - node
     PatchedArticleUpdateInput:
       type: object
       properties:
+        content_type:
+          $ref: '#/components/schemas/ContentType1e5Enum'
         title:
           type: string
           maxLength: 200
@@ -9927,14 +10001,13 @@ components:
           type: string
         content_format:
           $ref: '#/components/schemas/ContentFormatEnum'
-        announcement_date:
-          type: string
-          format: date
-          nullable: true
         category_id:
           type: integer
-        cover_image_id:
-          type: integer
+        is_sunday_notice:
+          type: boolean
+        sunday_date:
+          type: string
+          format: date
           nullable: true
     PatchedAssignmentUpdateInput:
       type: object
@@ -9978,6 +10051,29 @@ components:
         code:
           type: string
           maxLength: 10
+    PatchedEventUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        event_type:
+          $ref: '#/components/schemas/EventTypeEnum'
+        start_at:
+          type: string
+          format: date-time
+        end_at:
+          type: string
+          format: date-time
+        location:
+          type: string
+          maxLength: 300
+        max_participants:
+          type: integer
+          minimum: 1
+          nullable: true
     PatchedInput:
       type: object
       properties:
@@ -10477,6 +10573,16 @@ components:
           maxLength: 10
       required:
       - emoji
+    ReactionInput:
+      type: object
+      properties:
+        reaction_type:
+          $ref: '#/components/schemas/ReactionTypeEnum'
+        active:
+          type: boolean
+      required:
+      - active
+      - reaction_type
     ReactionTypeEnum:
       enum:
       - pray
@@ -10487,6 +10593,13 @@ components:
         * `pray` - Je prie
         * `amen` - Amen
         * `attend` - Je participe
+    ReadOutput:
+      type: object
+      properties:
+        first_read:
+          type: boolean
+      required:
+      - first_read
     Reading:
       type: object
       description: Serializer for Mass readings.
@@ -10546,16 +10659,28 @@ components:
       properties:
         id:
           type: integer
-        user_email:
+          readOnly: true
+        user_id:
           type: string
+          format: uuid
+          readOnly: true
+        full_name:
+          type: string
+          readOnly: true
+        email:
+          type: string
+          format: email
           readOnly: true
         registered_at:
           type: string
           format: date-time
+          readOnly: true
       required:
+      - email
+      - full_name
       - id
       - registered_at
-      - user_email
+      - user_id
     RejectInput:
       type: object
       properties:
@@ -10862,18 +10987,6 @@ components:
         * `diocese` - Diocèse
         * `parish` - Paroisse
         * `church` - Église
-    ScopeType349Enum:
-      enum:
-      - global
-      - diocese
-      - parish
-      - church
-      type: string
-      description: |-
-        * `global` - Global (toute l'Église du Sénégal)
-        * `diocese` - Diocèse
-        * `parish` - Paroisse
-        * `church` - Église
     SearchBookGroupOutput:
       type: object
       description: Shape of search results grouped by book.
@@ -10965,6 +11078,110 @@ components:
       - id
       - number
       - text
+    StaffArticleOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content_type:
+          allOf:
+          - $ref: '#/components/schemas/ContentTypeD15Enum'
+          title: Type de contenu
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 220
+          pattern: ^[-a-zA-Z0-9_]+$
+        excerpt:
+          type: string
+          title: Résumé court
+          maxLength: 400
+        content:
+          type: string
+          title: Contenu
+        content_format:
+          allOf:
+          - $ref: '#/components/schemas/ContentFormatEnum'
+          title: Format du contenu
+        category:
+          allOf:
+          - $ref: '#/components/schemas/CategoryOutput'
+          readOnly: true
+        author_name:
+          type: string
+          readOnly: true
+        scope:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        is_sunday_notice:
+          type: boolean
+          title: Annonce du dimanche
+        sunday_date:
+          type: string
+          format: date
+          nullable: true
+          title: Dimanche concerné
+        status:
+          allOf:
+          - $ref: '#/components/schemas/StaffArticleOutputStatusEnum'
+          title: Statut
+        publish_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publication programmée
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publié le
+        unpublished_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Dépublié le
+        unpublish_reason:
+          type: string
+          title: Motif de dépublication
+        reads_count:
+          type: integer
+          readOnly: true
+          default: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author_name
+      - category
+      - content
+      - id
+      - reads_count
+      - scope
+      - slug
+      - title
+      - updated_at
+    StaffArticleOutputStatusEnum:
+      enum:
+      - draft
+      - scheduled
+      - published
+      - unpublished
+      type: string
+      description: |-
+        * `draft` - Brouillon
+        * `scheduled` - Programmé
+        * `published` - Publié
+        * `unpublished` - Dépublié
     Status165Enum:
       enum:
       - submitted
@@ -10981,16 +11198,6 @@ components:
         * `validated` - Validée
         * `rejected` - Rejetée
         * `document_deposited` - Document déposé
-    Status4b8Enum:
-      enum:
-      - draft
-      - published
-      - unpublished
-      type: string
-      description: |-
-        * `draft` - Brouillon
-        * `published` - Publié
-        * `unpublished` - Dépublié
     StatusActionWithCommentInput:
       type: object
       properties:
@@ -11272,6 +11479,16 @@ components:
         * `4` - Vendredi
         * `5` - Samedi
         * `6` - Dimanche
+    WsTicketOutput:
+      type: object
+      properties:
+        ticket:
+          type: string
+        expires_in:
+          type: integer
+      required:
+      - expires_in
+      - ticket
   securitySchemes:
     keycloakBearer:
       type: http

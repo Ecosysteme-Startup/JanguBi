@@ -1,606 +1,250 @@
-from uuid import UUID
+from typing import Any
 
-from django.shortcuts import get_object_or_404
-from drf_spectacular.openapi import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.mixins import ApiAuthMixin
-from apps.api.pagination import (
-    LimitOffsetPagination,
-    get_paginated_response,
-    paginated_response_serializer,
-)
-from apps.core.exceptions import ApplicationError
-from apps.news.models import Article
-from apps.news.permissions import CanUnpublishArticle, IsArticleEditor
-from apps.news.selectors import (
-    article_get,
-    article_list_for_diocese,
-    article_list_for_editor,
-    article_list_for_parish,
-    article_list_for_user,
-    article_list_global,
-    category_list,
-)
+from apps.api.mixins import ApiAuthMixin, PermissionClassesType
+from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
+from apps.api.v1 import V1ApiMixin
+from apps.core.exceptions import NotFoundError
+from apps.hierarchy import selectors as hierarchy_selectors
+from apps.hierarchy.authz import HasCapability
+from apps.hierarchy.models import PlaceOfWorship
+from apps.news import selectors, services
 from apps.news.serializers import (
-    ArticleCategoryOutputSerializer,
     ArticleCreateInputSerializer,
-    ArticleDetailOutputSerializer,
+    ArticleFilterSerializer,
     ArticleListOutputSerializer,
-    ArticleReactionSetInputSerializer,
-    ArticleReactionsOutputSerializer,
+    ArticleOutputSerializer,
+    ArticlePublishInputSerializer,
     ArticleUnpublishInputSerializer,
     ArticleUpdateInputSerializer,
-)
-from apps.news.services import (
-    article_create,
-    article_delete,
-    article_increment_views,
-    article_publish,
-    article_reaction_set,
-    article_unpublish,
-    article_update,
+    CategoryOutputSerializer,
+    ReactionInputSerializer,
+    ReadOutputSerializer,
+    StaffArticleFilterSerializer,
+    StaffArticleOutputSerializer,
 )
 
-
-def _error(exc: ApplicationError) -> Response:
-    return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
-
-
-# ---------------------------------------------------------------------------
-# Catégories (publique)
-# ---------------------------------------------------------------------------
+TAG = ["news"]
+_PAGINATION = [
+    OpenApiParameter("limit", int, description="Nombre de résultats (défaut 10, max 50)"),
+    OpenApiParameter("offset", int, description="Décalage"),
+]
 
 
-class CategoryListApi(APIView):
-    permission_classes = [AllowAny]
+class _PublicApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """Lecture publique ; un utilisateur connecté voit en plus ses propres réactions."""
 
+    permission_classes: PermissionClassesType = (AllowAny,)
+
+
+class _AuthedApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes: PermissionClassesType = (IsAuthenticated,)
+
+
+class _StaffApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+    vérifié par le service, et les objets hors portée répondent 404."""
+
+    permission_classes: PermissionClassesType = (IsAuthenticated, HasCapability("annonces.publier"))
+
+    def get_permissions(self):
+        from apps.hierarchy import authz
+
+        if authz.peut(self.request.user, "plateforme.admin", None):
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+
+# --- Public ----------------------------------------------------------------------------------
+
+
+class CategoryListApi(_PublicApi):
+    @extend_schema(tags=TAG, summary="Catégories d'articles", responses=CategoryOutputSerializer(many=True))
+    def get(self, request: Request) -> Response:
+        return Response(CategoryOutputSerializer(selectors.category_list(), many=True).data)
+
+
+class ArticleListApi(_PublicApi):
     @extend_schema(
-        responses={200: ArticleCategoryOutputSerializer(many=True)},
-        tags=["news"],
-        summary="Lister les catégories d'articles actives",
+        tags=TAG,
+        operation_id="news_list",
+        summary="Annonces et articles publiés (filtres : nœud et sous-arbre, dimanche, type, catégorie)",
+        parameters=[ArticleFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(ArticleListOutputSerializer),
     )
-    def get(self, request):
-        categories = category_list(active_only=True)
-        return Response(ArticleCategoryOutputSerializer(categories, many=True).data)
-
-
-# ---------------------------------------------------------------------------
-# Feed global (publique)
-# ---------------------------------------------------------------------------
-
-
-class ArticleGlobalListApi(APIView):
-    permission_classes = [AllowAny]
-
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats (défaut 20)"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug de catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news"],
-        summary="Feed global — articles publiés pour toute l'Église du Sénégal",
-    )
-    def get(self, request):
-        qs = article_list_global(
-            category_slug=request.query_params.get("category"),
-            search=request.query_params.get("search"),
-            content_type=request.query_params.get("content_type"),
+    def get(self, request: Request) -> Response:
+        filters = ArticleFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        data = filters.validated_data
+        node = hierarchy_selectors.node_get(node_id=data["node"]) if data.get("node") else None
+        queryset = selectors.article_list_published(
+            node=node,
+            sunday=data.get("sunday"),
+            content_type=data.get("type"),
+            category_id=data.get("category"),
             viewer=request.user,
         )
         return get_paginated_response(
-            pagination_class=self.Pagination,
+            pagination_class=LimitOffsetPagination,
             serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
+            queryset=queryset,
             request=request,
             view=self,
         )
 
 
-# ---------------------------------------------------------------------------
-# Feed paroisse (auth requise)
-# ---------------------------------------------------------------------------
+class ArticleDetailApi(_PublicApi):
+    @extend_schema(tags=TAG, summary="Détail d'un article publié", responses=ArticleOutputSerializer)
+    def get(self, request: Request, article_id: str) -> Response:
+        return Response(ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data)
 
 
-class ArticleParishListApi(ApiAuthMixin, APIView):
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
+class ArticleReadApi(_AuthedApi):
+    @extend_schema(tags=TAG, summary="Marquer comme lu (une lecture par personne)", request=None, responses=ReadOutputSerializer)
+    def post(self, request: Request, article_id: str) -> Response:
+        article = selectors.article_get_published(article_id=article_id)
+        return Response({"first_read": services.article_mark_read(article=article, user=request.user)})
 
+
+class ArticleReactionApi(_AuthedApi):
     @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug de catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news"],
-        summary="Articles publiés d'une paroisse",
+        tags=TAG,
+        summary="Poser ou retirer une réaction (idempotent)",
+        request=ReactionInputSerializer,
+        responses=ArticleOutputSerializer,
     )
-    def get(self, request, parish_id: int):
-        # A2 — borner la lecture à l'appartenance/autorité : un fidèle ne lit que
-        # le fil des paroisses dont il est membre ; le clergé/admin, celles qu'il
-        # administre. Pas de lecture d'une paroisse arbitraire par id.
-        from apps.users.scoping import user_can_admin_parish
-
-        scope = request.user.get_scope_ids()
-        if parish_id not in scope["parish_ids"] and not user_can_admin_parish(
-            request.user, parish_id
-        ):
-            return Response(
-                {"detail": "Vous n'êtes pas membre de cette paroisse."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        qs = article_list_for_parish(
-            parish_id=parish_id,
-            category_slug=request.query_params.get("category"),
-            search=request.query_params.get("search"),
-            content_type=request.query_params.get("content_type"),
-            viewer=request.user,
-        )
-        return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
-            request=request,
-            view=self,
-        )
-
-
-class ArticleFeedApi(ApiAuthMixin, APIView):
-    """Fil d'actualités AGRÉGÉ de l'utilisateur connecté (Chantier 7b) :
-    global ∪ église ∪ paroisse ∪ diocèse de toutes ses appartenances (C3a)."""
-
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug de catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-            OpenApiParameter(
-                "scope_type",
-                OpenApiTypes.STR,
-                enum=["global", "diocese", "parish", "church"],
-                description="Filtrer le fil par portée (borné aux appartenances de l'utilisateur)",
-            ),
-            OpenApiParameter(
-                "scope_id",
-                OpenApiTypes.INT,
-                description="ID de l'entité de portée (requis pour diocese/parish/church)",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news"],
-        summary="Fil d'actualités agrégé (toutes mes portées, filtrable par portée)",
-    )
-    def get(self, request):
-        scope_type = request.query_params.get("scope_type")
-        scope_id = self._validate_scope_filter(request, scope_type)
-        if isinstance(scope_id, Response):  # erreur de validation (400/403)
-            return scope_id
-
-        qs = article_list_for_user(
-            user=request.user, scope_type=scope_type, scope_id=scope_id
-        )
-        if category := request.query_params.get("category"):
-            qs = qs.filter(category__slug=category)
-        if search := request.query_params.get("search"):
-            qs = qs.filter(title__icontains=search)
-        if content_type := request.query_params.get("content_type"):
-            qs = qs.filter(content_type=content_type)
-        return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
-            request=request,
-            view=self,
-        )
-
-    @staticmethod
-    def _validate_scope_filter(request, scope_type):
-        """Valide ?scope_type=&scope_id= et BORNE aux appartenances de l'utilisateur.
-
-        Retourne le scope_id résolu (int|None), ou une Response d'erreur :
-        - 400 si scope_type inconnu, ou scope_id manquant/non numérique pour une
-          portée territoriale ;
-        - 403 si la portée demandée n'est PAS dans les appartenances (ne rouvre pas
-          le cloisonnement).
-        """
-        if not scope_type:
-            return None
-        if scope_type == Article.ScopeType.GLOBAL:
-            return None  # scope_id ignoré pour global
-        if scope_type not in {
-            Article.ScopeType.DIOCESE,
-            Article.ScopeType.PARISH,
-            Article.ScopeType.CHURCH,
-        }:
-            return Response({"detail": "Portée invalide."}, status=status.HTTP_400_BAD_REQUEST)
-
-        raw = request.query_params.get("scope_id")
-        if not raw or not raw.lstrip("-").isdigit():
-            return Response(
-                {"detail": "scope_id requis pour cette portée."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        scope_id = int(raw)
-
-        ids = request.user.get_scope_ids()
-        allowed = {
-            Article.ScopeType.CHURCH: ids["church_ids"],
-            Article.ScopeType.PARISH: ids["parish_ids"],
-            Article.ScopeType.DIOCESE: ids["diocese_ids"],
-        }[scope_type]
-        if scope_id not in allowed:
-            return Response(
-                {"detail": "Portée hors de vos appartenances."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        return scope_id
-
-
-class ArticleMyParishListApi(ApiAuthMixin, APIView):
-    """Articles de la paroisse principale du fidèle connecté."""
-
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug de catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news"],
-        summary="Articles de ma paroisse (paroisse principale du profil)",
-    )
-    def get(self, request):
-        from apps.users.selectors import profile_get
-
-        profile = profile_get(user=request.user)
-        parish_id = profile.primary_parish if profile else None
-
-        if not parish_id:
-            return Response({"results": [], "count": 0, "next": None, "previous": None})
-
-        qs = article_list_for_parish(
-            parish_id=parish_id,
-            category_slug=request.query_params.get("category"),
-            search=request.query_params.get("search"),
-            content_type=request.query_params.get("content_type"),
-            viewer=request.user,
-        )
-        return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
-            request=request,
-            view=self,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Feed diocèse (auth requise)
-# ---------------------------------------------------------------------------
-
-
-class ArticleDioceseListApi(ApiAuthMixin, APIView):
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug de catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news"],
-        summary="Articles publiés d'un diocèse",
-    )
-    def get(self, request, diocese_id: int):
-        # A2 — borner à l'appartenance/autorité diocésaine (cf. ArticleParishListApi).
-        from apps.users.scoping import user_can_admin_diocese
-
-        scope = request.user.get_scope_ids()
-        if diocese_id not in scope["diocese_ids"] and not user_can_admin_diocese(
-            request.user, diocese_id
-        ):
-            return Response(
-                {"detail": "Vous n'êtes pas membre de ce diocèse."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        qs = article_list_for_diocese(
-            diocese_id=diocese_id,
-            category_slug=request.query_params.get("category"),
-            search=request.query_params.get("search"),
-            content_type=request.query_params.get("content_type"),
-            viewer=request.user,
-        )
-        return get_paginated_response(
-            pagination_class=self.Pagination,
-            serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
-            request=request,
-            view=self,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Détail article (publique)
-# ---------------------------------------------------------------------------
-
-
-class ArticleDetailApi(APIView):
-    permission_classes = [AllowAny]
-
-    @extend_schema(
-        responses={200: ArticleDetailOutputSerializer},
-        tags=["news"],
-        summary="Détail d'un article publié",
-    )
-    def get(self, request, article_id: UUID):
-        article = article_get(article_id=str(article_id), viewer=request.user)
-        if article is None or article.status != Article.Status.PUBLISHED:
-            return Response({"detail": "Article introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        article_increment_views(article=article)
-        return Response(ArticleDetailOutputSerializer(article).data)
-
-
-# ---------------------------------------------------------------------------
-# Réactions (auth requise)
-# ---------------------------------------------------------------------------
-
-
-class ArticleReactionSetApi(ApiAuthMixin, APIView):
-    """Poser ou retirer une réaction (prier / amen / participer).
-
-    Un seul endpoint pour les deux sens, avec l'état voulu dans le corps : c'est
-    ce qui rend l'action rejouable sans effet de bord (cf. `article_reaction_set`).
-    """
-
-    @extend_schema(
-        request=ArticleReactionSetInputSerializer,
-        responses={
-            200: ArticleReactionsOutputSerializer,
-            400: OpenApiTypes.OBJECT,
-            401: OpenApiTypes.OBJECT,
-        },
-        tags=["news"],
-        summary="Poser ou retirer une réaction sur un article publié",
-        description=(
-            "Idempotent : rejouer la même requête laisse le système dans le même "
-            "état. Réagir exige de pouvoir lire l'article (portée + publication). "
-            "Renvoie les compteurs réconciliés et les réactions de l'utilisateur."
-        ),
-    )
-    def post(self, request, article_id: UUID):
-        serializer = ArticleReactionSetInputSerializer(data=request.data)
+    def put(self, request: Request, article_id: str) -> Response:
+        serializer = ReactionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            summary = article_reaction_set(
-                article_id=str(article_id),
-                user=request.user,
-                **serializer.validated_data,
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ArticleReactionsOutputSerializer(summary).data)
+        article = selectors.article_get_published(article_id=article_id)
+        services.article_reaction_set(article=article, user=request.user, **serializer.validated_data)
+        return Response(ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data)
 
 
-# ---------------------------------------------------------------------------
-# Administration — liste tous statuts
-# ---------------------------------------------------------------------------
-
-
-class AdminArticleListApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
-
-    class Pagination(LimitOffsetPagination):
-        default_limit = 20
-
+class MeFeedApi(_AuthedApi):
     @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage pagination"),
-            OpenApiParameter("status", OpenApiTypes.STR, enum=["draft", "published", "unpublished"], description="Filtrer par statut"),
-            OpenApiParameter("scope_type", OpenApiTypes.STR, enum=["global", "diocese", "parish", "church"], description="Filtrer par portée"),
-            OpenApiParameter("category", OpenApiTypes.STR, description="Filtrer par slug catégorie"),
-            OpenApiParameter("search", OpenApiTypes.STR, description="Recherche dans le titre"),
-            OpenApiParameter(
-                "content_type",
-                OpenApiTypes.STR,
-                enum=["announcement", "article", "pastoral_letter"],
-                description="Filtrer par type de contenu",
-            ),
-        ],
-        responses={200: paginated_response_serializer(ArticleListOutputSerializer)},
-        tags=["news-admin"],
-        summary="[Admin] Lister tous les articles (tous statuts)",
+        tags=["me"],
+        operation_id="me_feed",
+        summary="Mon flux : contenus globaux, de ma paroisse suivie et de ses ancêtres",
+        parameters=_PAGINATION,
+        responses=paginated_response_serializer(ArticleListOutputSerializer),
     )
-    def get(self, request):
-        # Scopé à l'autorité de l'éditeur : la liste admin exposait auparavant
-        # tous les articles de la plateforme, y compris les brouillons et les
-        # lettres pastorales d'autres diocèses.
-        qs = article_list_for_editor(
-            editor=request.user,
-            status=request.query_params.get("status", "") or "",
-            scope_type=request.query_params.get("scope_type") or None,
-            category_slug=request.query_params.get("category") or None,
-            search=request.query_params.get("search") or None,
-            content_type=request.query_params.get("content_type") or None,
-            viewer=request.user,
-        )
+    def get(self, request: Request) -> Response:
         return get_paginated_response(
-            pagination_class=self.Pagination,
+            pagination_class=LimitOffsetPagination,
             serializer_class=ArticleListOutputSerializer,
-            queryset=qs,
+            queryset=selectors.feed_for(user=request.user),
             request=request,
             view=self,
         )
 
 
-# ---------------------------------------------------------------------------
-# Administration — CRUD
-# ---------------------------------------------------------------------------
+# --- Staff ---------------------------------------------------------------------------------
 
 
-class AdminArticleCreateApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
+def _resolve_scope(data: dict[str, Any]) -> dict[str, Any]:
+    data = dict(data)
+    node_id = data.pop("node_id", None)
+    place_id = data.pop("place_id", None)
+    data["node"] = hierarchy_selectors.node_get(node_id=node_id) if node_id else None
+    data["place"] = None
+    if place_id:
+        data["place"] = PlaceOfWorship.objects.filter(pk=place_id).first()
+        if data["place"] is None:
+            raise NotFoundError("Lieu de culte introuvable.", {"place_id": place_id})
+    if "category_id" in data:
+        data["category"] = selectors.category_get(category_id=data.pop("category_id"))
+    return data
+
+
+class StaffArticleListCreateApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_news_list",
+        summary="Mes contenus à gérer (tous statuts, compteur de lectures)",
+        parameters=[StaffArticleFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(StaffArticleOutputSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = StaffArticleFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=StaffArticleOutputSerializer,
+            queryset=selectors.article_list_for_staff(user=request.user, filters=filters.validated_data),
+            request=request,
+            view=self,
+        )
 
     @extend_schema(
+        tags=TAG,
+        summary="Créer un brouillon (annonces.publier sur le nœud)",
         request=ArticleCreateInputSerializer,
-        responses={201: ArticleDetailOutputSerializer},
-        tags=["news-admin"],
-        summary="[Admin] Créer un article",
+        responses={201: StaffArticleOutputSerializer},
     )
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         serializer = ArticleCreateInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            article = article_create(author=request.user, **serializer.validated_data)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ArticleDetailOutputSerializer(article).data, status=status.HTTP_201_CREATED)
+        article = services.article_create(author=request.user, **_resolve_scope(serializer.validated_data))
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
-class AdminArticleDetailApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
-
-    @extend_schema(
-        responses={200: ArticleDetailOutputSerializer},
-        tags=["news-admin"],
-        summary="[Admin] Détail d'un article (tous statuts)",
-    )
-    def get(self, request, article_id: UUID):
-        article = article_get(article_id=str(article_id), viewer=request.user)
-        if article is None:
-            return Response({"detail": "Article introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        return Response(ArticleDetailOutputSerializer(article).data)
-
-
-class AdminArticleUpdateApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
+class StaffArticleDetailApi(_StaffApi):
+    @extend_schema(tags=TAG, summary="Détail d'un contenu (tous statuts)", responses=StaffArticleOutputSerializer)
+    def get(self, request: Request, article_id: str) -> Response:
+        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
 
     @extend_schema(
-        request=ArticleUpdateInputSerializer,
-        responses={200: ArticleDetailOutputSerializer},
-        tags=["news-admin"],
-        summary="[Admin] Modifier un article",
+        tags=TAG, summary="Modifier un contenu", request=ArticleUpdateInputSerializer, responses=StaffArticleOutputSerializer
     )
-    def patch(self, request, article_id: UUID):
-        article = get_object_or_404(Article, pk=article_id)
-        serializer = ArticleUpdateInputSerializer(data=request.data)
+    def patch(self, request: Request, article_id: str) -> Response:
+        article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
+        serializer = ArticleUpdateInputSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        try:
-            article = article_update(article=article, editor=request.user, **serializer.validated_data)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ArticleDetailOutputSerializer(article).data)
+        data = dict(serializer.validated_data)
+        if "category_id" in data:
+            data["category"] = selectors.category_get(category_id=data.pop("category_id"))
+        services.article_update(article=article, editor=request.user, data=data)
+        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
+
+    @extend_schema(tags=TAG, summary="Supprimer un brouillon ou un contenu retiré", responses={204: None})
+    def delete(self, request: Request, article_id: str) -> Response:
+        services.article_delete(article=selectors.article_get_for_staff(user=request.user, article_id=article_id), editor=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class AdminArticlePublishApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
-
+class StaffArticlePublishApi(_StaffApi):
     @extend_schema(
-        request=None,
-        responses={200: ArticleDetailOutputSerializer},
-        tags=["news-admin"],
-        summary="[Admin] Publier un article",
+        tags=TAG,
+        summary="Publier maintenant ou programmer (publish_at futur)",
+        request=ArticlePublishInputSerializer,
+        responses=StaffArticleOutputSerializer,
     )
-    def post(self, request, article_id: UUID):
-        article = get_object_or_404(Article, pk=article_id)
-        try:
-            article = article_publish(article=article, editor=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ArticleDetailOutputSerializer(article).data)
+    def post(self, request: Request, article_id: str) -> Response:
+        serializer = ArticlePublishInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
+        services.article_publish(article=article, editor=request.user, publish_at=serializer.validated_data.get("publish_at"))
+        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
 
 
-class AdminArticleUnpublishApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, CanUnpublishArticle]
-
+class StaffArticleUnpublishApi(_StaffApi):
     @extend_schema(
-        request=ArticleUnpublishInputSerializer,
-        responses={200: ArticleDetailOutputSerializer},
-        tags=["news-admin"],
-        summary="[Admin] Dépublier un article",
+        tags=TAG, summary="Retirer un contenu publié ou programmé", request=ArticleUnpublishInputSerializer,
+        responses=StaffArticleOutputSerializer,
     )
-    def post(self, request, article_id: UUID):
-        article = get_object_or_404(Article, pk=article_id)
+    def post(self, request: Request, article_id: str) -> Response:
         serializer = ArticleUnpublishInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            article = article_unpublish(
-                article=article,
-                editor=request.user,
-                reason=serializer.validated_data.get("reason", ""),
-            )
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ArticleDetailOutputSerializer(article).data)
-
-
-class AdminArticleDeleteApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsArticleEditor]
-
-    @extend_schema(
-        responses={204: None},
-        tags=["news-admin"],
-        summary="[Admin] Supprimer un article (brouillon ou dépublié uniquement)",
-    )
-    def delete(self, request, article_id: UUID):
-        article = get_object_or_404(Article, pk=article_id)
-        try:
-            article_delete(article=article, editor=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
+        services.article_unpublish(article=article, editor=request.user, reason=serializer.validated_data["reason"])
+        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)

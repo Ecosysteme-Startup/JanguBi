@@ -71,6 +71,24 @@ class Event(BaseModel):
         db_index=True,
         verbose_name=_("église de portée"),
     )
+    # --- Portée V1 (L4) : un nœud, ou rien (global). Les champs scope_* ci-dessus restent jusqu'en L9.
+    scope_node = models.ForeignKey(
+        "hierarchy.Node",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="events",
+        verbose_name=_("nœud de portée"),
+    )
+    scope_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="events",
+        verbose_name=_("lieu de culte"),
+    )
+    reminder_sent_at = models.DateTimeField(_("rappel envoyé le"), null=True, blank=True)
     max_participants = models.PositiveIntegerField(null=True, blank=True)
 
     # Annulation DOUCE : un événement supprimé garde ses inscriptions (des fidèles
@@ -98,6 +116,7 @@ class Event(BaseModel):
             models.Index(fields=["scope_type", "scope_parish"], name="event_parish_idx"),
             models.Index(fields=["scope_type", "scope_diocese"], name="event_diocese_idx"),
             models.Index(fields=["scope_type", "scope_church"], name="event_church_idx"),
+            models.Index(fields=["scope_node", "start_at"], name="event_node_start_idx"),
         ]
 
     @property

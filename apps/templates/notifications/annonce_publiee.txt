@@ -1,0 +1,8 @@
+Bonjour,
+
+{{ node_name }} a publié une nouvelle annonce : « {{ title }} ».
+
+Lire l'annonce : {{ frontend_url }}/actualites/{{ article_id }}
+
+Vous recevez ce message parce que vous suivez cette paroisse sur Jàngu Bi.
+Vos préférences de notification : {{ frontend_url }}/profil/notifications

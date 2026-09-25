@@ -319,6 +319,21 @@ def person_verification_decide(
     return person
 
 
+# --- Paroisse suivie (RG-01) ----------------------------------------------------------
+
+
+@transaction.atomic
+def paroisse_suivie_set(*, person: Any, node: Node | None) -> Any:
+    """Choix libre, sans validation ni « transfert » (RG-01). ``None`` : ne plus suivre."""
+    if node is not None and not node.type.holds_registers:
+        raise ApplicationError("Choisissez une paroisse.", code="not_a_parish")
+    if node is not None and node.status == "supprime":
+        raise ApplicationError("Cette paroisse n'existe plus.", code="parish_deleted")
+    person.paroisse_suivie = node
+    person.save(update_fields=["paroisse_suivie"])
+    return person
+
+
 # --- Retraits de capacités (EF-PER-09) ---------------------------------------------------
 
 

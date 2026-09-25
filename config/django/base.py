@@ -55,6 +55,14 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.authentication.tasks.keycloak_staff_reconcile_task",
         "schedule": crontab(hour=0, minute=45),
     },
+    "news_publish_scheduled": {
+        "task": "apps.news.tasks.articles_publish_due_task",
+        "schedule": crontab(minute="*/5"),
+    },
+    "agenda_event_reminders": {
+        "task": "apps.agenda.tasks.event_reminders_task",
+        "schedule": crontab(minute=0),
+    },
     "hierarchy_assignments_sync": {
         "task": "apps.hierarchy.tasks.assignments_sync_task",
         "schedule": crontab(hour=0, minute=15),

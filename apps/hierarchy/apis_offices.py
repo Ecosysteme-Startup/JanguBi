@@ -1,7 +1,7 @@
 from typing import Any
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
@@ -29,6 +29,7 @@ from apps.hierarchy.serializers import (
     DeclarationInputSerializer,
     ImportInputSerializer,
     ImportReportSerializer,
+    NodeRefSerializer,
     OfficeTypeOutputSerializer,
     PersonStatusOutputSerializer,
     VerificationDecisionInputSerializer,
@@ -327,3 +328,32 @@ class AuditListApi(AuthedV1Api):
             request=request,
             view=self,
         )
+
+
+class ParoisseSuivieInputSerializer(serializers.Serializer):
+    node_id = serializers.UUIDField(allow_null=True, help_text="Paroisse à suivre ; null pour ne plus en suivre")
+
+
+class ParoisseSuivieOutputSerializer(serializers.Serializer):
+    node = NodeRefSerializer(allow_null=True)
+
+
+class MeParoisseSuivieApi(AuthedV1Api):
+    @extend_schema(tags=ME_TAG, summary="Ma paroisse suivie", responses=ParoisseSuivieOutputSerializer)
+    def get(self, request: Request) -> Response:
+        person = selectors_offices.person_get(person_id=request.user.pk)
+        return Response(ParoisseSuivieOutputSerializer({"node": person.paroisse_suivie}).data)
+
+    @extend_schema(
+        tags=ME_TAG,
+        summary="Changer de paroisse suivie (libre, sans validation — RG-01)",
+        request=ParoisseSuivieInputSerializer,
+        responses=ParoisseSuivieOutputSerializer,
+    )
+    def put(self, request: Request) -> Response:
+        serializer = ParoisseSuivieInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        node_id = serializer.validated_data["node_id"]
+        node = selectors.node_get(node_id=node_id) if node_id else None
+        person = services_offices.paroisse_suivie_set(person=request.user, node=node)
+        return Response(ParoisseSuivieOutputSerializer({"node": person.paroisse_suivie}).data)

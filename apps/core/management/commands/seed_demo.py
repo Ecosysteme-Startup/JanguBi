@@ -1007,7 +1007,7 @@ class Command(BaseCommand):
 
     def _create_agenda_and_intentions(self, users):
         from apps.agenda.models import Event
-        from apps.agenda.services import event_create
+        from apps.hierarchy.models import Node
         from apps.mass_intentions.models import MassIntention
         from apps.mass_intentions.services import mass_intention_submit
 
@@ -1021,25 +1021,31 @@ class Command(BaseCommand):
             organizer = users[data["organizer_email"]]
             scope_type = data["scope_type"]
             ref = data.get("scope_ref")
-            scope_id = None
-            scope_church_id = None
+            legacy: dict = {}
+            node = None
             if scope_type == "parish":
-                scope_id = self._parishes[ref].id
+                legacy["scope_parish"] = self._parishes[ref]
+                node = Node.objects.filter(legacy_model="org.Parish", legacy_id=self._parishes[ref].id).first()
             elif scope_type == "diocese":
-                scope_id = self._dioceses[ref].id
+                legacy["scope_diocese"] = self._dioceses[ref]
+                node = Node.objects.filter(legacy_model="org.Diocese", legacy_id=self._dioceses[ref].id).first()
             elif scope_type == "church":
-                scope_church_id = self._church_of(ref).id
+                church = self._church_of(ref)
+                legacy["scope_church"] = church
+                node = Node.objects.filter(legacy_model="org.Parish", legacy_id=church.parish_id).first()
 
+            # Données de démonstration : écriture directe (portée héritée + nœud V1 correspondant),
+            # sans le contrôle de capacités du service (les comptes de démo n'ont pas de nomination).
             start = now + datetime.timedelta(days=data["in_days"])
-            event_create(
+            Event.objects.create(
                 organizer=organizer,
                 title=data["title"],
                 event_type=data["event_type"],
                 start_at=start,
                 end_at=start + datetime.timedelta(hours=2),
                 scope_type=scope_type,
-                scope_id=scope_id,
-                scope_church_id=scope_church_id,
+                scope_node=node,
+                **legacy,
             )
             self.stdout.write(f"  [+] Événement [{scope_type}] : {data['title'][:42]}")
 
