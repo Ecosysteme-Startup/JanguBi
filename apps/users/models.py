@@ -160,6 +160,7 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         related_name="+",
     )
     verified_at = models.DateTimeField(_("vérifié le"), null=True, blank=True)
+    declared_at = models.DateTimeField(_("déclaré le"), null=True, blank=True)
     paroisse_suivie = models.ForeignKey(
         "hierarchy.Node",
         verbose_name=_("paroisse suivie"),

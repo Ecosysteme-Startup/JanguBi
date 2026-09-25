@@ -22,7 +22,14 @@ from apps.hierarchy.enums import (
     RequiredOrder,
     StatutVerification,
 )
-from apps.hierarchy.models import Capability, CapabilityOverride, Node, OfficeAssignment, OfficeType
+from apps.hierarchy.models import (
+    Capability,
+    CapabilityOverride,
+    DeclarationAttachment,
+    Node,
+    OfficeAssignment,
+    OfficeType,
+)
 from apps.hierarchy.selectors import node_ancestors
 
 OPEN_STATUSES = (AssignmentStatus.PROPOSEE, AssignmentStatus.ACTIVE)
@@ -252,7 +259,10 @@ def person_declaration_submit(
     degre_ordre: str = DegreOrdre.AUCUN,
     incardination_node: Node | None = None,
     institut_node: Node | None = None,
+    attachment_file_ids: list[int] | None = None,
 ) -> Any:
+    """Déclaration (ou complément) de l'état de vie. Les justificatifs s'ajoutent à ceux
+    déjà joints : compléter sa déclaration ne fait rien perdre."""
     if etat_de_vie == EtatDeVie.LAIC and degre_ordre != DegreOrdre.AUCUN:
         raise ApplicationError("Un laïc n'a pas de degré d'ordre.", code="invalid_declaration")
     if etat_de_vie == EtatDeVie.CLERC and degre_ordre == DegreOrdre.AUCUN:
@@ -270,6 +280,7 @@ def person_declaration_submit(
     person.statut_verification = StatutVerification.DECLARE
     person.verified_by = None
     person.verified_at = None
+    person.declared_at = timezone.now()
     person.save(
         update_fields=[
             "etat_de_vie",
@@ -279,16 +290,47 @@ def person_declaration_submit(
             "statut_verification",
             "verified_by",
             "verified_at",
+            "declared_at",
         ]
     )
+    attached = _declaration_attach(person=person, file_ids=attachment_file_ids or [])
     audit_log(
         actor=person,
         action="personne.declaration",
         target=person,
         node=incardination_node or institut_node,
-        metadata={"etat_de_vie": etat_de_vie, "degre_ordre": degre_ordre},
+        metadata={"etat_de_vie": etat_de_vie, "degre_ordre": degre_ordre, "justificatifs": attached},
     )
     return person
+
+
+MAX_DECLARATION_ATTACHMENTS = 5
+
+
+def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
+    """Joint des fichiers envoyés par la personne elle-même et dont l'envoi est terminé."""
+    from apps.files.models import File
+
+    ids = list(dict.fromkeys(file_ids))
+    if not ids:
+        return 0
+    files = {f.pk: f for f in File.objects.filter(pk__in=ids)}
+    for file_id in ids:
+        file_obj = files.get(file_id)
+        if file_obj is None:
+            raise ApplicationError("Fichier introuvable.", {"file_id": file_id}, code="file_not_found")
+        if file_obj.uploaded_by_id != person.pk:
+            raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
+        if not file_obj.is_valid:
+            raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
+    existing = set(DeclarationAttachment.objects.filter(person=person).values_list("file_id", flat=True))
+    new_ids = [i for i in ids if i not in existing]
+    if len(existing) + len(new_ids) > MAX_DECLARATION_ATTACHMENTS:
+        raise ApplicationError(
+            f"{MAX_DECLARATION_ATTACHMENTS} justificatifs au plus.", code="too_many_attachments"
+        )
+    DeclarationAttachment.objects.bulk_create([DeclarationAttachment(person=person, file=files[i]) for i in new_ids])
+    return len(new_ids)
 
 
 def verification_node(person: Any) -> Node | None:
@@ -300,8 +342,14 @@ def verification_node(person: Any) -> Node | None:
 def person_verification_decide(
     *, actor: Any, person: Any, decision: str, note: str = "", ip: str | None = None
 ) -> Any:
-    if decision not in {StatutVerification.VERIFIE, StatutVerification.REJETE}:
+    """Vérifier, rejeter ou demander un complément (motif obligatoire, transmis à la personne,
+    qui complète alors sa déclaration)."""
+    if decision not in {StatutVerification.VERIFIE, StatutVerification.REJETE, StatutVerification.COMPLEMENT}:
         raise ApplicationError("Décision invalide.", code="invalid_decision")
+    if decision == StatutVerification.COMPLEMENT and not note.strip():
+        raise ApplicationError(
+            "Indiquez ce qui manque : le motif est transmis à la personne.", {"note": "obligatoire"}, code="note_required"
+        )
     if person.pk == actor.pk:
         raise PermissionDeniedError("On ne vérifie pas son propre statut (RG-07).", code="self_verification")
     if person.etat_de_vie == EtatDeVie.LAIC:
@@ -312,12 +360,50 @@ def person_verification_decide(
         raise PermissionDeniedError("Vous ne pouvez pas vérifier cette personne.", code="verification_forbidden")
 
     person.statut_verification = decision
-    person.verification_note = note[:255]
+    person.verification_note = note.strip()[:255]
     person.verified_by = actor
     person.verified_at = timezone.now()
     person.save(update_fields=["statut_verification", "verification_note", "verified_by", "verified_at"])
     audit_log(actor=actor, action="personne.verification", target=person, node=node, metadata={"decision": decision}, ip=ip)
+    if decision == StatutVerification.COMPLEMENT:
+        transaction.on_commit(partial(_notify_complement, person))
     return person
+
+
+def _notify_complement(person: Any) -> None:
+    """Notification en application et e-mail vers l'adresse du compte. Ni le motif ni l'état
+    de vie ne quittent l'application : la personne les lit dans son profil."""
+    from apps.emails.models import Email
+    from apps.emails.tasks import email_send as email_send_task
+    from apps.messaging.services import notification_send
+
+    notification_send(user=person, event_type="personnes.complement", payload={"statut": StatutVerification.COMPLEMENT})
+    if not person.email:
+        return
+    html = (
+        "<p>Bonjour,</p><p>La chancellerie demande un complément à votre déclaration d'état de vie. "
+        "Le détail se trouve dans votre profil Jàngu Bi.</p>"
+    )
+    email = Email.objects.create(
+        to=person.email,
+        subject="[Jàngu Bi] Complément demandé pour votre déclaration",
+        html=html,
+        plain_text=html,
+        status=Email.Status.SENDING,
+    )
+    transaction.on_commit(partial(email_send_task.delay, email.id))
+
+
+@transaction.atomic
+def person_declaration_forget(*, person: Any) -> list[Any]:
+    """Suppression du compte : retire les justificatifs (donnée religieuse sensible) et
+    renvoie les ``File`` à effacer par l'appelant."""
+    attachments = list(DeclarationAttachment.objects.filter(person=person).select_related("file"))
+    DeclarationAttachment.objects.filter(pk__in=[a.pk for a in attachments]).delete()
+    person.verification_note = ""
+    person.declared_at = None
+    person.save(update_fields=["verification_note", "declared_at"])
+    return [a.file for a in attachments]
 
 
 # --- Paroisse suivie (RG-01) ----------------------------------------------------------

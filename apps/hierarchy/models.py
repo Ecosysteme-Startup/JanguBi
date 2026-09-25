@@ -304,6 +304,29 @@ class OfficeAssignment(BaseModel):
         return f"{self.office_type} — {self.node} ({self.get_status_display()})"
 
 
+class DeclarationAttachment(BaseModel):
+    """Justificatif joint à une déclaration d'état de vie (celebret, lettre d'obédience…).
+
+    Donnée religieuse sensible : visible de la personne et de qui a ``personnes.verifier``
+    sur son incardination ; effacée avec le compte."""
+
+    person = models.ForeignKey(
+        "users.BaseUser", on_delete=models.CASCADE, related_name="declaration_attachments", verbose_name=_("personne")
+    )
+    file = models.ForeignKey("files.File", on_delete=models.PROTECT, related_name="+", verbose_name=_("fichier"))
+
+    class Meta:
+        verbose_name = _("justificatif de déclaration")
+        verbose_name_plural = _("justificatifs de déclaration")
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["person", "file"], name="hierarchy_declaration_attachment_unique"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Justificatif {self.pk}"
+
+
 class CapabilityOverride(BaseModel):
     """Retrait d'une capacité à un office dans le sous-arbre d'un diocèse (EF-PER-09)."""
 

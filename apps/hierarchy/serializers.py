@@ -1,5 +1,6 @@
 from typing import Any
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.hierarchy.enums import (
@@ -22,6 +23,7 @@ from apps.hierarchy.models import (
     PlaceOfWorship,
     ScheduleException,
 )
+from apps.hierarchy.persons import email_mask, full_name
 
 # --- Sorties -----------------------------------------------------------------
 
@@ -353,22 +355,91 @@ class DeclarationInputSerializer(serializers.Serializer):
     degre_ordre = serializers.ChoiceField(choices=DegreOrdre.choices, default=DegreOrdre.AUCUN)
     incardination_node_id = serializers.UUIDField(required=False, allow_null=True)
     institut_node_id = serializers.UUIDField(required=False, allow_null=True)
+    attachment_file_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+        max_length=5,
+        help_text="Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés d'abord via /files/upload/",
+    )
+
+
+class DeclarationAttachmentOutputSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="file.id")
+    file_name = serializers.CharField(source="file.original_file_name")
+    file_type = serializers.CharField(source="file.file_type")
+    url = serializers.SerializerMethodField(help_text="Lien de téléchargement (présigné en stockage S3)")
+    created_at = serializers.DateTimeField()
+
+    def get_url(self, obj: Any) -> str | None:
+        return obj.file.url if obj.file.file else None
 
 
 class PersonStatusOutputSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     email = serializers.EmailField()
+    full_name = serializers.SerializerMethodField(help_text="Prénom et nom ; vide s'ils ne sont pas renseignés")
     etat_de_vie = serializers.CharField()
     degre_ordre = serializers.CharField()
-    statut_verification = serializers.CharField()
-    verification_note = serializers.CharField()
+    statut_verification = serializers.ChoiceField(choices=StatutVerification.choices)
+    verification_note = serializers.CharField(help_text="Motif du refus ou du complément demandé")
+    declared_at = serializers.DateTimeField(allow_null=True, help_text="Date de la dernière déclaration")
     incardination_node = NodeRefSerializer(allow_null=True)
     institut_node = NodeRefSerializer(allow_null=True)
+    attachments = serializers.SerializerMethodField()
+
+    def get_full_name(self, obj: Any) -> str:
+        return full_name(obj)
+
+    @extend_schema_field(DeclarationAttachmentOutputSerializer(many=True))
+    def get_attachments(self, obj: Any) -> list[Any]:
+        files = getattr(obj, "declaration_files", None)
+        if files is None:
+            files = obj.declaration_attachments.filter(file__upload_finished_at__isnull=False).select_related("file")
+        return list(DeclarationAttachmentOutputSerializer(files, many=True).data)
 
 
 class VerificationDecisionInputSerializer(serializers.Serializer):
-    decision = serializers.ChoiceField(choices=[StatutVerification.VERIFIE, StatutVerification.REJETE])
-    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    decision = serializers.ChoiceField(
+        choices=[StatutVerification.VERIFIE, StatutVerification.REJETE, StatutVerification.COMPLEMENT]
+    )
+    note = serializers.CharField(
+        max_length=255,
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Motif, obligatoire pour « complement » ; transmis à la personne",
+    )
+
+
+class VerificationFilterSerializer(serializers.Serializer):
+    statut = serializers.ChoiceField(
+        choices=[StatutVerification.DECLARE, StatutVerification.COMPLEMENT],
+        required=False,
+        help_text="« declare » : à vérifier ; « complement » : en attente du complément demandé",
+    )
+
+
+class PersonSearchFilterSerializer(serializers.Serializer):
+    q = serializers.CharField(min_length=2, max_length=100, help_text="Nom, prénom ou e-mail (2 caractères au moins)")
+
+
+class PersonSearchOutputSerializer(serializers.Serializer):
+    """Juste ce qu'il faut pour choisir la personne à nommer (jamais l'e-mail en clair)."""
+
+    id = serializers.UUIDField()
+    full_name = serializers.SerializerMethodField()
+    email_masked = serializers.SerializerMethodField()
+    etat_de_vie = serializers.CharField()
+    degre_ordre = serializers.CharField()
+    statut_verification = serializers.ChoiceField(choices=StatutVerification.choices)
+    incardination_node = NodeRefSerializer(allow_null=True)
+
+    def get_full_name(self, obj: Any) -> str:
+        return full_name(obj)
+
+    def get_email_masked(self, obj: Any) -> str:
+        return email_mask(obj.email)
 
 
 class CapabilityOverrideSerializer(serializers.Serializer):

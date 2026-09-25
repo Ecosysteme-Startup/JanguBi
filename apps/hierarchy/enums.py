@@ -73,6 +73,7 @@ class StatutVerification(models.TextChoices):
     DECLARE = "declare", _("Déclaré")
     VERIFIE = "verifie", _("Vérifié")
     REJETE = "rejete", _("Rejeté")
+    COMPLEMENT = "complement", _("Complément demandé")
 
 
 # Rang d'ordre : sert à la condition d'ordre des offices (EF-PER-05).

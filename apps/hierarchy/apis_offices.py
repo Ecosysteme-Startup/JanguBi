@@ -31,8 +31,11 @@ from apps.hierarchy.serializers import (
     ImportReportSerializer,
     NodeRefSerializer,
     OfficeTypeOutputSerializer,
+    PersonSearchFilterSerializer,
+    PersonSearchOutputSerializer,
     PersonStatusOutputSerializer,
     VerificationDecisionInputSerializer,
+    VerificationFilterSerializer,
 )
 
 TAG = ["hierarchy"]
@@ -74,7 +77,10 @@ class AssignmentListCreateApi(AuthedV1Api):
     @extend_schema(
         tags=TAG,
         operation_id="hierarchy_assignments_list",
-        summary="Nominations visibles (celles des nœuds où j'ai offices.nommer, et les miennes)",
+        summary=(
+            "Nominations visibles : celles des nœuds où j'ai offices.nommer, en lecture celles des nœuds "
+            "où j'ai tableau_bord.voir, et les miennes"
+        ),
         parameters=[AssignmentFilterSerializer, *_PAGINATION],
         responses=paginated_response_serializer(AssignmentOutputSerializer),
     )
@@ -116,7 +122,11 @@ class AssignmentListCreateApi(AuthedV1Api):
 class AssignmentDetailApi(AuthedV1Api):
     def _get_visible(self, request: Request, assignment_id: int):
         assignment = selectors_offices.assignment_get(assignment_id=assignment_id)
-        visible = assignment.person_id == request.user.pk or authz.peut(request.user, "offices.nommer", assignment.node)
+        visible = (
+            assignment.person_id == request.user.pk
+            or authz.peut(request.user, "offices.nommer", assignment.node)
+            or authz.peut(request.user, "tableau_bord.voir", assignment.node)
+        )
         if not visible:
             raise NotFoundError("Nomination introuvable.", {"assignment_id": assignment_id})
         return assignment
@@ -142,6 +152,28 @@ class AssignmentDetailApi(AuthedV1Api):
         else:
             assignment = services_offices.assignment_cancel(actor=request.user, assignment=assignment, ip=_ip(request))
         return Response(AssignmentOutputSerializer(assignment).data)
+
+
+class PersonSearchApi(AuthedV1Api):
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("offices.nommer"))
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="hierarchy_persons_list",
+        summary="Rechercher la personne à nommer (offices.nommer ; e-mail masqué)",
+        parameters=[PersonSearchFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(PersonSearchOutputSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = PersonSearchFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=PersonSearchOutputSerializer,
+            queryset=selectors_offices.person_search(q=filters.validated_data["q"]),
+            request=request,
+            view=self,
+        )
 
 
 class AssignmentImportApi(AuthedV1Api):
@@ -185,15 +217,20 @@ class VerificationListApi(AuthedV1Api):
 
     @extend_schema(
         tags=TAG,
-        summary="Déclarations d'état de vie à vérifier (personnes.verifier)",
-        parameters=_PAGINATION,
+        summary="Déclarations d'état de vie à vérifier ou en attente de complément (personnes.verifier)",
+        parameters=[VerificationFilterSerializer, *_PAGINATION],
         responses=paginated_response_serializer(PersonStatusOutputSerializer),
     )
     def get(self, request: Request) -> Response:
+        filters = VerificationFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        queryset = selectors_offices.verification_queue(actor=request.user)
+        if statut := filters.validated_data.get("statut"):
+            queryset = queryset.filter(statut_verification=statut)
         return get_paginated_response(
             pagination_class=LimitOffsetPagination,
             serializer_class=PersonStatusOutputSerializer,
-            queryset=selectors_offices.verification_queue(actor=request.user),
+            queryset=queryset,
             request=request,
             view=self,
         )
@@ -204,7 +241,7 @@ class VerificationDecisionApi(AuthedV1Api):
 
     @extend_schema(
         tags=TAG,
-        summary="Vérifier ou rejeter une déclaration (personnes.verifier sur l'incardination)",
+        summary="Vérifier, rejeter ou demander un complément (personnes.verifier sur l'incardination)",
         request=VerificationDecisionInputSerializer,
         responses=PersonStatusOutputSerializer,
     )
@@ -218,7 +255,7 @@ class VerificationDecisionApi(AuthedV1Api):
         person = services_offices.person_verification_decide(
             actor=request.user, person=target, ip=_ip(request), **serializer.validated_data
         )
-        return Response(_person_status(person))
+        return Response(_person_status(selectors_offices.person_get(person_id=person.pk)))
 
 
 # --- Retraits de capacités (plateforme) --------------------------------------------------
@@ -285,7 +322,10 @@ class MeDeclarationApi(AuthedV1Api):
 
     @extend_schema(
         tags=ME_TAG,
-        summary="Déclarer mon état de vie (reste « déclaré » jusqu'à vérification ; aucun effet sur les droits)",
+        summary=(
+            "Déclarer ou compléter mon état de vie (reste « déclaré » jusqu'à vérification ; aucun effet "
+            "sur les droits). Les justificatifs s'ajoutent aux précédents."
+        ),
         request=DeclarationInputSerializer,
         responses=PersonStatusOutputSerializer,
     )
@@ -301,8 +341,9 @@ class MeDeclarationApi(AuthedV1Api):
             degre_ordre=data["degre_ordre"],
             incardination_node=selectors.node_get(node_id=incardination) if incardination else None,
             institut_node=selectors.node_get(node_id=institut) if institut else None,
+            attachment_file_ids=data["attachment_file_ids"],
         )
-        return Response(_person_status(person))
+        return Response(_person_status(selectors_offices.person_get(person_id=person.pk)))
 
 
 # --- Journal d'audit -------------------------------------------------------------------
