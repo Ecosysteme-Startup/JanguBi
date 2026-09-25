@@ -144,6 +144,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedRegistrationOutputList'
           description: ''
+  /api/v1/audit/:
+    get:
+      operationId: v1_audit_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Journal d'audit (audit.voir sur un nœud, ou plateforme)
+      parameters:
+      - in: query
+        name: action
+        schema:
+          type: string
+          minLength: 1
+        description: Préfixe (ex. office.)
+      - in: query
+        name: actor
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - audit
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditEventOutputList'
+          description: ''
   /api/v1/auth/jwt/login/:
     post:
       operationId: v1_auth_jwt_login_create
@@ -1474,13 +1525,239 @@ paths:
                   id:
                     type: integer
           description: ''
+  /api/v1/hierarchy/assignments/:
+    get:
+      operationId: v1_hierarchy_assignments_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Nominations visibles (celles des nœuds où j'ai offices.nommer, et les
+        miennes)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Sous-arbre de ce nœud
+      - in: query
+        name: office
+        schema:
+          type: string
+          minLength: 1
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: person
+        schema:
+          type: string
+          format: uuid
+      - in: query
+        name: status
+        schema:
+          enum:
+          - proposee
+          - active
+          - terminee
+          - annulee
+          type: string
+          minLength: 1
+        description: |-
+          * `proposee` - Proposée
+          * `active` - Active
+          * `terminee` - Terminée
+          * `annulee` - Annulée
+      tags:
+      - hierarchy
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAssignmentOutputList'
+          description: ''
+    post:
+      operationId: v1_hierarchy_assignments_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Nommer une personne à un office (offices.nommer + office « nommeur
+        »)
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignmentCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignmentCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignmentCreateInput'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentOutput'
+          description: ''
+  /api/v1/hierarchy/assignments/{assignment_id}/:
+    get:
+      operationId: v1_hierarchy_assignments_retrieve_2
+      description: À placer en premier dans les bases des vues V1.
+      summary: Détail d'une nomination
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hierarchy
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentOutput'
+          description: ''
+    patch:
+      operationId: v1_hierarchy_assignments_partial_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Terminer ou annuler une nomination
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAssignmentUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAssignmentUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAssignmentUpdateInput'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignmentOutput'
+          description: ''
+  /api/v1/hierarchy/assignments/import/:
+    post:
+      operationId: v1_hierarchy_assignments_import_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Importer le mouvement annuel des affectations (CSV : action, email,
+        office, node_code…)'
+      parameters:
+      - in: query
+        name: dry_run
+        schema:
+          type: boolean
+          default: true
+      - in: query
+        name: effective_date
+        schema:
+          type: string
+          format: date
+        description: Date d'effet du mouvement
+        required: true
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportInput'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportReport'
+          description: ''
+  /api/v1/hierarchy/capability-overrides/:
+    get:
+      operationId: v1_hierarchy_capability_overrides_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retraits de capacités par diocèse
+      tags:
+      - hierarchy
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapabilityOverride'
+          description: ''
+    post:
+      operationId: v1_hierarchy_capability_overrides_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retirer une capacité à un office dans un diocèse (plateforme.admin)
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityOverride'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CapabilityOverride'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CapabilityOverride'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapabilityOverride'
+          description: ''
+  /api/v1/hierarchy/capability-overrides/{override_id}/:
+    delete:
+      operationId: v1_hierarchy_capability_overrides_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Annuler un retrait de capacité (plateforme.admin)
+      parameters:
+      - in: path
+        name: override_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - hierarchy
+      responses:
+        '204':
+          description: No response body
   /api/v1/hierarchy/import/nodes/:
     post:
       operationId: v1_hierarchy_import_nodes_create
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: 'Importer des nœuds (CSV : code, type, name, parent_code…) (structure.gerer)'
       parameters:
       - in: query
@@ -1508,9 +1785,11 @@ paths:
     post:
       operationId: v1_hierarchy_import_places_create
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: 'Importer des lieux de culte (CSV : node_code, name, kind…) (structure.gerer)'
       parameters:
       - in: query
@@ -1538,9 +1817,11 @@ paths:
     get:
       operationId: v1_hierarchy_node_types_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Types de nœuds et parents autorisés
       tags:
       - hierarchy
@@ -1559,9 +1840,11 @@ paths:
     get:
       operationId: v1_hierarchy_nodes_retrieve
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Lister les nœuds (filtres type, parent, within, q, city, status, on_platform)
       parameters:
       - in: query
@@ -1635,9 +1918,11 @@ paths:
     post:
       operationId: v1_hierarchy_nodes_create
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Créer un nœud (structure.gerer)
       tags:
       - hierarchy
@@ -1664,9 +1949,11 @@ paths:
     get:
       operationId: v1_hierarchy_nodes_retrieve_2
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Détail d'un nœud
       parameters:
       - in: path
@@ -1689,9 +1976,11 @@ paths:
     patch:
       operationId: v1_hierarchy_nodes_partial_update
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Modifier un nœud ou son statut (structure.gerer)
       parameters:
       - in: path
@@ -1724,9 +2013,11 @@ paths:
     get:
       operationId: v1_hierarchy_nodes_ancestors_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Ancêtres d'un nœud (de la racine au parent)
       parameters:
       - in: path
@@ -1752,9 +2043,11 @@ paths:
     get:
       operationId: v1_hierarchy_nodes_children_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Enfants directs d'un nœud
       parameters:
       - in: path
@@ -1780,9 +2073,11 @@ paths:
     get:
       operationId: v1_hierarchy_nodes_places_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Lieux de culte d'un nœud
       parameters:
       - in: path
@@ -1807,9 +2102,11 @@ paths:
     post:
       operationId: v1_hierarchy_nodes_places_create
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Ajouter un lieu de culte (structure.gerer)
       parameters:
       - in: path
@@ -1839,13 +2136,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlaceOutput'
           description: ''
+  /api/v1/hierarchy/office-types/:
+    get:
+      operationId: v1_hierarchy_office_types_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Catalogue des offices
+      tags:
+      - hierarchy
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfficeTypeOutput'
+          description: ''
   /api/v1/hierarchy/places/{place_id}/:
     get:
       operationId: v1_hierarchy_places_retrieve
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Détail d'un lieu de culte
       parameters:
       - in: path
@@ -1867,9 +2182,11 @@ paths:
     patch:
       operationId: v1_hierarchy_places_partial_update
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Modifier un lieu de culte (structure.gerer)
       parameters:
       - in: path
@@ -1901,9 +2218,11 @@ paths:
     get:
       operationId: v1_hierarchy_places_exceptions_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Exceptions d'horaire à venir d'un lieu de culte
       parameters:
       - in: path
@@ -1927,9 +2246,11 @@ paths:
     post:
       operationId: v1_hierarchy_places_exceptions_create
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Ajouter une exception (annulation ou horaire supplémentaire) (horaires.gerer)
       parameters:
       - in: path
@@ -1962,9 +2283,11 @@ paths:
     delete:
       operationId: v1_hierarchy_places_exceptions_destroy
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Supprimer une exception d'horaire (horaires.gerer)
       parameters:
       - in: path
@@ -1986,9 +2309,11 @@ paths:
     get:
       operationId: v1_hierarchy_places_schedule_list
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Semaine type d'un lieu de culte
       parameters:
       - in: path
@@ -2012,9 +2337,11 @@ paths:
     put:
       operationId: v1_hierarchy_places_schedule_update
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Remplacer la semaine type d'un lieu de culte (horaires.gerer)
       parameters:
       - in: path
@@ -2044,6 +2371,64 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Schedule'
+          description: ''
+  /api/v1/hierarchy/verifications/:
+    get:
+      operationId: v1_hierarchy_verifications_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Déclarations d'état de vie à vérifier (personnes.verifier)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - hierarchy
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonStatusOutputList'
+          description: ''
+  /api/v1/hierarchy/verifications/{person_id}/decision/:
+    post:
+      operationId: v1_hierarchy_verifications_decision_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Vérifier ou rejeter une déclaration (personnes.verifier sur l'incardination)
+      parameters:
+      - in: path
+        name: person_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerificationDecisionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerificationDecisionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerificationDecisionInput'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatusOutput'
           description: ''
   /api/v1/liturgy/date/{date_str}/:
     get:
@@ -2188,6 +2573,62 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Reading'
+          description: ''
+  /api/v1/me/capacites/:
+    get:
+      operationId: v1_me_capacites_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes capacités et les nœuds où elles s'exercent (pour adapter l'interface)
+      tags:
+      - me
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CapaciteOutput'
+          description: ''
+  /api/v1/me/declaration/:
+    get:
+      operationId: v1_me_declaration_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mon état de vie déclaré
+      tags:
+      - me
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatusOutput'
+          description: ''
+    post:
+      operationId: v1_me_declaration_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Déclarer mon état de vie (reste « déclaré » jusqu'à vérification ;
+        aucun effet sur les droits)
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclarationInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DeclarationInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DeclarationInput'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonStatusOutput'
           description: ''
   /api/v1/messaging/blocks/:
     get:
@@ -4006,9 +4447,11 @@ paths:
     get:
       operationId: v1_public_nodes_retrieve
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Annuaire public des paroisses (recherche par nom, ville, diocèse)
       parameters:
       - in: query
@@ -4064,9 +4507,11 @@ paths:
     get:
       operationId: v1_public_nodes_week_retrieve
       description: |-
-        Lecture publique ; écriture réservée au super-admin.
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
 
-        TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
       summary: Semaine des horaires d'un nœud (messes, confessions, adoration ; exceptions
         comprises)
       parameters:
@@ -5298,6 +5743,14 @@ paths:
           description: Trop de demandes
 components:
   schemas:
+    ActionEnum:
+      enum:
+      - terminer
+      - annuler
+      type: string
+      description: |-
+        * `terminer` - terminer
+        * `annuler` - annuler
     AelfResource:
       type: object
       description: Serializer for external AELF resources (audio/youtube).
@@ -5670,6 +6123,107 @@ components:
         reason:
           type: string
           default: ''
+    AssignmentCreateInput:
+      type: object
+      properties:
+        person_id:
+          type: string
+          format: uuid
+        office:
+          type: string
+          description: Code de l'office
+          pattern: ^[-a-zA-Z0-9_]+$
+        node_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+          description: 'Par défaut : aujourd''hui'
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        decree_ref:
+          type: string
+          default: ''
+          maxLength: 120
+        note:
+          type: string
+          default: ''
+          maxLength: 255
+      required:
+      - node_id
+      - office
+      - person_id
+    AssignmentOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        person:
+          allOf:
+          - $ref: '#/components/schemas/PersonRef'
+          readOnly: true
+        office:
+          type: string
+          readOnly: true
+        office_label:
+          type: string
+          readOnly: true
+        node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          readOnly: true
+        start_date:
+          type: string
+          format: date
+          title: Début
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          title: Fin
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AssignmentOutputStatusEnum'
+          title: Statut
+        appointed_by_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        decree_ref:
+          type: string
+          title: Référence du décret
+          maxLength: 120
+        note:
+          type: string
+          maxLength: 255
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - appointed_by_id
+      - id
+      - node
+      - office
+      - office_label
+      - person
+      - start_date
+    AssignmentOutputStatusEnum:
+      enum:
+      - proposee
+      - active
+      - terminee
+      - annulee
+      type: string
+      description: |-
+        * `proposee` - Proposée
+        * `active` - Active
+        * `terminee` - Terminée
+        * `annulee` - Annulée
     AttachmentOutput:
       type: object
       properties:
@@ -5707,6 +6261,44 @@ components:
       description: |-
         * `user_supporting` - Justificatif fidèle
         * `parish_final` - Document final paroisse
+    AuditEventOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        at:
+          type: string
+          format: date-time
+          readOnly: true
+        actor_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        action:
+          type: string
+          maxLength: 80
+        target_type:
+          type: string
+          maxLength: 80
+        target_id:
+          type: string
+          maxLength: 64
+        node_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        metadata: {}
+      required:
+      - action
+      - actor_id
+      - at
+      - id
+      - node_id
+      - target_id
+      - target_type
     AuditLogItem:
       type: object
       properties:
@@ -5867,6 +6459,54 @@ components:
       - order
       - slug
       - testament
+    CapabilityOverride:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        diocese_node_id:
+          type: string
+          format: uuid
+        office:
+          type: string
+          pattern: ^[-a-zA-Z0-9_]+$
+        capability:
+          type: string
+      required:
+      - capability
+      - diocese_node_id
+      - id
+      - office
+    CapaciteOutput:
+      type: object
+      properties:
+        capacite:
+          type: string
+        node_id:
+          type: string
+          format: uuid
+          nullable: true
+        node_name:
+          type: string
+        herite:
+          type: boolean
+        office:
+          type: string
+      required:
+      - capacite
+      - herite
+      - node_id
+      - node_name
+      - office
+    CardinalityEnum:
+      enum:
+      - one
+      - many
+      type: string
+      description: |-
+        * `one` - Un seul titulaire
+        * `many` - Plusieurs titulaires
     ChapterMetadataOutput:
       type: object
       properties:
@@ -6317,6 +6957,47 @@ components:
       - diocese_name
       - id
       - name
+    DecisionEnum:
+      enum:
+      - verifie
+      - rejete
+      type: string
+      description: |-
+        * `verifie` - verifie
+        * `rejete` - rejete
+    DeclarationInput:
+      type: object
+      properties:
+        etat_de_vie:
+          $ref: '#/components/schemas/EtatDeVieEnum'
+        degre_ordre:
+          allOf:
+          - $ref: '#/components/schemas/DegreOrdreEnum'
+          default: aucun
+        incardination_node_id:
+          type: string
+          format: uuid
+          nullable: true
+        institut_node_id:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - etat_de_vie
+    DegreOrdreEnum:
+      enum:
+      - aucun
+      - diacre_transitoire
+      - diacre_permanent
+      - pretre
+      - eveque
+      type: string
+      description: |-
+        * `aucun` - Aucun
+        * `diacre_transitoire` - Diacre (transitoire)
+        * `diacre_permanent` - Diacre permanent
+        * `pretre` - Prêtre
+        * `eveque` - Évêque
     DepositDocumentInput:
       type: object
       properties:
@@ -6767,6 +7448,16 @@ components:
           type: string
       required:
       - detail
+    EtatDeVieEnum:
+      enum:
+      - laic
+      - clerc
+      - consacre
+      type: string
+      description: |-
+        * `laic` - Laïc
+        * `clerc` - Clerc
+        * `consacre` - Consacré
     EventInput:
       type: object
       properties:
@@ -6991,10 +7682,12 @@ components:
     ImportLineStatusEnum:
       enum:
       - ok
+      - warning
       - error
       type: string
       description: |-
         * `ok` - ok
+        * `warning` - warning
         * `error` - error
     ImportReport:
       type: object
@@ -7004,6 +7697,8 @@ components:
         applied:
           type: boolean
         valid:
+          type: integer
+        warnings:
           type: integer
         errors:
           type: integer
@@ -7017,6 +7712,7 @@ components:
       - errors
       - lines
       - valid
+      - warnings
     Input:
       type: object
       properties:
@@ -7740,6 +8436,54 @@ components:
       required:
       - id
       - office_type
+    OfficeTypeOutput:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 60
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+          title: Libellé
+          maxLength: 150
+        node_types:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        required_order:
+          allOf:
+          - $ref: '#/components/schemas/RequiredOrderEnum'
+          title: Ordre requis
+        cardinality:
+          allOf:
+          - $ref: '#/components/schemas/CardinalityEnum'
+          title: Titulaires
+        appointed_by:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        appointed_by_platform:
+          type: boolean
+          title: Nommé par la plateforme
+          description: Nomination saisie par Numerisen (ex. évêque diocésain, nomination
+            romaine).
+        capabilities:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        inherits_down:
+          type: boolean
+          title: Hérite sur le sous-arbre
+      required:
+      - appointed_by
+      - capabilities
+      - code
+      - label
+      - node_types
     OrgRef:
       type: object
       description: Référence légère {id, name} vers une entité territoriale.
@@ -7814,6 +8558,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ArticleListOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedAssignmentOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssignmentOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedAuditEventOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEventOutput'
       required:
       - count
       - limit
@@ -7977,6 +8773,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedPersonStatusOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonStatusOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedProvinceOutputList:
       type: object
       properties:
@@ -8105,6 +8927,16 @@ components:
         cover_image_id:
           type: integer
           nullable: true
+    PatchedAssignmentUpdateInput:
+      type: object
+      properties:
+        action:
+          $ref: '#/components/schemas/ActionEnum'
+        end_date:
+          type: string
+          format: date
+          nullable: true
+          description: 'Terminer : date de fin (défaut : aujourd''hui)'
     PatchedChurchUpdateInput:
       type: object
       properties:
@@ -8346,6 +9178,56 @@ components:
       - offset
       - previous
       - results
+    PersonRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - email
+      - full_name
+      - id
+    PersonStatusOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        etat_de_vie:
+          type: string
+        degre_ordre:
+          type: string
+        statut_verification:
+          type: string
+        verification_note:
+          type: string
+        incardination_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        institut_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+      required:
+      - degre_ordre
+      - email
+      - etat_de_vie
+      - id
+      - incardination_node
+      - institut_node
+      - statut_verification
+      - verification_note
     PlaceCreateInput:
       type: object
       properties:
@@ -8658,6 +9540,18 @@ components:
           type: string
       required:
       - reason
+    RequiredOrderEnum:
+      enum:
+      - aucun
+      - diacre
+      - pretre
+      - eveque
+      type: string
+      description: |-
+        * `aucun` - Aucun
+        * `diacre` - Diacre
+        * `pretre` - Prêtre
+        * `eveque` - Évêque
     ResendInput:
       type: object
       properties:
@@ -9328,6 +10222,17 @@ components:
       - offset
       - previous
       - results
+    VerificationDecisionInput:
+      type: object
+      properties:
+        decision:
+          $ref: '#/components/schemas/DecisionEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 255
+      required:
+      - decision
     VerseOutput:
       type: object
       properties:

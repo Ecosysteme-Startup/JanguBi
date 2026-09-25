@@ -6,7 +6,7 @@ export
        init-data create-admin init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
-       seed seed-senegal seed-demo seed-reset \
+       seed seed-senegal seed-hierarchy seed-demo seed-reset \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf init-tv-categories \
 	ci-list ci act hooks ci-docker ci-docker-act \
 	build-prod up-prod down-prod logs-prod
@@ -178,6 +178,11 @@ create-admin:
 seed-senegal:
 	docker compose exec django python manage.py seed_senegal
 
+# Référentiel V1 (apps/hierarchy) : types, province, 7 diocèses, doyennés de Dakar,
+# paroisse pilote et ses horaires. Idempotent.
+seed-hierarchy:
+	docker compose exec django python manage.py seed_hierarchy_profile senegal
+
 seed-demo:
 	docker compose exec django python manage.py seed_demo
 
@@ -194,7 +199,7 @@ seed: seed-senegal seed-demo
 # structure territoriale, AUCUN compte ne peut finir son onboarding. La sélection
 # de paroisse est obligatoire et bloquante — menu vide, bouton grisé, aucun moyen
 # de passer l'étape (audit beta 2026-07-20). `seed_senegal` est idempotent.
-init-all: init-data seed-senegal
+init-all: init-data seed-senegal seed-hierarchy
 
 
 # ==============================================================================

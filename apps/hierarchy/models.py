@@ -26,7 +26,16 @@ else:
     from treebeard.mp_tree import MP_Node
 
 from apps.common.models import BaseModel
-from apps.hierarchy.enums import NodeStatus, PlaceKind, ScheduleKind, Weekday
+from apps.hierarchy.enums import (
+    AssignmentStatus,
+    Cardinality,
+    NodeStatus,
+    OverrideEffect,
+    PlaceKind,
+    RequiredOrder,
+    ScheduleKind,
+    Weekday,
+)
 
 
 # Le gestionnaire de Node vient de treebeard (non typé) : le plugin Django ne peut pas le résoudre.
@@ -198,3 +207,153 @@ class ScheduleException(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.date} {self.get_kind_display()}"
+
+
+# --- Offices, nominations, capacités (L2, SRS §5.1, §6) -----------------------------
+
+
+class Capability(models.Model):
+    """Droit applicatif élémentaire. Catalogue fermé (RG-14) : seedé, jamais créé depuis l'interface."""
+
+    code = models.CharField(_("code"), max_length=60, primary_key=True)
+    label = models.CharField(_("libellé"), max_length=150)
+    description = models.TextField(_("description"), blank=True, default="")
+    domain = models.CharField(_("domaine"), max_length=40)
+
+    class Meta:
+        verbose_name = _("capacité")
+        verbose_name_plural = _("capacités")
+        ordering = ["domain", "code"]
+
+    def __str__(self) -> str:
+        return self.code
+
+
+class OfficeType(BaseModel):
+    """Fonction ecclésiale ou administrative paramétrable (curé, secrétaire…)."""
+
+    code = models.SlugField(_("code"), max_length=60, unique=True)
+    label = models.CharField(_("libellé"), max_length=150)
+    node_types = models.ManyToManyField(NodeType, related_name="office_types", verbose_name=_("s'exerce sur"))
+    required_order = models.CharField(
+        _("ordre requis"), max_length=10, choices=RequiredOrder.choices, default=RequiredOrder.AUCUN
+    )
+    cardinality = models.CharField(_("titulaires"), max_length=4, choices=Cardinality.choices, default=Cardinality.MANY)
+    appointed_by = models.ManyToManyField(
+        "self", symmetrical=False, blank=True, related_name="can_appoint", verbose_name=_("nommé par")
+    )
+    appointed_by_platform = models.BooleanField(
+        _("nommé par la plateforme"),
+        default=False,
+        help_text=_("Nomination saisie par Numerisen (ex. évêque diocésain, nomination romaine)."),
+    )
+    capabilities = models.ManyToManyField(Capability, blank=True, related_name="office_types")
+    inherits_down = models.BooleanField(_("hérite sur le sous-arbre"), default=True)
+    is_system = models.BooleanField(_("office du profil par défaut"), default=False)
+
+    class Meta:
+        verbose_name = _("type d'office")
+        verbose_name_plural = _("types d'office")
+        ordering = ["label"]
+
+    def __str__(self) -> str:
+        return self.label
+
+
+class OfficeAssignment(BaseModel):
+    """Nomination datée d'une personne à un office sur un nœud (RG-04 : la file suit le nœud)."""
+
+    person = models.ForeignKey(
+        "users.BaseUser", on_delete=models.PROTECT, related_name="office_assignments", verbose_name=_("personne")
+    )
+    office_type = models.ForeignKey(OfficeType, on_delete=models.PROTECT, related_name="assignments")
+    node = models.ForeignKey(Node, on_delete=models.PROTECT, related_name="office_assignments")
+    start_date = models.DateField(_("début"))
+    end_date = models.DateField(_("fin"), null=True, blank=True)
+    status = models.CharField(
+        _("statut"), max_length=10, choices=AssignmentStatus.choices, default=AssignmentStatus.PROPOSEE, db_index=True
+    )
+    appointed_by = models.ForeignKey(
+        "users.BaseUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments_made",
+        verbose_name=_("nommé par"),
+    )
+    decree_ref = models.CharField(_("référence du décret"), max_length=120, blank=True, default="")
+    decree_file = models.ForeignKey(
+        "files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+", verbose_name=_("décret")
+    )
+    note = models.CharField(_("note"), max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("nomination")
+        verbose_name_plural = _("nominations")
+        ordering = ["-start_date"]
+        indexes = [
+            models.Index(fields=["person", "status"], name="hierarchy_assign_person_status"),
+            models.Index(fields=["node", "office_type", "status"], name="hierarchy_assign_node_office"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(end_date__isnull=True) | Q(end_date__gte=F("start_date")),
+                name="hierarchy_assignment_dates",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.office_type} — {self.node} ({self.get_status_display()})"
+
+
+class CapabilityOverride(BaseModel):
+    """Retrait d'une capacité à un office dans le sous-arbre d'un diocèse (EF-PER-09)."""
+
+    diocese_node = models.ForeignKey(Node, on_delete=models.CASCADE, related_name="capability_overrides")
+    office_type = models.ForeignKey(OfficeType, on_delete=models.CASCADE, related_name="overrides")
+    capability = models.ForeignKey(Capability, on_delete=models.CASCADE, related_name="overrides")
+    effect = models.CharField(max_length=10, choices=OverrideEffect.choices, default=OverrideEffect.RETRAIT)
+
+    class Meta:
+        verbose_name = _("retrait de capacité")
+        verbose_name_plural = _("retraits de capacité")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["diocese_node", "office_type", "capability"], name="hierarchy_override_unique"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.diocese_node} : {self.office_type} − {self.capability}"
+
+
+class AuditEvent(models.Model):
+    """Journal d'audit métier, en insertion seule (EF-PER-11). Écrit par les services."""
+
+    at = models.DateTimeField(auto_now_add=True, db_index=True)
+    actor = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    action = models.CharField(max_length=80, db_index=True)
+    target_type = models.CharField(max_length=80)
+    target_id = models.CharField(max_length=64)
+    node = models.ForeignKey(Node, on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_events")
+    metadata = models.JSONField(default=dict, blank=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("événement d'audit")
+        verbose_name_plural = _("journal d'audit")
+        ordering = ["-at"]
+        indexes = [models.Index(fields=["target_type", "target_id"], name="hierarchy_audit_target")]
+
+    def __str__(self) -> str:
+        return f"{self.at:%Y-%m-%d %H:%M} {self.action}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        if self.pk is not None:
+            raise ValueError("Le journal d'audit est en insertion seule.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args: Any, **kwargs: Any) -> Any:
+        raise ValueError("Le journal d'audit est en insertion seule.")

@@ -64,3 +64,9 @@
 - **Statut** : Verrouillée
 - **Décision** : consentement explicite horodaté, minimisation, conservation limitée (messages 180 j, pièces 90 j après clôture), aucun contenu de message accessible à un administrateur, tableaux de bord agrégés au-dessus de la paroisse, journal d'audit immuable.
 - **À faire (L9)** : registre des traitements et déclaration à la CDP ; réévaluation de l'hébergement avant l'ouverture publique.
+
+## ADR-012 — Remplacement des permissions app par app, au lot qui migre la portée
+- **Statut** : Verrouillée (25/09/2026, lot L2)
+- **Contexte** : le plan L2.10 prévoit de remplacer `IsAnyAdmin` et les contrôles ad hoc de `news`, `agenda`, `documents` et `messaging` dès L2. Or ces apps portent encore leur portée sur `org.Parish` / `org.Church` ; les lots L4, L5 et L6a remplacent ces clés par des `Node`. Faire la conversion en L2 obligerait à écrire un pont `org → Node` puis à le réécrire deux lots plus tard.
+- **Décision** : L2 livre le moteur (`peut`, `noeuds_autorises`, `HasCapability`) et convertit `hierarchy`. Chaque autre app bascule sur les capacités dans le lot qui migre sa portée : `news` et `agenda` en L4, `documents` en L5, `messaging` en L6a, `dashboards` en L8. D'ici là, l'ancien modèle (`RoleAssignment`) continue d'autoriser ces apps ; aucun nouveau code ne s'en sert.
+- **Conséquences** : le critère de sortie « plus aucune app V1 n'utilise `IsAnyAdmin` » est atteint à la fin de L6a (L8 pour les tableaux de bord), pas à la fin de L2. Un test par lot vérifie qu'aucune vue de l'app convertie n'importe plus `IsAnyAdmin`.

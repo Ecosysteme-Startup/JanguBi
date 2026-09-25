@@ -2,12 +2,13 @@ from dataclasses import asdict
 from datetime import timedelta
 from typing import Any
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, AllowAny, BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -16,10 +17,10 @@ from apps.api.mixins import ApiAuthMixin
 from apps.api.pagination import LimitOffsetPagination, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
 from apps.core.exceptions import ApplicationError
-from apps.hierarchy import selectors, services
+from apps.hierarchy import authz, selectors, services
 from apps.hierarchy.enums import NodeStatus
 from apps.hierarchy.imports import nodes_import_csv, places_import_csv
-from apps.hierarchy.models import Node
+from apps.hierarchy.models import Node, PlaceOfWorship
 from apps.hierarchy.serializers import (
     DirectoryFilterSerializer,
     ImportInputSerializer,
@@ -39,22 +40,46 @@ from apps.hierarchy.serializers import (
     ScheduleSerializer,
     WeekQuerySerializer,
 )
-from apps.users.permissions import IsSuperAdmin
 
 TAG = ["hierarchy"]
 PUBLIC_TAG = ["public"]
 
 
-class HierarchyBaseApi(V1ApiMixin, ApiAuthMixin, APIView):
-    """Lecture publique ; écriture réservée au super-admin.
+class _CanWrite(BasePermission):
+    message = "Vous n'avez pas la capacité requise sur ce nœud."
 
-    TODO(L2) : remplacer IsSuperAdmin par HasCapability("structure.gerer" | "horaires.gerer").
+    def has_permission(self, request: Request, view: Any) -> bool:
+        if view.write_on_any_node:
+            return authz.a_la_capacite(request.user, view.write_capability)
+        return authz.peut(request.user, view.write_capability, view.get_write_node())
+
+
+class HierarchyBaseApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
+
+    ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+    vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+    capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
     """
+
+    write_capability = "structure.gerer"
+    write_on_any_node = False
+
+    def get_write_node(self) -> Node | None:
+        return None
 
     def get_permissions(self):
         if self.request.method in SAFE_METHODS:
             return [AllowAny()]
-        return [IsAuthenticated(), IsSuperAdmin()]
+        return [IsAuthenticated(), _CanWrite()]
+
+    def _kwarg_node(self) -> Node | None:
+        # L'URL impose un UUID valide (<uuid:node_id>).
+        return Node.objects.filter(pk=self.kwargs.get("node_id")).first()
+
+    def _place_node(self) -> Node | None:
+        place = PlaceOfWorship.objects.select_related("node").filter(pk=self.kwargs.get("place_id")).first()
+        return place.node if place else None
 
 
 def _node_list_response(*, request: Request, view: APIView, queryset) -> Response:
@@ -88,6 +113,13 @@ class NodeTypeListApi(HierarchyBaseApi):
 
 
 class NodeListCreateApi(HierarchyBaseApi):
+    def get_write_node(self) -> Node | None:
+        parent_id = self.request.data.get("parent_id") if hasattr(self.request.data, "get") else None
+        try:
+            return Node.objects.filter(pk=parent_id).first() if parent_id else None
+        except (ValueError, DjangoValidationError):
+            return None
+
     @extend_schema(
         tags=TAG,
         summary="Lister les nœuds (filtres type, parent, within, q, city, status, on_platform)",
@@ -103,7 +135,7 @@ class NodeListCreateApi(HierarchyBaseApi):
         filters.is_valid(raise_exception=True)
         data = dict(filters.validated_data)
         # Les nœuds supprimés ne sont listés qu'aux administrateurs du référentiel.
-        if data.get("status") == NodeStatus.SUPPRIME and not IsSuperAdmin().has_permission(request, self):
+        if data.get("status") == NodeStatus.SUPPRIME and not authz.a_la_capacite(request.user, "structure.gerer"):
             raise PermissionDenied("Seuls les administrateurs voient les nœuds supprimés.")
         return _node_list_response(request=request, view=self, queryset=selectors.node_list(filters=data))
 
@@ -125,6 +157,8 @@ class NodeListCreateApi(HierarchyBaseApi):
 
 
 class NodeDetailApi(HierarchyBaseApi):
+    get_write_node = HierarchyBaseApi._kwarg_node
+
     @extend_schema(tags=TAG, summary="Détail d'un nœud", responses=NodeOutputSerializer)
     def get(self, request: Request, node_id: str) -> Response:
         return Response(_node_data(selectors.node_get(node_id=node_id)))
@@ -165,6 +199,8 @@ class NodeAncestorsApi(HierarchyBaseApi):
 
 
 class NodePlaceListCreateApi(HierarchyBaseApi):
+    get_write_node = HierarchyBaseApi._kwarg_node
+
     @extend_schema(tags=TAG, summary="Lieux de culte d'un nœud", responses=PlaceOutputSerializer(many=True))
     def get(self, request: Request, node_id: str) -> Response:
         node = selectors.node_get(node_id=node_id)
@@ -185,6 +221,8 @@ class NodePlaceListCreateApi(HierarchyBaseApi):
 
 
 class PlaceDetailApi(HierarchyBaseApi):
+    get_write_node = HierarchyBaseApi._place_node
+
     @extend_schema(tags=TAG, summary="Détail d'un lieu de culte", responses=PlaceOutputSerializer)
     def get(self, request: Request, place_id: int) -> Response:
         return Response(PlaceOutputSerializer(selectors.place_get(place_id=place_id)).data)
@@ -204,6 +242,9 @@ class PlaceDetailApi(HierarchyBaseApi):
 
 
 class PlaceScheduleApi(HierarchyBaseApi):
+    write_capability = "horaires.gerer"
+    get_write_node = HierarchyBaseApi._place_node
+
     @extend_schema(tags=TAG, summary="Semaine type d'un lieu de culte", responses=ScheduleSerializer(many=True))
     def get(self, request: Request, place_id: int) -> Response:
         place = selectors.place_get(place_id=place_id)
@@ -224,6 +265,9 @@ class PlaceScheduleApi(HierarchyBaseApi):
 
 
 class PlaceExceptionListCreateApi(HierarchyBaseApi):
+    write_capability = "horaires.gerer"
+    get_write_node = HierarchyBaseApi._place_node
+
     @extend_schema(
         tags=TAG,
         summary="Exceptions d'horaire à venir d'un lieu de culte",
@@ -249,6 +293,9 @@ class PlaceExceptionListCreateApi(HierarchyBaseApi):
 
 
 class PlaceExceptionDeleteApi(HierarchyBaseApi):
+    write_capability = "horaires.gerer"
+    get_write_node = HierarchyBaseApi._place_node
+
     @extend_schema(tags=TAG, summary="Supprimer une exception d'horaire (horaires.gerer)", responses={204: None})
     def delete(self, request: Request, place_id: int, exception_id: int) -> Response:
         place = selectors.place_get(place_id=place_id)
@@ -262,6 +309,7 @@ class PlaceExceptionDeleteApi(HierarchyBaseApi):
 
 
 class _ImportApi(HierarchyBaseApi):
+    write_on_any_node = True
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     importer = staticmethod(nodes_import_csv)
 
@@ -275,7 +323,7 @@ class _ImportApi(HierarchyBaseApi):
             content = serializer.validated_data["file"].read().decode("utf-8")
         except UnicodeDecodeError as exc:
             raise ApplicationError("Le fichier doit être encodé en UTF-8.", code="csv_encoding") from exc
-        report = self.importer(content=content, dry_run=dry_run)
+        report = self.importer(content=content, dry_run=dry_run, actor=request.user)
         return Response(ImportReportSerializer(report.as_dict()).data)
 
 

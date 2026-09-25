@@ -30,3 +30,62 @@ class Weekday(models.IntegerChoices):
     VENDREDI = 4, _("Vendredi")
     SAMEDI = 5, _("Samedi")
     DIMANCHE = 6, _("Dimanche")
+
+
+class RequiredOrder(models.TextChoices):
+    AUCUN = "aucun", _("Aucun")
+    DIACRE = "diacre", _("Diacre")
+    PRETRE = "pretre", _("Prêtre")
+    EVEQUE = "eveque", _("Évêque")
+
+
+class Cardinality(models.TextChoices):
+    ONE = "one", _("Un seul titulaire")
+    MANY = "many", _("Plusieurs titulaires")
+
+
+class AssignmentStatus(models.TextChoices):
+    PROPOSEE = "proposee", _("Proposée")
+    ACTIVE = "active", _("Active")
+    TERMINEE = "terminee", _("Terminée")
+    ANNULEE = "annulee", _("Annulée")
+
+
+class OverrideEffect(models.TextChoices):
+    RETRAIT = "retrait", _("Retrait")
+
+
+class EtatDeVie(models.TextChoices):
+    LAIC = "laic", _("Laïc")
+    CLERC = "clerc", _("Clerc")
+    CONSACRE = "consacre", _("Consacré")
+
+
+class DegreOrdre(models.TextChoices):
+    AUCUN = "aucun", _("Aucun")
+    DIACRE_TRANSITOIRE = "diacre_transitoire", _("Diacre (transitoire)")
+    DIACRE_PERMANENT = "diacre_permanent", _("Diacre permanent")
+    PRETRE = "pretre", _("Prêtre")
+    EVEQUE = "eveque", _("Évêque")
+
+
+class StatutVerification(models.TextChoices):
+    DECLARE = "declare", _("Déclaré")
+    VERIFIE = "verifie", _("Vérifié")
+    REJETE = "rejete", _("Rejeté")
+
+
+# Rang d'ordre : sert à la condition d'ordre des offices (EF-PER-05).
+ORDER_RANK = {
+    DegreOrdre.AUCUN: 0,
+    DegreOrdre.DIACRE_TRANSITOIRE: 1,
+    DegreOrdre.DIACRE_PERMANENT: 1,
+    DegreOrdre.PRETRE: 2,
+    DegreOrdre.EVEQUE: 3,
+}
+REQUIRED_ORDER_RANK = {
+    RequiredOrder.AUCUN: 0,
+    RequiredOrder.DIACRE: 1,
+    RequiredOrder.PRETRE: 2,
+    RequiredOrder.EVEQUE: 3,
+}

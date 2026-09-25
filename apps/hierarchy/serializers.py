@@ -1,7 +1,27 @@
+from typing import Any
+
 from rest_framework import serializers
 
-from apps.hierarchy.enums import NodeStatus, PlaceKind, ScheduleKind, Weekday
-from apps.hierarchy.models import MassSchedule, Node, NodeType, PlaceOfWorship, ScheduleException
+from apps.hierarchy.enums import (
+    AssignmentStatus,
+    DegreOrdre,
+    EtatDeVie,
+    NodeStatus,
+    PlaceKind,
+    ScheduleKind,
+    StatutVerification,
+    Weekday,
+)
+from apps.hierarchy.models import (
+    AuditEvent,
+    MassSchedule,
+    Node,
+    NodeType,
+    OfficeAssignment,
+    OfficeType,
+    PlaceOfWorship,
+    ScheduleException,
+)
 
 # --- Sorties -----------------------------------------------------------------
 
@@ -135,7 +155,7 @@ class NodeWeekOutputSerializer(serializers.Serializer):
 
 class ImportLineSerializer(serializers.Serializer):
     line = serializers.IntegerField()
-    status = serializers.ChoiceField(choices=["ok", "error"])
+    status = serializers.ChoiceField(choices=["ok", "warning", "error"])
     message = serializers.CharField()
     code = serializers.CharField()
 
@@ -144,6 +164,7 @@ class ImportReportSerializer(serializers.Serializer):
     dry_run = serializers.BooleanField()
     applied = serializers.BooleanField()
     valid = serializers.IntegerField()
+    warnings = serializers.IntegerField()
     # Nom de champ imposé par le contrat d'API ; il masque Serializer.errors (sérialiseur de sortie seulement).
     errors = serializers.IntegerField()  # type: ignore[assignment]
     lines = ImportLineSerializer(many=True)
@@ -230,3 +251,144 @@ class ImportQuerySerializer(serializers.Serializer):
 
 class WeekQuerySerializer(serializers.Serializer):
     start = serializers.DateField(required=False, help_text="Premier jour (par défaut : aujourd'hui)")
+
+
+# --- Offices, nominations, personnes (L2) -----------------------------------------------
+
+
+class PersonRefSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    full_name = serializers.SerializerMethodField()
+
+    def get_full_name(self, obj: Any) -> str:
+        profile = getattr(obj, "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
+        return name or obj.email
+
+
+class OfficeTypeOutputSerializer(serializers.ModelSerializer):
+    node_types: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
+    appointed_by: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
+    capabilities: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
+
+    class Meta:
+        model = OfficeType
+        fields = [
+            "code",
+            "label",
+            "node_types",
+            "required_order",
+            "cardinality",
+            "appointed_by",
+            "appointed_by_platform",
+            "capabilities",
+            "inherits_down",
+        ]
+
+
+class AssignmentOutputSerializer(serializers.ModelSerializer):
+    person = PersonRefSerializer(read_only=True)
+    office = serializers.CharField(source="office_type.code", read_only=True)
+    office_label = serializers.CharField(source="office_type.label", read_only=True)
+    node = NodeRefSerializer(read_only=True)
+    appointed_by_id = serializers.UUIDField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = OfficeAssignment
+        fields = [
+            "id",
+            "person",
+            "office",
+            "office_label",
+            "node",
+            "start_date",
+            "end_date",
+            "status",
+            "appointed_by_id",
+            "decree_ref",
+            "note",
+            "created_at",
+        ]
+
+
+class AssignmentFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(required=False, help_text="Sous-arbre de ce nœud")
+    person = serializers.UUIDField(required=False)
+    status = serializers.ChoiceField(choices=AssignmentStatus.choices, required=False)
+    office = serializers.CharField(required=False)
+
+
+class AssignmentCreateInputSerializer(serializers.Serializer):
+    person_id = serializers.UUIDField()
+    office = serializers.SlugField(help_text="Code de l'office")
+    node_id = serializers.UUIDField()
+    start_date = serializers.DateField(required=False, help_text="Par défaut : aujourd'hui")
+    end_date = serializers.DateField(required=False, allow_null=True)
+    decree_ref = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
+class AssignmentUpdateInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["terminer", "annuler"])
+    end_date = serializers.DateField(required=False, allow_null=True, help_text="Terminer : date de fin (défaut : aujourd'hui)")
+
+
+class AssignmentImportQuerySerializer(serializers.Serializer):
+    dry_run = serializers.BooleanField(default=True)
+    effective_date = serializers.DateField(help_text="Date d'effet du mouvement")
+
+
+class CapaciteOutputSerializer(serializers.Serializer):
+    capacite = serializers.CharField()
+    node_id = serializers.UUIDField(allow_null=True)
+    node_name = serializers.CharField()
+    herite = serializers.BooleanField()
+    office = serializers.CharField()
+
+
+class DeclarationInputSerializer(serializers.Serializer):
+    etat_de_vie = serializers.ChoiceField(choices=EtatDeVie.choices)
+    degre_ordre = serializers.ChoiceField(choices=DegreOrdre.choices, default=DegreOrdre.AUCUN)
+    incardination_node_id = serializers.UUIDField(required=False, allow_null=True)
+    institut_node_id = serializers.UUIDField(required=False, allow_null=True)
+
+
+class PersonStatusOutputSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    email = serializers.EmailField()
+    etat_de_vie = serializers.CharField()
+    degre_ordre = serializers.CharField()
+    statut_verification = serializers.CharField()
+    verification_note = serializers.CharField()
+    incardination_node = NodeRefSerializer(allow_null=True)
+    institut_node = NodeRefSerializer(allow_null=True)
+
+
+class VerificationDecisionInputSerializer(serializers.Serializer):
+    decision = serializers.ChoiceField(choices=[StatutVerification.VERIFIE, StatutVerification.REJETE])
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
+class CapabilityOverrideSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    diocese_node_id = serializers.UUIDField()
+    office = serializers.SlugField(source="office_type.code")
+    capability = serializers.CharField(source="capability.code")
+
+
+class AuditEventOutputSerializer(serializers.ModelSerializer):
+    actor_id = serializers.UUIDField(read_only=True, allow_null=True)
+    node_id = serializers.UUIDField(read_only=True, allow_null=True)
+
+    class Meta:
+        model = AuditEvent
+        fields = ["id", "at", "actor_id", "action", "target_type", "target_id", "node_id", "metadata"]
+
+
+class AuditFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(required=False)
+    actor = serializers.UUIDField(required=False)
+    action = serializers.CharField(required=False, help_text="Préfixe (ex. office.)")
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)

@@ -127,3 +127,95 @@ PROFILES: dict[str, Profile] = {
         "schedules": SENEGAL_SCHEDULES,
     },
 }
+
+
+# --- Capacités et offices (SRS §6.2, §6.3) ------------------------------------------
+
+
+class CapabilitySpec(TypedDict):
+    code: str
+    label: str
+    domain: str
+
+
+class OfficeSpec(TypedDict):
+    code: str
+    label: str
+    node_types: list[str]
+    required_order: str
+    cardinality: str
+    appointed_by: list[str]
+    appointed_by_platform: bool
+    inherits_down: bool
+    capabilities: list[str]
+
+
+# Catalogue FERMÉ (RG-14) : ajouter une capacité = une décision + un ADR + du code.
+CAPABILITIES: list[CapabilitySpec] = [
+    {"code": "structure.gerer", "label": "Créer ou modifier les nœuds et lieux de culte du sous-arbre", "domain": "structure"},
+    {"code": "horaires.gerer", "label": "Horaires et exceptions des lieux de culte", "domain": "structure"},
+    {"code": "offices.nommer", "label": "Nommer aux offices dont on est « nommeur »", "domain": "offices"},
+    {"code": "personnes.verifier", "label": "Vérifier un statut clérical ou consacré", "domain": "offices"},
+    {"code": "annonces.publier", "label": "Publier annonces et articles", "domain": "paroisse"},
+    {"code": "evenements.gerer", "label": "Événements et inscriptions", "domain": "paroisse"},
+    {"code": "actes.traiter", "label": "Traiter les demandes d'actes", "domain": "actes"},
+    {"code": "actes.superviser", "label": "Indicateurs agrégés des demandes d'actes", "domain": "actes"},
+    {"code": "messagerie.recevoir_fideles", "label": "Être joignable par les fidèles", "domain": "messagerie"},
+    {"code": "confessions.gerer", "label": "Gérer ses créneaux de confession", "domain": "confessions"},
+    {"code": "confessions.voir_planning", "label": "Voir le planning des confessions (initiales)", "domain": "confessions"},
+    {"code": "tableau_bord.voir", "label": "Tableau de bord du nœud", "domain": "pilotage"},
+    {"code": "audit.voir", "label": "Journal d'audit du nœud", "domain": "pilotage"},
+    {"code": "plateforme.admin", "label": "Administration Numerisen (hors arbre)", "domain": "plateforme"},
+]
+
+_ALL_BUT_PLATFORM_AND_MESSAGING = [
+    c["code"] for c in CAPABILITIES if c["code"] not in {"plateforme.admin", "messagerie.recevoir_fideles"}
+]
+_CURE_CAPABILITIES = [
+    "horaires.gerer",
+    "offices.nommer",
+    "annonces.publier",
+    "evenements.gerer",
+    "actes.traiter",
+    "messagerie.recevoir_fideles",
+    "confessions.gerer",
+    "confessions.voir_planning",
+    "tableau_bord.voir",
+    "audit.voir",
+]
+
+OFFICES: list[OfficeSpec] = [
+    {"code": "eveque_diocesain", "label": "Évêque diocésain", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "one", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": _ALL_BUT_PLATFORM_AND_MESSAGING},
+    {"code": "eveque_auxiliaire", "label": "Évêque auxiliaire", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "many", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser", "annonces.publier", "audit.voir"]},
+    {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir"]},
+    {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir"]},
+    {"code": "delegue_numerique_diocesain", "label": "Délégué diocésain au numérique", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "horaires.gerer", "tableau_bord.voir"]},
+    {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir"]},
+    {"code": "doyen", "label": "Doyen", "node_types": ["doyenne"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser"]},
+    {"code": "cure", "label": "Curé / administrateur paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES},
+    # Curés « in solidum » (c. 517) : l'exception à la cardinalité du curé (EF-PER-05).
+    {"code": "cure_in_solidum", "label": "Curé in solidum", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES},
+    {"code": "vicaire_paroissial", "label": "Vicaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["annonces.publier", "evenements.gerer", "actes.traiter", "messagerie.recevoir_fideles", "confessions.gerer"]},
+    {"code": "aumonier", "label": "Aumônier", "node_types": ["aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["annonces.publier", "evenements.gerer", "messagerie.recevoir_fideles", "confessions.gerer"]},
+    {"code": "recteur", "label": "Recteur de sanctuaire / d'église", "node_types": ["paroisse", "quasi_paroisse", "aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["horaires.gerer", "annonces.publier", "confessions.gerer"]},
+    {"code": "secretaire_paroissial", "label": "Secrétaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "actes.traiter", "confessions.voir_planning", "tableau_bord.voir"]},
+    {"code": "referent_numerique", "label": "Référent numérique paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "tableau_bord.voir"]},
+    {"code": "catechiste", "label": "Catéchiste", "node_types": ["paroisse", "quasi_paroisse", "ceb"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["evenements.gerer"]},
+    {"code": "responsable_ceb", "label": "Responsable de CEB", "node_types": ["ceb"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["annonces.publier", "evenements.gerer"]},
+]
+
+# Capacités de l'administrateur plateforme (Numerisen), valables sur tout l'arbre.
+# Délibérément SANS actes.traiter, messagerie.* ni confessions.* : la plateforme
+# administre le référentiel, elle ne traite pas les dossiers des paroisses (RG-09).
+PLATFORM_ADMIN_CAPABILITIES = frozenset(
+    {
+        "plateforme.admin",
+        "structure.gerer",
+        "horaires.gerer",
+        "offices.nommer",
+        "personnes.verifier",
+        "tableau_bord.voir",
+        "actes.superviser",
+        "audit.voir",
+    }
+)

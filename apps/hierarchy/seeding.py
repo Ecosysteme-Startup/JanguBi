@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from django.db import transaction
 
 from apps.core.exceptions import ApplicationError
-from apps.hierarchy.models import MassSchedule, Node, NodeType, PlaceOfWorship
+from apps.hierarchy.catalogue import load_offices_catalogue
+from apps.hierarchy.models import Capability, MassSchedule, Node, NodeType, OfficeType, PlaceOfWorship
 from apps.hierarchy.profiles import PROFILES, NodeSpec, Profile
 from apps.hierarchy.services import node_create, place_create
 
@@ -65,10 +66,17 @@ def node_types_load(*, profile: str, report: SeedReport | None = None) -> dict[s
 
 
 @transaction.atomic
+def offices_load() -> dict[str, int]:
+    """Catalogue des capacités et des offices (profil par défaut)."""
+    return load_offices_catalogue(Capability=Capability, OfficeType=OfficeType, NodeType=NodeType)
+
+
+@transaction.atomic
 def hierarchy_profile_load(*, profile: str) -> SeedReport:
     data = _profile(profile)
     report = SeedReport()
     types = node_types_load(profile=profile, report=report)
+    offices_load()
 
     nodes: dict[str, Node] = {}
     for spec in data["nodes"]:

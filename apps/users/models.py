@@ -8,6 +8,7 @@ from django.utils.translation import gettext_lazy as _
 from phonenumber_field.modelfields import PhoneNumberField
 
 from apps.common.models import BaseModel
+from apps.hierarchy.enums import DegreOrdre, EtatDeVie, StatutVerification
 from apps.users.enums import (
     AuditEvent,
     ClergyValidationStatus,
@@ -190,6 +191,60 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         blank=True,
         related_name="members",
     )
+    # --- Personne V1 (SRS §5.2, ADR-003) : état de vie, vérification, paroisse suivie ---
+    keycloak_sub = models.CharField(
+        _("identifiant Keycloak"), max_length=64, unique=True, null=True, blank=True
+    )
+    etat_de_vie = models.CharField(
+        _("état de vie"), max_length=10, choices=EtatDeVie.choices, default=EtatDeVie.LAIC
+    )
+    degre_ordre = models.CharField(
+        _("degré d'ordre"), max_length=20, choices=DegreOrdre.choices, default=DegreOrdre.AUCUN
+    )
+    incardination_node = models.ForeignKey(
+        "hierarchy.Node",
+        verbose_name=_("incardination"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="incardinated_people",
+    )
+    institut_node = models.ForeignKey(
+        "hierarchy.Node",
+        verbose_name=_("institut"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="consecrated_members",
+    )
+    statut_verification = models.CharField(
+        _("statut de vérification"),
+        max_length=10,
+        choices=StatutVerification.choices,
+        default=StatutVerification.DECLARE,
+        db_index=True,
+    )
+    verification_note = models.CharField(_("note de vérification"), max_length=255, blank=True, default="")
+    verified_by = models.ForeignKey(
+        "users.BaseUser",
+        verbose_name=_("vérifié par"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    verified_at = models.DateTimeField(_("vérifié le"), null=True, blank=True)
+    paroisse_suivie = models.ForeignKey(
+        "hierarchy.Node",
+        verbose_name=_("paroisse suivie"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="followers",
+    )
+    consent_version = models.CharField(_("version du consentement"), max_length=20, blank=True, default="")
+    consent_at = models.DateTimeField(_("consentement le"), null=True, blank=True)
+
     groups = models.ManyToManyField(  # type: ignore[assignment]  # django-stubs : redéclaration M2M de PermissionsMixin (related_name custom)
         Group,
         verbose_name=_("groupes"),

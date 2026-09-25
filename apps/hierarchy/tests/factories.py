@@ -38,3 +38,49 @@ class Tree:
         for name, value in list(vars(self).items()):
             if isinstance(value, Node):
                 setattr(self, name, Node.objects.get(pk=value.pk))
+
+
+# --- Personnes et nominations (L2) -------------------------------------------------------
+
+
+def office(code: str):
+    from apps.hierarchy.models import OfficeType
+    from apps.hierarchy.seeding import offices_load
+
+    if not OfficeType.objects.filter(code=code).exists():
+        node_type("diocese")  # garantit les types de nœuds
+        offices_load()
+    return OfficeType.objects.get(code=code)
+
+
+def person(email: str | None = None, *, ordre: str = "aucun", verified: bool = True, **kwargs):
+    from apps.hierarchy.enums import DegreOrdre, EtatDeVie, StatutVerification
+    from apps.users.tests.factories import BaseUserFactory
+
+    etat = EtatDeVie.LAIC if ordre == DegreOrdre.AUCUN else EtatDeVie.CLERC
+    fields = {
+        "etat_de_vie": etat,
+        "degre_ordre": ordre,
+        "statut_verification": StatutVerification.VERIFIE if verified else StatutVerification.DECLARE,
+        **kwargs,
+    }
+    if email:
+        fields["email"] = email
+    return BaseUserFactory.create(**fields)
+
+
+def priest(email: str | None = None, **kwargs):
+    return person(email, ordre="pretre", **kwargs)
+
+
+def nominate(who, office_code: str, node: Node, **kwargs):
+    """Nomination ACTIVE posée directement (mise en place de test, sans contrôle d'autorité)."""
+    from datetime import date
+
+    from apps.hierarchy import authz
+    from apps.hierarchy.models import OfficeAssignment
+
+    fields = {"start_date": date(2020, 1, 1), "status": "active", **kwargs}
+    assignment = OfficeAssignment.objects.create(person=who, office_type=office(office_code), node=node, **fields)
+    authz.invalidate_user(who.pk)
+    return assignment
