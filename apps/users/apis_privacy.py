@@ -1,6 +1,6 @@
 from django.conf import settings
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -77,12 +77,16 @@ class MeExportApi(V1ApiMixin, ApiAuthMixin, APIView):
 
 
 class MeApi(V1ApiMixin, UserMeDetailApi):
-    """/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03)."""
+    """/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03)."""
 
     @extend_schema(
         tags=TAG,
         summary="Supprimer mon compte (anonymisation, purge des conversations ; irréversible)",
-        responses={204: None},
+        responses={
+            204: None,
+            400: OpenApiResponse(description="Compte déjà supprimé"),
+            409: OpenApiResponse(description="Nomination en cours : elle doit d'abord prendre fin"),
+        },
     )
     def delete(self, request: Request) -> Response:
         services_privacy.account_delete(user=request.user)

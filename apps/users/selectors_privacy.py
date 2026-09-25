@@ -16,13 +16,18 @@ def _iso(value: Any) -> Any:
 
 
 def personal_data_export(*, user: Any) -> dict[str, Any]:
+    from django.db.models import Prefetch
+
     from apps.agenda.models import EventRegistration
     from apps.confessions.models import ConfessionBooking
     from apps.documents.models import DocumentRequest
     from apps.messaging.models import Conversation, Message, NotificationPreference
 
     profile = getattr(user, "profile", None)
-    conversations = Conversation.objects.filter(Q(participant_a=user) | Q(participant_b=user))
+    own_messages = Message.objects.filter(sender=user, deleted_at__isnull=True).order_by("created_at")
+    conversations = Conversation.objects.filter(Q(participant_a=user) | Q(participant_b=user)).prefetch_related(
+        Prefetch("messages", queryset=own_messages, to_attr="own_messages")
+    )
     preference = NotificationPreference.objects.filter(user=user).first()
     return {
         "generated_at": timezone.now().isoformat(),
@@ -79,12 +84,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
             {
                 "id": str(c.pk),
                 "created_at": _iso(c.created_at),
-                "my_messages": [
-                    {"sent_at": _iso(m.created_at), "content": m.content}
-                    for m in Message.objects.filter(conversation=c, sender=user, deleted_at__isnull=True).order_by(
-                        "created_at"
-                    )
-                ],
+                "my_messages": [{"sent_at": _iso(m.created_at), "content": m.content} for m in c.own_messages],
             }
             for c in conversations.order_by("created_at")
         ],

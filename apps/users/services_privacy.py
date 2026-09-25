@@ -51,21 +51,37 @@ def _active_offices(user: Any) -> bool:
     return active_assignments(user=user).exists()
 
 
+def _storage_delete_on_commit(file_fields: list[Any]) -> None:
+    """Suppression des octets APRÈS validation : un retour arrière ne laisse pas une base
+    qui pointe vers des fichiers déjà effacés."""
+    targets = [(f.storage, f.name) for f in file_fields if f]
+    transaction.on_commit(lambda: [storage.delete(name) for storage, name in targets])
+
+
+def _files_delete(file_objs: list[Any]) -> None:
+    _storage_delete_on_commit([f.file for f in file_objs if f is not None])
+    for file_obj in file_objs:
+        if file_obj is not None:
+            file_obj.delete()
+
+
 def _purge_conversations(user: Any) -> int:
     from django.db.models import Q
 
-    from apps.messaging.models import Conversation, MessageAttachment
+    from apps.messaging.models import Conversation, ConversationExport, MessageAttachment
 
     conversations = Conversation.objects.filter(Q(participant_a=user) | Q(participant_b=user))
-    files = [
+    files: list[Any] = [
         a.file for a in MessageAttachment.objects.filter(message__conversation__in=conversations).select_related("file")
     ]
+    files += [
+        e.json_file
+        for e in ConversationExport.objects.filter(conversation__in=conversations).select_related("json_file")
+        if e.json_file_id
+    ]
     count = conversations.count()
-    for conversation in conversations:
-        conversation.delete()
-    for file_obj in files:
-        if file_obj is not None:
-            file_obj.delete()
+    conversations.delete()
+    _files_delete(files)
     return count
 
 
@@ -80,8 +96,7 @@ def _anonymize_document_requests(user: Any, now: datetime.datetime) -> int:
     requests.filter(status__in=DOCUMENT_ACTIVE_STATUSES).update(status="cancelled", closed_at=now, updated_at=now)
     attachments = list(DocumentRequestAttachment.objects.filter(request__in=requests).select_related("file"))
     DocumentRequestAttachment.objects.filter(pk__in=[a.pk for a in attachments]).delete()
-    for attachment in attachments:
-        attachment.file.delete()
+    _files_delete([a.file for a in attachments])
     InternalNote.objects.filter(request__in=requests).delete()
     DocumentRequestStatusLog.objects.filter(request__in=requests).update(comment="")
     return requests.update(
@@ -118,9 +133,26 @@ def _release_bookings_and_registrations(user: Any, now: datetime.datetime) -> No
 
 
 def _forget_traces(user: Any) -> None:
-    from apps.messaging.models import MessagingAvailability, Notification, NotificationPreference
-    from apps.news.models import ArticleRead
+    from django.db.models import Q
 
+    from apps.messaging.models import (
+        ClergicalMessage,
+        MessageBlock,
+        MessageReaction,
+        MessagingAvailability,
+        MessagingCguAcceptance,
+        Notification,
+        NotificationPreference,
+        PushDevice,
+    )
+    from apps.news.models import ArticleReaction, ArticleRead
+
+    MessageBlock.objects.filter(Q(blocker=user) | Q(blocked=user)).delete()
+    MessageReaction.objects.filter(user=user).delete()
+    MessagingCguAcceptance.objects.filter(user=user).delete()
+    PushDevice.objects.filter(user=user).delete()
+    ClergicalMessage.objects.filter(Q(sender=user) | Q(individual_recipient=user)).delete()
+    ArticleReaction.objects.filter(user=user).delete()
     Notification.objects.filter(user=user).delete()
     NotificationPreference.objects.filter(user=user).delete()
     MessagingAvailability.objects.filter(user=user).delete()
@@ -128,8 +160,15 @@ def _forget_traces(user: Any) -> None:
 
 
 def _anonymize_identity(user: Any) -> str | None:
+    from apps.hierarchy.enums import DegreOrdre, EtatDeVie
+
     keycloak_sub = user.keycloak_sub
     user.is_active = False
+    # État de vie et degré d'ordre : donnée religieuse sensible, effacée aussi.
+    user.etat_de_vie = EtatDeVie.LAIC
+    user.degre_ordre = DegreOrdre.AUCUN
+    user.incardination_node = None
+    user.institut_node = None
     user.email = f"deleted_{user.id}@deleted.invalid"
     user.phone_number = None
     user.keycloak_sub = None
@@ -138,17 +177,21 @@ def _anonymize_identity(user: Any) -> str | None:
     user.last_mfa_on = None
     user.set_unusable_password()
     user.rotate_jwt_key()
-    user.save()
+    user.save(
+        update_fields=[
+            "is_active", "email", "phone_number", "keycloak_sub", "paroisse_suivie", "last_seen_on",
+            "last_mfa_on", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
+            "password", "jwt_key", "updated_at",
+        ]
+    )  # fmt: skip
     profile = getattr(user, "profile", None)
     if profile is not None:
-        for field in ("first_name", "last_name"):
-            setattr(profile, field, "")
+        _storage_delete_on_commit([profile.avatar])
+        profile.first_name = profile.last_name = ""
         profile.date_of_birth = None
         profile.phone = None
-        if profile.avatar:
-            profile.avatar.delete(save=False)
         profile.avatar = None
-        profile.save()
+        profile.save(update_fields=["first_name", "last_name", "date_of_birth", "phone", "avatar", "updated_at"])
     return keycloak_sub
 
 

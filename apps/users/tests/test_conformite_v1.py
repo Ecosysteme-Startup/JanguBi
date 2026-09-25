@@ -154,3 +154,14 @@ def test_keycloak_account_deleted_after_commit(world, settings, monkeypatch, dja
     assert calls == ["kc-123"]
     world.awa.refresh_from_db()
     assert world.awa.keycloak_sub is None
+
+
+def test_account_delete_erases_religious_status_and_relations(world):
+    from apps.messaging.models import MessageBlock
+
+    religieuse = person("soeur@test.sn", etat_de_vie="consacre")
+    MessageBlock.objects.create(blocker=religieuse, blocked=world.pere)
+    account_delete(user=religieuse)
+    religieuse.refresh_from_db()
+    assert (religieuse.etat_de_vie, religieuse.degre_ordre) == ("laic", "aucun")
+    assert not MessageBlock.objects.filter(blocker=religieuse).exists()

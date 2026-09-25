@@ -3560,7 +3560,7 @@ paths:
   /api/v1/me/:
     get:
       operationId: v1_me_retrieve
-      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
+      description: '/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03).'
       summary: Mon profil
       tags:
       - Profil
@@ -3606,7 +3606,7 @@ paths:
           description: ''
     delete:
       operationId: v1_me_destroy
-      description: '/me/ : profil (GET, PATCH) et suppression du compte (DELETE, EF-CONF-03).'
+      description: '/me/ : profil (GET) et suppression du compte (DELETE, EF-CONF-03).'
       summary: Supprimer mon compte (anonymisation, purge des conversations ; irréversible)
       tags:
       - Conformité
@@ -3618,6 +3618,10 @@ paths:
       responses:
         '204':
           description: No response body
+        '400':
+          description: Compte déjà supprimé
+        '409':
+          description: 'Nomination en cours : elle doit d''abord prendre fin'
   /api/v1/me/capacites/:
     get:
       operationId: v1_me_capacites_list

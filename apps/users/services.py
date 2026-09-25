@@ -19,6 +19,7 @@ import secrets
 import time
 from typing import Any
 
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -164,6 +165,12 @@ def user_register_fidele(
     # Même réponse que pour une création ; la personne concernée est prévenue par e-mail.
     existing = BaseUser.objects.filter(email__iexact=email).first()
     if existing is not None:
+        # Même travail coûteux que l'autre branche (validation + hachage) : pas d'écart de temps.
+        try:
+            validate_password(password)
+        except DjangoValidationError as exc:
+            raise ApplicationError(" ".join(exc.messages))
+        make_password(password)
         _send_email_safe("account_exists", {"user": existing}, existing.email)
         return None
 
