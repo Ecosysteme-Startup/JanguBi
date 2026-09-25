@@ -57,6 +57,9 @@ REST_FRAMEWORK = {
     },
 }
 
+# Formulaire de contact : quota coupé (réactivé par override_settings dans ses tests).
+CONTACT_THROTTLE_RATE = None
+
 # Mot de passe plus rapide à hasher en test
 PASSWORD_HASHERS = [
     "django.contrib.auth.hashers.MD5PasswordHasher",

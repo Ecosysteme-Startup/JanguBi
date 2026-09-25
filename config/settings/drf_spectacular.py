@@ -20,5 +20,9 @@ SPECTACULAR_SETTINGS = {
         'DocumentRequestStatusEnum': 'apps.documents.models.DocumentRequest.Status',
         'PickupModeEnum': 'apps.documents.models.DocumentRequest.PickupMode',
         'EventTypeEnum': 'apps.agenda.models.Event.EventType',
+        'ContactFonctionEnum': 'apps.contact.enums.Fonction',
+        'AccountRealmRoleEnum': 'apps.users.selectors_accounts.ROLES',
+        'AccountStatusEnum': 'apps.users.selectors_accounts.STATUSES',
+        'AccountMfaEnum': 'apps.users.apis_accounts.MFA_CHOICES',
     },
 }

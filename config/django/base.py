@@ -83,6 +83,11 @@ CELERY_BEAT_SCHEDULE = filter_beat_schedule(_CELERY_BEAT_SCHEDULE_ALL, active=JA
 EMAIL_FROM_ADDRESS = env.str("EMAIL_FROM_ADDRESS", default="noreply@jangubi.sn")
 ADMIN_ACCOUNT_EXPIRY_DAYS = env.int("ADMIN_ACCOUNT_EXPIRY_DAYS", default=7)
 
+# Formulaire public « Pour les paroisses » (POST /api/v1/public/contact/) : destinataire
+# interne des demandes de présentation, et quota par adresse IP.
+CONTACT_EMAIL = env.str("CONTACT_EMAIL", default="contact@numerisen.sn")
+CONTACT_THROTTLE_RATE = env.str("CONTACT_THROTTLE_RATE", default="5/hour")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 
@@ -118,6 +123,7 @@ LOCAL_APPS = [
     "apps.news.apps.NewsConfig",
     "apps.agenda.apps.AgendaConfig",
     "apps.dashboards.apps.DashboardsConfig",
+    "apps.contact.apps.ContactConfig",
 ]
 
 THIRD_PARTY_APPS = [
