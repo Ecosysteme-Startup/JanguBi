@@ -1,0 +1,66 @@
+# Jàngu Bi — Registre des décisions d'architecture (ADR)
+
+> Format court : contexte, décision, conséquences. Une décision « verrouillée » ne se rediscute pas sans nouvel ADR.
+> Statuts possibles : **Verrouillée**, **À trancher**, **Remplacée**.
+
+---
+
+## ADR-001 — Refonte sur place, pas de réécriture
+- **Statut** : Verrouillée (24/09/2026)
+- **Contexte** : ~26 k lignes de code et ~22 k lignes de tests, architecture HackSoft saine, défauts concentrés dans l'identité, la hiérarchie et le périmètre.
+- **Décision** : conserver le repo `JanguBi` et les apps saines. Refondre `org` / `users` / `authentication` ; geler le reste.
+- **Conséquences** : migrations expand/contract ; tag `pre-v1` ; les anciens champs restent lisibles jusqu'en L9.
+
+## ADR-002 — Hiérarchie : arbre générique paramétrable
+- **Statut** : Verrouillée
+- **Décision** : `NodeType` + `Node` (django-treebeard `MP_Node`), lieux de culte séparés de l'arbre. Arbre de la vie consacrée dans le même modèle, avec des types non territoriaux.
+- **Pourquoi** : un diocèse ajoute zones, secteurs ou aumôneries sans code. Au Sénégal, une seule province, et les structures varient d'un diocèse à l'autre.
+- **Alternatives écartées** : tables typées (existant, rigide) ; `ltree` natif (moins d'outillage Django).
+
+## ADR-003 — Autorisation : offices et capacités, héritage sur le sous-arbre
+- **Statut** : Verrouillée
+- **Décision** : toute autorisation passe par `peut(user, capacite, node)`. Les capacités sont un catalogue fermé. Les offices sont paramétrables. Les nominations sont datées.
+- **Pourquoi** : c'est le fonctionnement réel de l'Église (l'office confère le pouvoir sur un territoire). Cela supprime les 5 mécanismes superposés (`UserRole`, `pastoral_role`, `RoleAssignment`, `Membership`, déclarations).
+- **Conséquences** : `IsAnyAdmin` et consorts sont interdits dans les apps V1 ; tests de matrice obligatoires.
+
+## ADR-004 — Authentification : Keycloak, hiérarchie dans l'application
+- **Statut** : Verrouillée
+- **Décision** : Keycloak 26 (OIDC, PKCE côté web, jetons vérifiés par JWKS). Trois rôles de realm seulement : `fidele`, `staff`, `platform_admin`. MFA TOTP pour `staff` et `platform_admin`. La hiérarchie, les offices et les capacités restent dans l'application.
+- **Pourquoi** : on délègue la sécurité des comptes (MFA, reset, sessions, brute force) sans dupliquer un référentiel ecclésial vivant (plus de 170 paroisses, mutations annuelles) dans des groupes Keycloak.
+- **Conséquences** : SimpleJWT, `drf-jwt`, `jwt_key` et l'OTP maison sont retirés. Les comptes sont migrés avec import des hachages `pbkdf2_sha256`. Keycloak devient un service à sauvegarder.
+
+## ADR-005 — Messagerie temps réel conservée, chiffrement de bout en bout visé
+- **Statut** : Verrouillée pour la messagerie ; **À trancher** pour la technologie E2E (étude L6b)
+- **Décision** : WebSocket via Django Channels (channel layer Redis). E2E étudié entre `vodozemac` (Olm/Megolm, WASM) et OpenMLS ; le serveur reste un annuaire de clés et un relais opaque.
+- **Garde-fou** : point d'arrêt si l'étude dépasse 12 jours. Dans ce cas, pilote en Fernet côté serveur avec une mention de transparence.
+- **Règle métier liée** : pas de confession par message (Saint-Siège, 2002 et 2020). La messagerie sert à l'écoute et à l'accompagnement ; les rendez-vous de confession se prennent en présentiel.
+
+## ADR-006 — Gel des modules hors V1 par configuration
+- **Statut** : Verrouillée
+- **Décision** : réglage `JANGUBI_MODULES` (liste des modules actifs). `apps/api/urls.py` n'inclut que les modules actifs, et les tâches Beat des modules gelés sont retirées. Le code et les migrations restent.
+- **Modules gelés** : `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `testing_examples`, plus des sous-parties de `bible`, `liturgy` et `rosary` (voir plan L0.4).
+
+## ADR-007 — Broker Celery : RabbitMQ conservé
+- **Statut** : Verrouillée (révisable après le pilote)
+- **Contexte** : Redis suffirait au volume du pilote, mais RabbitMQ est déjà en place et fonctionne.
+- **Décision** : garder RabbitMQ comme broker Celery. Redis sert au cache, au channel layer Channels et au cache JWKS.
+- **Conséquence** : aucun changement d'infrastructure dans la V1.
+
+## ADR-008 — Contenus liturgiques et droits
+- **Statut** : Verrouillée
+- **Décision** : Bible en **Crampon 1923** (domaine public ; statut à confirmer avant la mise en ligne publique). Lectures du jour selon `LITURGY_SOURCE` : `aelf` seulement avec un accord écrit de l'AELF, sinon `crampon_refs`. Calendrier liturgique calculé localement.
+- **Pourquoi** : les CGU de l'AELF interdisent toute redistribution sans autorisation expresse.
+
+## ADR-009 — Actes : suivi de démarche, jamais de délivrance numérique
+- **Statut** : Verrouillée
+- **Décision** : l'application suit la demande jusqu'au retrait de l'original signé et scellé. Pas de PDF d'acte, pas de coffre-fort. La paroisse destinataire est toujours celle du sacrement.
+
+## ADR-010 — CI locale obligatoire avec `act`
+- **Statut** : Verrouillée
+- **Décision** : aucun push sur `develop`, `stage` ou `main` sans `make act` vert (ruff, mypy, pytest dans le conteneur du runner). Hook `pre-push` fourni. Les jobs qui publient (Docker push, déploiement) ne sont **jamais** lancés via `act`.
+- **Pourquoi** : économiser les minutes GitHub Actions et ne jamais déclencher un déploiement cassé (le job `trigger-deploy` suit automatiquement un push vert).
+
+## ADR-011 — Données sensibles et conformité (loi 2008-12)
+- **Statut** : Verrouillée
+- **Décision** : consentement explicite horodaté, minimisation, conservation limitée (messages 180 j, pièces 90 j après clôture), aucun contenu de message accessible à un administrateur, tableaux de bord agrégés au-dessus de la paroisse, journal d'audit immuable.
+- **À faire (L9)** : registre des traitements et déclaration à la CDP ; réévaluation de l'hébergement avant l'ouverture publique.
