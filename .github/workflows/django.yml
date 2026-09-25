@@ -125,7 +125,7 @@ jobs:
 
 
       - name: Build and push
-        uses: docker/build-push-action@f72b3cf665d7d5fe435407befecb40d10b4266d2 #v7.2.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc #v7.2.0
         with:
           context: .
           file: docker/production.Dockerfile
