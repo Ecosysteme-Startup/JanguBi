@@ -1,0 +1,9 @@
+Bonjour,
+
+Votre rendez-vous du {{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}, {{ place }}, a été annulé par le prêtre.
+{% if message %}
+Son message : {{ message }}
+{% endif %}
+Vous pouvez choisir un autre créneau dans l'application.
+
+Jàngu Bi

@@ -73,7 +73,7 @@ def _email_queue(*, to: str, template: str, context: dict[str, Any], eta: dateti
 def people_notify(
     *,
     user_ids: Iterable[Any],
-    topic: str,
+    topic: str | None,
     event_type: str,
     payload: dict[str, Any],
     email_template: str | None = None,
@@ -81,7 +81,10 @@ def people_notify(
     now: datetime.datetime | None = None,
 ) -> int:
     """Notification in-app immédiate (sans bruit : elle attend dans la liste) et e-mail hors
-    plage de silence, sinon différé à la fin du silence. Renvoie le nombre de personnes notifiées."""
+    plage de silence, sinon différé à la fin du silence. Renvoie le nombre de personnes notifiées.
+
+    ``topic=None`` : notification personnelle (rendez-vous, demande) envoyée quelle que soit
+    la préférence par thème ; les canaux (in-app, e-mail) et la plage de silence s'appliquent."""
     from apps.users.models import BaseUser
 
     ids = list(dict.fromkeys(user_ids))
@@ -89,12 +92,12 @@ def people_notify(
         return 0
     now = timezone.localtime(now or timezone.now())
     preferences = _preferences_for(ids)
-    topic_field = TOPICS[topic]
+    topic_field = TOPICS[topic] if topic is not None else None
     notifications = []
     emails: list[tuple[str, datetime.datetime | None]] = []
     for user in BaseUser.objects.filter(pk__in=ids, is_active=True).only("pk", "email"):
         pref = preferences.get(user.pk) or NotificationPreference(user_id=user.pk)
-        if not getattr(pref, topic_field):
+        if topic_field is not None and not getattr(pref, topic_field):
             continue
         if pref.in_app:
             notifications.append(Notification(user_id=user.pk, event_type=event_type, payload=payload))

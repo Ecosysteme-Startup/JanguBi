@@ -25,6 +25,8 @@ FREEZABLE_MODULES: tuple[str, ...] = (
     "liturgy",
     "liturgy.heures",  # Liturgie des Heures (pas d'accord AELF)
     "messaging",
+    "messaging.inter_clerge",
+    "confessions",
     "documents",
     "news",
     "org",
@@ -46,6 +48,7 @@ FROZEN_BY_DEFAULT: frozenset[str] = frozenset(
     {
         "bible.avance",
         "rosary.communautaire",
+        "messaging.inter_clerge",
         "liturgy.heures",
         "clergy_accounts",
         "mass_intentions",

@@ -17,6 +17,7 @@ from apps.messaging.models import (
     Message,
     MessageBlock,
     MessageReaction,
+    MessagingAvailability,
     MessagingCguAcceptance,
     Notification,
     PriestProfile,
@@ -142,25 +143,84 @@ def priest_profile_update(
 # ---------------------------------------------------------------------------
 
 
+CONFESSION_NOTICE = (
+    "La confession ne peut pas se faire par message. Pour recevoir le sacrement de réconciliation, "
+    "prenez rendez-vous avec un prêtre : la confession se vit en présence du prêtre."
+)
+ADULT_AGE = 18
+MINOR_MESSAGE = (
+    "La messagerie avec un prêtre est réservée aux personnes majeures. Si tu as moins de 18 ans, "
+    "parle à un prêtre de ta paroisse avec tes parents ou ton catéchiste, ou prends rendez-vous à l'accueil."
+)
+
+
+def age_on(*, birth: date, on: date) -> int:
+    return on.year - birth.year - ((on.month, on.day) < (birth.month, birth.day))
+
+
+def adult_check(*, user: BaseUser) -> None:
+    """RG-13 : messagerie réservée aux majeurs en V1 (date de naissance du profil obligatoire)."""
+    from apps.core.exceptions import PermissionDeniedError
+
+    birth = getattr(getattr(user, "profile", None), "date_of_birth", None)
+    if birth is None:
+        raise PermissionDeniedError(
+            "Renseignez votre date de naissance dans votre profil pour écrire à un prêtre.", code="birth_date_required"
+        )
+    if age_on(birth=birth, on=timezone.localdate()) < ADULT_AGE:
+        raise PermissionDeniedError(MINOR_MESSAGE, code="minor")
+
+
+def reachable_check(*, priest: BaseUser) -> None:
+    """EF-PRE-01 : seul un titulaire de ``messagerie.recevoir_fideles`` qui accepte de nouveaux
+    échanges peut être contacté (plus de contact d'un utilisateur quelconque par UUID)."""
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(priest, "messagerie.recevoir_fideles"):
+        raise ApplicationError("Ce prêtre n'est pas joignable par la messagerie.", code="not_reachable")
+    availability = MessagingAvailability.objects.filter(user=priest).first()
+    if availability is not None and not availability.accepts_new_conversations:
+        raise ApplicationError("Ce prêtre ne prend pas de nouveaux échanges pour le moment.", code="not_accepting")
+
+
 @transaction.atomic
 def conversation_get_or_create(
     *, fidele: BaseUser, priest: BaseUser
 ) -> tuple[Conversation, bool]:
-    # Garde pastorale : une conversation 1-à-1 ne peut être ouverte qu'avec un membre
-    # du clergé ÉLIGIBLE — un prêtre disposant d'un PriestProfile qui accepte
-    # l'accompagnement pastoral (accepts_pastoral_chat). Bloque les échanges
-    # fidèle↔fidèle et le contact d'un utilisateur non pastoral par UUID.
-    if not PriestProfile.objects.filter(user=priest, accepts_pastoral_chat=True).exists():
-        raise ApplicationError(
-            "Vous ne pouvez démarrer une conversation qu'avec un prêtre disponible "
-            "pour l'accompagnement pastoral."
-        )
+    existing = Conversation.objects.filter(
+        participant_a=min(fidele, priest, key=lambda u: str(u.id)),
+        participant_b=max(fidele, priest, key=lambda u: str(u.id)),
+    ).first()
+    if existing is not None:
+        return existing, False
+    if fidele.pk == priest.pk:
+        raise ApplicationError("Conversation impossible avec soi-même.", code="self_conversation")
+    reachable_check(priest=priest)
+    adult_check(user=fidele)
+    _check_not_blocked(fidele, priest)
     participant_a, participant_b = _normalize_participants(fidele, priest)
     conversation, created = Conversation.objects.get_or_create(
         participant_a=participant_a,
         participant_b=participant_b,
     )
     return conversation, created
+
+
+@transaction.atomic
+def availability_update(*, user: BaseUser, data: dict) -> MessagingAvailability:
+    """EF-PRE-07 : disponibilités d'un prêtre joignable."""
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(user, "messagerie.recevoir_fideles"):
+        from apps.core.exceptions import PermissionDeniedError
+
+        raise PermissionDeniedError("Réservé aux prêtres joignables.", code="not_reachable")
+    availability, _ = MessagingAvailability.objects.get_or_create(user=user)
+    for field in ("accepts_new_conversations", "absent_until", "reply_windows", "note"):
+        if field in data:
+            setattr(availability, field, data[field])
+    availability.save()
+    return availability
 
 
 @transaction.atomic
@@ -234,6 +294,11 @@ def message_send(
     _check_not_blocked(sender, receiver)
     _check_cgu(conversation, sender)
     _check_rate_limit(sender, conversation)
+    # RG-13 : le côté fidèle doit être majeur, y compris dans une conversation ouverte avant la V1.
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(sender, "messagerie.recevoir_fideles"):
+        adult_check(user=sender)
 
     if client_message_id:
         existing = Message.objects.filter(client_message_id=client_message_id).first()

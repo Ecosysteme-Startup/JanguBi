@@ -221,6 +221,27 @@ def HasCapability(capability: str, *, node_resolver: NodeResolver | None = None)
     return _HasCapability
 
 
+def HasAnyCapability(*capabilities: str) -> type[BasePermission]:  # noqa: N802
+    """Permission DRF : au moins une des capacités, sur au moins un nœud (MFA exigée)."""
+    for capability in capabilities:
+        _check_capability(capability)
+
+    class _HasAnyCapability(BasePermission):
+        message = "Vous n'avez pas la capacité requise."
+
+        def has_permission(self, request: Any, view: Any) -> bool:
+            user = request.user
+            if not getattr(user, "is_authenticated", False):
+                return False
+            allowed = any(a_la_capacite(user, c) for c in capabilities)
+            if allowed:
+                mfa_check(user)
+            return allowed
+
+    _HasAnyCapability.__name__ = "HasAnyCapability_" + "_".join(c.replace(".", "_") for c in capabilities)
+    return _HasAnyCapability
+
+
 def node_from_kwarg(name: str = "node_id") -> NodeResolver:
     def resolve(request: Any, view: Any) -> Node | None:
         return Node.objects.filter(pk=view.kwargs.get(name)).first()

@@ -1,6 +1,8 @@
 from django.urls import path
 
+from apps.core.modules import is_module_active
 from apps.messaging.apis import (
+    AvailabilityApi,
     BlockDeleteApi,
     BlockListCreateApi,
     ClergicalMessageInboxApi,
@@ -22,17 +24,12 @@ from apps.messaging.apis import (
     NotificationListApi,
     NotificationReadApi,
     PriestListApi,
-    PriestProfileCguApi,
-    PriestProfileCreateApi,
-    PriestProfileUpdateApi,
 )
 
 urlpatterns = [
-    # Priest profiles
-    path("priest-profile/", PriestProfileCreateApi.as_view(), name="priest-profile-create"),
-    path("priest-profile/cgu/", PriestProfileCguApi.as_view(), name="priest-profile-cgu"),
-    path("priest-profile/me/", PriestProfileUpdateApi.as_view(), name="priest-profile-update"),
+    # Prêtres joignables et disponibilités (V1)
     path("priests/", PriestListApi.as_view(), name="priest-list"),
+    path("availability/", AvailabilityApi.as_view(), name="availability"),
     # CGU messagerie (global, par utilisateur)
     path("cgu/", MessagingCguApi.as_view(), name="messaging-cgu"),
     # Conversations
@@ -54,9 +51,13 @@ urlpatterns = [
     # Notifications
     path("notifications/", NotificationListApi.as_view(), name="notification-list"),
     path("notifications/<uuid:notification_id>/read/", NotificationReadApi.as_view(), name="notification-read"),
-    # ClergicalMessage (inter-clergé)
-    path("clerical/", ClergicalMessageSendApi.as_view(), name="clerical-send"),
-    path("clerical/inbox/", ClergicalMessageInboxApi.as_view(), name="clerical-inbox"),
-    path("clerical/sent/", ClergicalMessageSentApi.as_view(), name="clerical-sent"),
-    path("clerical/<int:message_id>/read/", ClergicalMessageReadApi.as_view(), name="clerical-read"),
 ]
+
+# Messagerie inter-clergé : gelée en V1 (SRS §1.3, sous-module « messaging.inter_clerge »).
+if is_module_active("messaging.inter_clerge"):
+    urlpatterns += [
+        path("clerical/", ClergicalMessageSendApi.as_view(), name="clerical-send"),
+        path("clerical/inbox/", ClergicalMessageInboxApi.as_view(), name="clerical-inbox"),
+        path("clerical/sent/", ClergicalMessageSentApi.as_view(), name="clerical-sent"),
+        path("clerical/<int:message_id>/read/", ClergicalMessageReadApi.as_view(), name="clerical-read"),
+    ]

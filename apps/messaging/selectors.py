@@ -14,7 +14,6 @@ from apps.messaging.models import (
     MessageBlock,
     MessagingCguAcceptance,
     Notification,
-    PriestProfile,
 )
 from apps.users.models import BaseUser
 
@@ -121,12 +120,35 @@ def unread_count(*, conversation: Conversation, user: BaseUser) -> int:
     )
 
 
-def priest_list_available() -> QuerySet[PriestProfile]:
-    return (
-        PriestProfile.objects.filter(accepts_pastoral_chat=True)
-        .select_related("user")
-        .order_by("user__email")
-    )
+def priests_reachable_for(*, user: BaseUser) -> list[dict]:
+    """EF-PRE-01 : prêtres joignables de la paroisse suivie (nomination sur ce nœud) et des
+    aumôneries du même diocèse, avec leur disponibilité. Sans paroisse suivie : liste vide."""
+    from apps.hierarchy.models import Node
+    from apps.hierarchy.selectors import node_ancestor_of_type
+    from apps.hierarchy.selectors_offices import capability_holders
+    from apps.messaging.models import MessagingAvailability
+
+    parish = getattr(user, "paroisse_suivie", None)
+    if parish is None:
+        return []
+    targets = [parish]
+    diocese = node_ancestor_of_type(node=parish, type_code="diocese")
+    if diocese is not None:
+        targets += list(Node.objects.filter(path__startswith=diocese.path, type__code="aumonerie", status="erige"))
+
+    rows: dict = {}
+    for node in targets:
+        for priest in capability_holders(node=node, capability="messagerie.recevoir_fideles", direct_only=True):
+            if priest.pk != user.pk:
+                rows.setdefault(priest.pk, {"user": priest, "nodes": []})["nodes"].append(node)
+    availabilities = {a.user_id: a for a in MessagingAvailability.objects.filter(user_id__in=list(rows))}
+    result = []
+    for row in rows.values():
+        availability = availabilities.get(row["user"].pk)
+        if availability is not None and not availability.accepts_new_conversations:
+            continue
+        result.append({**row, "availability": availability})
+    return sorted(result, key=lambda r: r["user"].email)
 
 
 def block_list(*, user: BaseUser) -> QuerySet[MessageBlock]:

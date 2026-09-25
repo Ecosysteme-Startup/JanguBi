@@ -611,6 +611,132 @@ paths:
                 items:
                   $ref: '#/components/schemas/DailyTextOutput'
           description: ''
+  /api/v1/bible/homilenotes/:
+    get:
+      operationId: v1_bible_homilenotes_list
+      summary: List mes notes d'homélie
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HomilieNoteOutput'
+          description: ''
+    post:
+      operationId: v1_bible_homilenotes_create
+      summary: Créer une note d'homélie (DIACRE+)
+      tags:
+      - Bible — Avancé
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HomilieNoteInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/HomilieNoteInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/HomilieNoteInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomilieNoteOutput'
+          description: ''
+  /api/v1/bible/homilenotes/{note_id}/:
+    get:
+      operationId: v1_bible_homilenotes_retrieve
+      summary: Récupérer une note d'homélie
+      parameters:
+      - in: path
+        name: note_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomilieNoteOutput'
+          description: ''
+    patch:
+      operationId: v1_bible_homilenotes_partial_update
+      summary: Modifier une note d'homélie
+      parameters:
+      - in: path
+        name: note_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedHomilieNoteInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedHomilieNoteInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedHomilieNoteInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomilieNoteOutput'
+          description: ''
+    delete:
+      operationId: v1_bible_homilenotes_destroy
+      summary: Supprimer une note d'homélie
+      parameters:
+      - in: path
+        name: note_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/bible/import/:
     post:
       operationId: v1_bible_import_create
@@ -646,6 +772,265 @@ paths:
         '404':
           description: 'Fichier introuvable dans le dossier d''importation — `{"error":
             ...}`'
+  /api/v1/bible/lectio/:
+    get:
+      operationId: v1_bible_lectio_list
+      summary: Liste mes sessions Lectio Divina
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LectioDivinaOutput'
+          description: ''
+    post:
+      operationId: v1_bible_lectio_create
+      summary: Créer ou mettre à jour une session Lectio Divina
+      tags:
+      - Bible — Avancé
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LectioDivinaInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LectioDivinaInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LectioDivinaInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LectioDivinaOutput'
+          description: ''
+  /api/v1/bible/reading-plans/:
+    get:
+      operationId: v1_bible_reading_plans_list
+      summary: Liste les plans de lecture publiés
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+    post:
+      operationId: v1_bible_reading_plans_create
+      summary: Créer un plan de lecture (PRETRE+)
+      tags:
+      - Bible — Avancé
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadingPlanInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReadingPlanInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReadingPlanInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+  /api/v1/bible/reading-plans/{plan_id}/:
+    get:
+      operationId: v1_bible_reading_plans_retrieve
+      summary: Détail d'un plan de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
+    post:
+      operationId: v1_bible_reading_plans_create_2
+      description: 'Aucun corps de requête : publier est une simple bascule d''état,
+        réservée à l''auteur du parcours.'
+      summary: Publier un plan de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
+  /api/v1/bible/reading-plans/{plan_id}/publish/:
+    get:
+      operationId: v1_bible_reading_plans_publish_retrieve
+      summary: Détail d'un plan de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
+    post:
+      operationId: v1_bible_reading_plans_publish_create
+      description: 'Aucun corps de requête : publier est une simple bascule d''état,
+        réservée à l''auteur du parcours.'
+      summary: Publier un plan de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
+  /api/v1/bible/reading-plans/{plan_id}/subscribe/:
+    post:
+      operationId: v1_bible_reading_plans_subscribe_create
+      description: 'Aucun corps de requête. Idempotent : une ré-inscription renvoie
+        200 sans créer de doublon. Le parcours doit être publié.'
+      summary: S'inscrire à un parcours de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
+  /api/v1/bible/reading-plans/{plan_id}/unsubscribe/:
+    post:
+      operationId: v1_bible_reading_plans_unsubscribe_create
+      description: 'Aucun corps de requête. Idempotent : se désinscrire d''un parcours
+        auquel on n''est pas inscrit renvoie 200.'
+      summary: Se désinscrire d'un parcours de lecture
+      parameters:
+      - in: path
+        name: plan_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Avancé
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingPlanOutput'
+          description: ''
+        '400':
+          description: No response body
   /api/v1/bible/search/:
     get:
       operationId: v1_bible_search_list
@@ -757,6 +1142,285 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BookMetadataOutput'
+          description: ''
+  /api/v1/clergy-accounts/invitations/:
+    get:
+      operationId: v1_clergy_accounts_invitations_list
+      summary: Lister les invitations clergé
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Offset de pagination
+      - in: query
+        name: status
+        schema:
+          type: string
+          enum:
+          - accepted
+          - expired
+          - pending
+          - revoked
+        description: Filtrer par statut
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+    post:
+      operationId: v1_clergy_accounts_invitations_create
+      summary: Créer une invitation clergé
+      tags:
+      - clergy-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+  /api/v1/clergy-accounts/invitations/{invitation_id}/:
+    get:
+      operationId: v1_clergy_accounts_invitations_retrieve
+      summary: Détail d'une invitation
+      parameters:
+      - in: path
+        name: invitation_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+  /api/v1/clergy-accounts/invitations/{invitation_id}/revoke/:
+    post:
+      operationId: v1_clergy_accounts_invitations_revoke_create
+      summary: Révoquer une invitation
+      parameters:
+      - in: path
+        name: invitation_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+  /api/v1/clergy-accounts/invitations/accept/:
+    post:
+      operationId: v1_clergy_accounts_invitations_accept_create
+      summary: Accepter une invitation (utilisateur connecté)
+      tags:
+      - clergy-accounts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+  /api/v1/clergy-accounts/invitations/validate/:
+    get:
+      operationId: v1_clergy_accounts_invitations_validate_retrieve
+      description: Public endpoint — validates token and returns invitation details
+        (no auth required).
+      summary: Valider un token d'invitation (public)
+      parameters:
+      - in: query
+        name: token
+        schema:
+          type: string
+          format: uuid
+        description: UUID du token d'invitation
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationOutput'
+          description: ''
+  /api/v1/confessions/bookings/:
+    post:
+      operationId: v1_confessions_bookings_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Réserver un créneau (409 s'il vient d'être pris)
+      tags:
+      - confessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookingCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookingCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOutput'
+          description: ''
+  /api/v1/confessions/bookings/{booking_id}/cancel/:
+    post:
+      operationId: v1_confessions_bookings_cancel_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Annuler mon rendez-vous (jusqu'à H-1)
+      parameters:
+      - in: path
+        name: booking_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingOutput'
+          description: ''
+  /api/v1/confessions/slots/:
+    get:
+      operationId: v1_confessions_slots_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Créneaux libres d'une paroisse ou d'un lieu
+      parameters:
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: 'À partir de cette date (défaut : maintenant)'
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: 'Nœud (paroisse…) : sous-arbre compris'
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: place
+        schema:
+          type: integer
+        description: Lieu de culte
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSlotOutputList'
           description: ''
   /api/v1/dashboards/analytics/:
     get:
@@ -1211,6 +1875,158 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentRequestOptions'
+          description: ''
+  /api/v1/donations/{donation_id}/confirm/:
+    post:
+      operationId: v1_donations_confirm_create
+      summary: Confirmer manuellement un don en espèces (autorité paroisse)
+      parameters:
+      - in: path
+        name: donation_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - donations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DonationConfirmInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DonationConfirmInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DonationConfirmInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DonationOutput'
+          description: ''
+  /api/v1/donations/campaigns/:
+    get:
+      operationId: v1_donations_campaigns_list
+      summary: Lister les campagnes actives
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - donations
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CampaignOutput'
+          description: ''
+    post:
+      operationId: v1_donations_campaigns_create
+      summary: Créer une campagne de dons (clergé)
+      tags:
+      - donations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CampaignCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CampaignCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignOutput'
+          description: ''
+  /api/v1/donations/donate/:
+    post:
+      operationId: v1_donations_donate_create
+      summary: Faire un don
+      tags:
+      - donations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DonationMakeInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DonationMakeInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DonationMakeInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DonationOutput'
+          description: ''
+  /api/v1/donations/my/:
+    get:
+      operationId: v1_donations_my_list
+      summary: Mes dons
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - donations
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DonationOutput'
           description: ''
   /api/v1/errors/trigger/:
     get:
@@ -2440,6 +3256,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/LiturgicalDate'
           description: ''
+  /api/v1/liturgy/offices/{id}/:
+    get:
+      operationId: v1_liturgy_offices_retrieve
+      summary: Détail d'un office liturgique (clergé uniquement)
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
   /api/v1/liturgy/readings/{id}/:
     get:
       operationId: v1_liturgy_readings_retrieve
@@ -2483,6 +3323,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/LiturgicalDate'
           description: ''
+  /api/v1/liturgy/v1/complies/:
+    get:
+      operationId: v1_liturgy_v1_complies_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
   /api/v1/liturgy/v1/informations/:
     get:
       operationId: v1_liturgy_v1_informations_retrieve
@@ -2518,6 +3388,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiturgicalDate'
+          description: ''
+  /api/v1/liturgy/v1/laudes/:
+    get:
+      operationId: v1_liturgy_v1_laudes_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
           description: ''
   /api/v1/liturgy/v1/lectures/:
     get:
@@ -2587,6 +3487,400 @@ paths:
                 items:
                   $ref: '#/components/schemas/Reading'
           description: ''
+  /api/v1/liturgy/v1/none/:
+    get:
+      operationId: v1_liturgy_v1_none_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
+  /api/v1/liturgy/v1/sexte/:
+    get:
+      operationId: v1_liturgy_v1_sexte_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
+  /api/v1/liturgy/v1/tierce/:
+    get:
+      operationId: v1_liturgy_v1_tierce_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
+  /api/v1/liturgy/v1/vepres/:
+    get:
+      operationId: v1_liturgy_v1_vepres_retrieve
+      description: Base for the 7 Liturgy of the Hours endpoints (clergy-only).
+      summary: Office de la Liturgie des Heures (clergé uniquement)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: 'Date YYYY-MM-DD (défaut: aujourd''hui)'
+      - in: query
+        name: zone
+        schema:
+          type: string
+        description: 'Zone liturgique (défaut: afrique)'
+      tags:
+      - Liturgy
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Office'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/accept/:
+    post:
+      operationId: v1_mass_intentions_accept_create
+      summary: Accepter une intention de messe
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/celebrate/:
+    post:
+      operationId: v1_mass_intentions_celebrate_create
+      description: 'Clôt le cycle et émet le reçu numérique. `celebration_date` est
+        facultative : à défaut, la date confirmée ou proposée est retenue, sinon la
+        date du jour.'
+      summary: Marquer une intention comme célébrée
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassIntentionCelebrateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MassIntentionCelebrateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MassIntentionCelebrateInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/confirm-date/:
+    post:
+      operationId: v1_mass_intentions_confirm_date_create
+      description: Confirme la date proposée par la paroisse. Réservé au fidèle demandeur
+        ou à un membre du clergé ayant autorité sur la paroisse de l'intention. L'intention
+        doit être au statut `date_proposed`.
+      summary: Confirmer la date de célébration proposée
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/decline/:
+    post:
+      operationId: v1_mass_intentions_decline_create
+      summary: Refuser une intention de messe
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassIntentionDeclineInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MassIntentionDeclineInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MassIntentionDeclineInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/propose-date/:
+    post:
+      operationId: v1_mass_intentions_propose_date_create
+      summary: Proposer une date de célébration
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassIntentionProposeDateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MassIntentionProposeDateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MassIntentionProposeDateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/{intention_id}/receipt/:
+    get:
+      operationId: v1_mass_intentions_receipt_retrieve
+      description: Renvoie l'URL du reçu PDF. Disponible uniquement pour une intention
+        au statut `celebrated`.
+      summary: Récupérer le reçu numérique d'une intention célébrée
+      parameters:
+      - in: path
+        name: intention_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - mass-intentions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionReceiptOutput'
+          description: ''
+  /api/v1/mass-intentions/my/:
+    get:
+      operationId: v1_mass_intentions_my_list
+      summary: Mes intentions de messe (fidèle)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - mass-intentions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/parish/:
+    get:
+      operationId: v1_mass_intentions_parish_list
+      summary: Intentions de la paroisse (prêtre)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - mass-intentions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
+  /api/v1/mass-intentions/submit/:
+    post:
+      operationId: v1_mass_intentions_submit_create
+      summary: Soumettre une intention de messe
+      tags:
+      - mass-intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassIntentionSubmitInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MassIntentionSubmitInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MassIntentionSubmitInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassIntentionOutput'
+          description: ''
   /api/v1/me/:
     get:
       operationId: v1_me_retrieve
@@ -2653,6 +3947,36 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CapaciteOutput'
+          description: ''
+  /api/v1/me/confession-bookings/:
+    get:
+      operationId: me_confession_bookings_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes rendez-vous de confession
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookingOutputList'
           description: ''
   /api/v1/me/declaration/:
     get:
@@ -2849,6 +4173,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WsTicketOutput'
+          description: ''
+  /api/v1/messaging/availability/:
+    get:
+      operationId: v1_messaging_availability_retrieve
+      summary: Mes disponibilités (prêtre joignable)
+      tags:
+      - messaging
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
+          description: ''
+    put:
+      operationId: v1_messaging_availability_update
+      summary: Modifier mes disponibilités (nouveaux échanges, absence, plages de
+        réponse)
+      tags:
+      - messaging
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Availability'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Availability'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Availability'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Availability'
           description: ''
   /api/v1/messaging/blocks/:
     get:
@@ -3498,87 +4869,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationOutput'
           description: ''
-  /api/v1/messaging/priest-profile/:
-    post:
-      operationId: v1_messaging_priest_profile_create
-      summary: Créer un profil prêtre
-      tags:
-      - messaging
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PriestProfileCreateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PriestProfileCreateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PriestProfileCreateInput'
-        required: true
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PriestProfileOutput'
-          description: ''
-  /api/v1/messaging/priest-profile/cgu/:
-    post:
-      operationId: v1_messaging_priest_profile_cgu_create
-      summary: Accepter les CGU prêtre
-      tags:
-      - messaging
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PriestProfileOutput'
-          description: ''
-  /api/v1/messaging/priest-profile/me/:
-    patch:
-      operationId: v1_messaging_priest_profile_me_partial_update
-      summary: Mettre à jour le profil prêtre
-      tags:
-      - messaging
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedPriestProfileUpdateInput'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedPriestProfileUpdateInput'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedPriestProfileUpdateInput'
-      security:
-      - keycloakBearer: []
-      - legacyJwt: []
-      - session: []
-      - sessionHeader: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PriestProfileOutput'
-          description: ''
   /api/v1/messaging/priests/:
     get:
       operationId: v1_messaging_priests_list
-      summary: Lister les prêtres disponibles
+      summary: Prêtres joignables de ma paroisse suivie et des aumôneries du diocèse
       tags:
       - messaging
       security:
@@ -3593,7 +4887,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PriestProfileOutput'
+                  $ref: '#/components/schemas/ReachablePriestOutput'
           description: ''
   /api/v1/news/:
     get:
@@ -4702,6 +5996,200 @@ paths:
               schema:
                 $ref: '#/components/schemas/NodeWeekOutput'
           description: ''
+  /api/v1/rag/query/:
+    post:
+      operationId: v1_rag_query_create
+      summary: Ask a question to the AI assistant using RAG (Retrieval-Augmented Generation)
+      tags:
+      - RAG
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RagQuery'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RagQuery'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RagQuery'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RagResponse'
+          description: ''
+  /api/v1/rosary/community/:
+    get:
+      operationId: v1_rosary_community_list
+      summary: Liste des chapelets communautaires actifs
+      tags:
+      - Chapelet
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommunityRosaryOutput'
+          description: ''
+    post:
+      operationId: v1_rosary_community_create
+      summary: Initier un chapelet communautaire (clergé seulement)
+      tags:
+      - Chapelet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommunityRosaryInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CommunityRosaryInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CommunityRosaryInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityRosaryOutput'
+          description: ''
+  /api/v1/rosary/community/{rosary_id}/end/:
+    post:
+      operationId: v1_rosary_community_end_create
+      summary: Terminer un chapelet communautaire (initiateur seulement)
+      parameters:
+      - in: path
+        name: rosary_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Chapelet
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityRosaryOutput'
+          description: ''
+  /api/v1/rosary/community/{rosary_id}/intentions/:
+    get:
+      operationId: v1_rosary_community_intentions_retrieve
+      description: Permet à un participant qui rejoint en cours de chapelet de retrouver
+        les intentions déposées avant sa connexion — le WebSocket ne diffuse que celles
+        émises depuis l'ouverture de son socket.
+      summary: Intentions déjà déposées dans une session (participants et initiateur)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 50, max 200)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage de pagination
+      - in: path
+        name: rosary_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Chapelet
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedIntentionOutputList'
+          description: ''
+    post:
+      operationId: v1_rosary_community_intentions_create
+      summary: Soumettre une intention de prière
+      parameters:
+      - in: path
+        name: rosary_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Chapelet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntentionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IntentionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IntentionInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          description: No response body
+  /api/v1/rosary/community/{rosary_id}/join/:
+    post:
+      operationId: v1_rosary_community_join_create
+      summary: Rejoindre un chapelet communautaire
+      parameters:
+      - in: path
+        name: rosary_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Chapelet
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommunityRosaryOutput'
+          description: ''
   /api/v1/rosary/day/{day}/:
     get:
       operationId: v1_rosary_day_retrieve
@@ -4900,6 +6388,183 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TodayRosaryOutput'
+          description: ''
+  /api/v1/spiritual/reflections/:
+    get:
+      operationId: v1_spiritual_reflections_retrieve
+      summary: Historique des réflexions visibles (scopé aux appartenances)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 20)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage pagination
+      tags:
+      - spiritual
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReflectionOutputList'
+          description: ''
+    post:
+      operationId: v1_spiritual_reflections_create
+      summary: Publier / mettre à jour ma réflexion (clergé, scopée)
+      tags:
+      - spiritual
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReflectionUpsertInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReflectionUpsertInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReflectionUpsertInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReflectionOutput'
+          description: ''
+  /api/v1/spiritual/reflections/{reflection_id}/:
+    get:
+      operationId: v1_spiritual_reflections_retrieve_2
+      summary: Détail d'une réflexion
+      parameters:
+      - in: path
+        name: reflection_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - spiritual
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReflectionOutput'
+          description: ''
+    patch:
+      operationId: v1_spiritual_reflections_partial_update
+      description: 'Édition partielle : seuls les champs fournis changent. L''auteur
+        et la date ne sont pas modifiables. Déplacer la portée exige l''autorité sur
+        la nouvelle portée.'
+      summary: Modifier une réflexion (auteur ou autorité sur sa portée)
+      parameters:
+      - in: path
+        name: reflection_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - spiritual
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedReflectionUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedReflectionUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedReflectionUpdateInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReflectionOutput'
+          description: ''
+    delete:
+      operationId: v1_spiritual_reflections_destroy
+      summary: Supprimer une réflexion (auteur ou autorité sur sa portée)
+      parameters:
+      - in: path
+        name: reflection_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - spiritual
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/spiritual/reflections/my-today/:
+    get:
+      operationId: v1_spiritual_reflections_my_today_retrieve
+      summary: Ma réflexion du jour (auteur connecté)
+      tags:
+      - spiritual
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReflectionOutput'
+          description: ''
+  /api/v1/spiritual/reflections/today/:
+    get:
+      operationId: v1_spiritual_reflections_today_retrieve
+      summary: Réflexion pastorale du jour (scopée aux appartenances de l'utilisateur)
+      tags:
+      - spiritual
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReflectionOutput'
           description: ''
   /api/v1/staff/agenda/:
     get:
@@ -5110,6 +6775,181 @@ paths:
             text/csv:
               schema:
                 type: string
+          description: ''
+  /api/v1/staff/confessions/bookings/{booking_id}/attendance/:
+    post:
+      operationId: v1_staff_confessions_bookings_attendance_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Marquer le rendez-vous honoré ou absent
+      parameters:
+      - in: path
+        name: booking_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - confessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttendanceInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AttendanceInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AttendanceInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/staff/confessions/planning/:
+    get:
+      operationId: v1_staff_confessions_planning_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Planning sur 4 semaines (nominatif pour le prêtre, initiales pour le
+        secrétariat)
+      parameters:
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+        description: 'Début de la fenêtre de 4 semaines (défaut : aujourd''hui)'
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanningSlot'
+          description: ''
+  /api/v1/staff/confessions/rules/:
+    get:
+      operationId: staff_confessions_rules_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes règles de créneaux
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RuleOutput'
+          description: ''
+    post:
+      operationId: v1_staff_confessions_rules_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Créer une règle récurrente (génère 4 semaines de créneaux)
+      tags:
+      - confessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RuleCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RuleCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleOutput'
+          description: ''
+  /api/v1/staff/confessions/rules/{rule_id}/:
+    delete:
+      operationId: v1_staff_confessions_rules_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Désactiver une règle (les réservations restent)
+      parameters:
+      - in: path
+        name: rule_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - confessions
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/staff/confessions/slots/{slot_id}/cancel/:
+    post:
+      operationId: v1_staff_confessions_slots_cancel_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Annuler un de mes créneaux (le réservant est prévenu)
+      parameters:
+      - in: path
+        name: slot_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - confessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SlotCancelInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SlotCancelInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SlotCancelInput'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotOutput'
           description: ''
   /api/v1/staff/documents/:
     get:
@@ -5708,6 +7548,546 @@ paths:
               schema:
                 $ref: '#/components/schemas/StaffArticleOutput'
           description: ''
+  /api/v1/transfers/:
+    post:
+      operationId: v1_transfers_create
+      summary: Soumettre une demande de transfert paroissial
+      tags:
+      - transfers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransferCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOutput'
+          description: ''
+  /api/v1/transfers/{transfer_id}/acknowledge/:
+    post:
+      operationId: v1_transfers_acknowledge_create
+      summary: Accuser réception et finaliser un transfert (admin destination)
+      parameters:
+      - in: path
+        name: transfer_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - transfers
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOutput'
+          description: ''
+  /api/v1/transfers/{transfer_id}/approve/:
+    post:
+      operationId: v1_transfers_approve_create
+      summary: Approuver un transfert (admin paroisse d'origine)
+      parameters:
+      - in: path
+        name: transfer_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - transfers
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOutput'
+          description: ''
+  /api/v1/transfers/{transfer_id}/reject/:
+    post:
+      operationId: v1_transfers_reject_create
+      summary: Rejeter un transfert (admin paroisse d'origine)
+      parameters:
+      - in: path
+        name: transfer_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - transfers
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRejectInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransferRejectInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransferRejectInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOutput'
+          description: ''
+  /api/v1/transfers/admin/:
+    get:
+      operationId: v1_transfers_admin_retrieve
+      summary: Transferts des paroisses administrées (paginé)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - transfers
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTransferOutputList'
+          description: ''
+  /api/v1/transfers/my-request/:
+    get:
+      operationId: v1_transfers_my_request_retrieve
+      summary: Ma demande de transfert courante (404 si aucune)
+      tags:
+      - transfers
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferOutput'
+          description: ''
+  /api/v1/tv/categories/:
+    get:
+      operationId: v1_tv_categories_list
+      description: 'GET : PUBLIC (catalogue ouvert). POST : Super Admin.'
+      summary: List TV categories (public read)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+          description: ''
+    post:
+      operationId: v1_tv_categories_create
+      description: 'GET : PUBLIC (catalogue ouvert). POST : Super Admin.'
+      summary: Create TV category (admin)
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Category'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Category'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+        '400':
+          description: Validation error
+  /api/v1/tv/categories/{slug}/:
+    get:
+      operationId: v1_tv_categories_retrieve
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Get TV category (public read)
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+        '404':
+          description: Not found
+    put:
+      operationId: v1_tv_categories_update
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Update TV category (admin)
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Category'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Category'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    patch:
+      operationId: v1_tv_categories_partial_update
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Partial update TV category (admin)
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCategory'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+    delete:
+      operationId: v1_tv_categories_destroy
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Delete TV category (admin)
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          description: Not found
+  /api/v1/tv/videos/:
+    get:
+      operationId: v1_tv_videos_list
+      description: 'GET : PUBLIC (catalogue ouvert). POST : Super Admin.'
+      summary: List TV videos (public read)
+      parameters:
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Filter by category slug
+      - in: query
+        name: is_live
+        schema:
+          type: string
+          enum:
+          - 'false'
+          - 'true'
+      - in: query
+        name: is_pinned_live
+        schema:
+          type: string
+          enum:
+          - 'false'
+          - 'true'
+      - in: query
+        name: limit
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        schema:
+          type: integer
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VideoList'
+          description: ''
+    post:
+      operationId: v1_tv_videos_create
+      description: 'GET : PUBLIC (catalogue ouvert). POST : Super Admin.'
+      summary: Create TV video (admin)
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoList'
+          description: ''
+  /api/v1/tv/videos/{video_id}/:
+    get:
+      operationId: v1_tv_videos_retrieve
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Get TV video (public read)
+      parameters:
+      - in: path
+        name: video_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoList'
+          description: ''
+        '404':
+          description: Not found
+    put:
+      operationId: v1_tv_videos_update
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Update TV video (admin)
+      parameters:
+      - in: path
+        name: video_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VideoCreateUpdate'
+        required: true
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoList'
+          description: ''
+    patch:
+      operationId: v1_tv_videos_partial_update
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Partial update TV video (admin)
+      parameters:
+      - in: path
+        name: video_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - TV
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVideoCreateUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVideoCreateUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVideoCreateUpdate'
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoList'
+          description: ''
+    delete:
+      operationId: v1_tv_videos_destroy
+      description: 'GET : PUBLIC (catalogue ouvert). PUT/PATCH/DELETE : Super Admin.'
+      summary: Delete TV video (admin)
+      parameters:
+      - in: path
+        name: video_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - TV
+      security:
+      - keycloakBearer: []
+      - legacyJwt: []
+      - session: []
+      - sessionHeader: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          description: Not found
   /api/v1/users/:
     get:
       operationId: v1_users_retrieve
@@ -7238,6 +9618,13 @@ components:
         * `active` - Active
         * `terminee` - Terminée
         * `annulee` - Annulée
+    AttendanceInput:
+      type: object
+      properties:
+        attended:
+          type: boolean
+      required:
+      - attended
     AuditEventOutput:
       type: object
       properties:
@@ -7323,6 +9710,25 @@ components:
       - offset
       - previous
       - results
+    Availability:
+      type: object
+      properties:
+        accepts_new_conversations:
+          type: boolean
+          title: Accepte de nouveaux échanges
+        absent_until:
+          type: string
+          format: date
+          nullable: true
+          title: Absent jusqu'au
+        reply_windows:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        note:
+          type: string
+          maxLength: 200
     BibleImportInput:
       type: object
       properties:
@@ -7436,6 +9842,144 @@ components:
       - order
       - slug
       - testament
+    BookingCreateInput:
+      type: object
+      properties:
+        slot_id:
+          type: integer
+      required:
+      - slot_id
+    BookingOutput:
+      type: object
+      description: 'Vue du fidèle : son rendez-vous. Aucun champ de contenu (RG-08).'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/BookingOutputStatusEnum'
+        slot:
+          $ref: '#/components/schemas/SlotOutput'
+        cancel_message:
+          type: string
+          maxLength: 300
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        can_cancel:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - can_cancel
+      - id
+      - slot
+    BookingOutputStatusEnum:
+      enum:
+      - reservee
+      - annulee_fidele
+      - annulee_pretre
+      - honoree
+      - absent
+      type: string
+      description: |-
+        * `reservee` - Réservée
+        * `annulee_fidele` - Annulée par le fidèle
+        * `annulee_pretre` - Annulée par le prêtre
+        * `honoree` - Honorée
+        * `absent` - Absent
+    CampaignCreateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        donation_type:
+          $ref: '#/components/schemas/DonationTypeEnum'
+        target_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,0})?$
+          nullable: true
+        scope_type:
+          type: string
+          default: global
+        scope_id:
+          type: integer
+          nullable: true
+        parish_id:
+          type: integer
+          nullable: true
+        church_id:
+          type: integer
+          nullable: true
+      required:
+      - donation_type
+      - title
+    CampaignOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        donation_type:
+          $ref: '#/components/schemas/DonationTypeEnum'
+        target_amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,12}(?:\.\d{0,0})?$
+          nullable: true
+        currency:
+          type: string
+          maxLength: 3
+        scope_type:
+          type: string
+          maxLength: 20
+        scope_id:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          nullable: true
+        parish:
+          type: integer
+          nullable: true
+        church:
+          type: integer
+          nullable: true
+        is_active:
+          type: boolean
+        starts_at:
+          type: string
+          format: date-time
+        ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_by_email:
+          type: string
+          format: email
+          readOnly: true
+          nullable: true
+        total_donations:
+          type: integer
+          readOnly: true
+      required:
+      - created_by_email
+      - donation_type
+      - id
+      - title
+      - total_donations
     CapabilityOverride:
       type: object
       properties:
@@ -7484,6 +10028,39 @@ components:
       description: |-
         * `one` - Un seul titulaire
         * `many` - Plusieurs titulaires
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        is_clergy_only:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - slug
+      - updated_at
     CategoryOutput:
       type: object
       properties:
@@ -7806,6 +10383,43 @@ components:
       - reviewed_at
       - status
       - submitted_at
+    CommunityRosaryInput:
+      type: object
+      properties:
+        mystery_group_id:
+          type: integer
+          nullable: true
+        intention:
+          type: string
+          default: ''
+    CommunityRosaryOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        initiator_email:
+          type: string
+          readOnly: true
+        mystery_group_name:
+          type: string
+          readOnly: true
+        intention:
+          type: string
+        status:
+          type: string
+        current_decade:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - current_decade
+      - id
+      - initiator_email
+      - intention
+      - mystery_group_name
+      - started_at
+      - status
     ContentFormatEnum:
       enum:
       - text
@@ -7861,10 +10475,16 @@ components:
         unread_count:
           type: integer
           default: 0
+        confession_notice:
+          type: string
+          readOnly: true
+          description: 'Bandeau permanent : pas de confession par message (EF-PRE-05,
+            RG-08)'
         created_at:
           type: string
           format: date-time
       required:
+      - confession_notice
       - id
       - last_message
       - participant_a
@@ -8107,6 +10727,109 @@ components:
         * `religious_marriage` - Attestation de mariage religieux
         * `godparent` - Attestation parrain / marraine
         * `other` - Autre document
+    DonationConfirmInput:
+      type: object
+      properties:
+        payment_reference:
+          type: string
+          default: ''
+          maxLength: 200
+    DonationMakeInput:
+      type: object
+      properties:
+        campaign_id:
+          type: integer
+          nullable: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,0})?$
+        payment_provider:
+          $ref: '#/components/schemas/PaymentProviderEnum'
+        is_anonymous:
+          type: boolean
+          default: false
+        note:
+          type: string
+          default: ''
+        church_id:
+          type: integer
+          nullable: true
+        parish_id:
+          type: integer
+          nullable: true
+        anonymous_donor_name:
+          type: string
+          default: ''
+          maxLength: 120
+        anonymous_donor_phone:
+          type: string
+          default: ''
+          maxLength: 30
+      required:
+      - amount
+      - payment_provider
+    DonationOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        campaign_title:
+          type: string
+          readOnly: true
+          nullable: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,10}(?:\.\d{0,0})?$
+        currency:
+          type: string
+          maxLength: 3
+        payment_provider:
+          $ref: '#/components/schemas/PaymentProviderEnum'
+        status:
+          $ref: '#/components/schemas/DonationOutputStatusEnum'
+        is_anonymous:
+          type: boolean
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - campaign_title
+      - id
+      - payment_provider
+    DonationOutputStatusEnum:
+      enum:
+      - pending
+      - confirmed
+      - failed
+      - canceled
+      - refunded
+      type: string
+      description: |-
+        * `pending` - En attente
+        * `confirmed` - Confirmé
+        * `failed` - Échoué
+        * `canceled` - Annulé
+        * `refunded` - Remboursé
+    DonationTypeEnum:
+      enum:
+      - sunday_collection
+      - church_tithe
+      - mass_intention_offering
+      - special_project
+      - free_donation
+      type: string
+      description: |-
+        * `sunday_collection` - Quête du dimanche
+        * `church_tithe` - Denier de l'Église
+        * `mass_intention_offering` - Offrande de messe
+        * `special_project` - Projet spécial
+        * `free_donation` - Don libre
     ErrorResponse:
       type: object
       properties:
@@ -8309,6 +11032,44 @@ components:
       - mysteries
       - name
       - slug
+    HomilieNoteInput:
+      type: object
+      properties:
+        passage_start_id:
+          type: integer
+        passage_end_id:
+          type: integer
+          nullable: true
+        content:
+          type: string
+      required:
+      - content
+      - passage_start_id
+    HomilieNoteOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        passage_start_id:
+          type: integer
+        passage_end_id:
+          type: integer
+          nullable: true
+        content:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - content
+      - created_at
+      - id
+      - passage_end_id
+      - passage_start_id
+      - updated_at
     ImportInput:
       type: object
       properties:
@@ -8375,6 +11136,201 @@ components:
           type: string
       required:
       - file_id
+    IntentionInput:
+      type: object
+      properties:
+        text:
+          type: string
+      required:
+      - text
+    IntentionOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        text:
+          type: string
+        submitted_by:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created_at
+      - id
+      - submitted_by
+      - text
+    IntentionTypeEnum:
+      enum:
+      - for_deceased
+      - for_living
+      - for_occasion
+      - for_community
+      type: string
+      description: |-
+        * `for_deceased` - Pour un défunt
+        * `for_living` - Pour un vivant
+        * `for_occasion` - Pour une occasion
+        * `for_community` - Pour la communauté
+    InvitationAcceptInput:
+      type: object
+      properties:
+        token:
+          type: string
+          format: uuid
+      required:
+      - token
+    InvitationCreateInput:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        pastoral_role:
+          $ref: '#/components/schemas/PastoralRoleEnum'
+        diocese_id:
+          type: integer
+          nullable: true
+        parish_id:
+          type: integer
+          nullable: true
+          description: Paroisse cible (prêtre/diacre).
+        church_id:
+          type: integer
+          nullable: true
+          description: Église cible (diacre).
+      required:
+      - email
+      - first_name
+      - last_name
+      - pastoral_role
+    InvitationOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        token:
+          type: string
+          format: uuid
+          readOnly: true
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        first_name:
+          type: string
+          title: Prénom
+          maxLength: 150
+        last_name:
+          type: string
+          title: Nom
+          maxLength: 150
+        pastoral_role:
+          type: string
+          title: Rôle pastoral
+          maxLength: 20
+        diocese_name:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/InvitationOutputStatusEnum'
+          title: Statut
+        status_label:
+          type: string
+          readOnly: true
+        created_by_name:
+          type: string
+          nullable: true
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          title: Expire le
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created_by_name
+      - diocese_name
+      - email
+      - expires_at
+      - first_name
+      - id
+      - last_name
+      - pastoral_role
+      - status_label
+      - token
+    InvitationOutputStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - revoked
+      - expired
+      type: string
+      description: |-
+        * `pending` - En attente
+        * `accepted` - Acceptée
+        * `revoked` - Révoquée
+        * `expired` - Expirée
+    LectioDivinaInput:
+      type: object
+      properties:
+        passage_id:
+          type: integer
+          nullable: true
+        lectio:
+          type: string
+          default: ''
+        meditatio:
+          type: string
+          default: ''
+        oratio:
+          type: string
+          default: ''
+        contemplatio:
+          type: string
+          default: ''
+    LectioDivinaOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        passage_id:
+          type: integer
+          nullable: true
+        session_date:
+          type: string
+          format: date
+        lectio:
+          type: string
+        meditatio:
+          type: string
+        oratio:
+          type: string
+        contemplatio:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - contemplatio
+      - id
+      - lectio
+      - meditatio
+      - oratio
+      - passage_id
+      - session_date
+      - updated_at
     LiturgicalDate:
       type: object
       description: |-
@@ -8422,6 +11378,143 @@ components:
       - readings
       - resource
       - zone
+    MassIntentionCelebrateInput:
+      type: object
+      description: |-
+        Corps optionnel : le prêtre peut acter la date réelle de célébration.
+
+        Tout est facultatif — un ``POST {}`` reste valide et laisse le service
+        retomber sur la date confirmée/proposée, puis sur aujourd'hui.
+      properties:
+        celebration_date:
+          type: string
+          format: date
+          nullable: true
+    MassIntentionDeclineInput:
+      type: object
+      properties:
+        notes:
+          type: string
+          default: ''
+    MassIntentionOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        reference:
+          type: string
+          description: Référence publique citée sur le reçu numérique.
+          maxLength: 32
+        intention_type:
+          $ref: '#/components/schemas/IntentionTypeEnum'
+        intention_text:
+          type: string
+        status:
+          $ref: '#/components/schemas/MassIntentionOutputStatusEnum'
+        requestor_email:
+          type: string
+          format: email
+          readOnly: true
+        pretre_email:
+          type: string
+          format: email
+          readOnly: true
+          nullable: true
+        parish_name:
+          type: string
+          readOnly: true
+          nullable: true
+        proposed_date:
+          type: string
+          format: date
+          nullable: true
+        celebration_date:
+          type: string
+          format: date
+          nullable: true
+        receipt_url:
+          type: string
+          nullable: true
+          description: |-
+            URL du reçu, ou ``None`` tant qu'il n'y en a pas.
+
+            Un fichier dont l'upload n'est pas terminé (``is_valid`` faux) n'est
+            jamais exposé : mieux vaut pas de lien qu'un lien mort.
+          readOnly: true
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - intention_text
+      - intention_type
+      - parish_name
+      - pretre_email
+      - receipt_url
+      - requestor_email
+      - updated_at
+    MassIntentionOutputStatusEnum:
+      enum:
+      - pending
+      - accepted
+      - date_proposed
+      - confirmed
+      - celebrated
+      - declined
+      type: string
+      description: |-
+        * `pending` - En attente
+        * `accepted` - Acceptée
+        * `date_proposed` - Date proposée
+        * `confirmed` - Confirmée
+        * `celebrated` - Célébrée
+        * `declined` - Refusée
+    MassIntentionProposeDateInput:
+      type: object
+      properties:
+        proposed_date:
+          type: string
+          format: date
+      required:
+      - proposed_date
+    MassIntentionReceiptOutput:
+      type: object
+      description: Charge utile de l'endpoint de reçu — volontairement minimale.
+      properties:
+        reference:
+          type: string
+        receipt_url:
+          type: string
+          nullable: true
+        celebration_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - celebration_date
+      - receipt_url
+      - reference
+    MassIntentionSubmitInput:
+      type: object
+      properties:
+        intention_type:
+          $ref: '#/components/schemas/IntentionTypeEnum'
+        intention_text:
+          type: string
+          minLength: 10
+        parish_id:
+          type: integer
+          nullable: true
+      required:
+      - intention_text
+      - intention_type
     MembershipCreateInput:
       type: object
       properties:
@@ -9273,6 +12366,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedBookingOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedChurchOutputList:
       type: object
       properties:
@@ -9344,6 +12463,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedIntentionOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntentionOutput'
       required:
       - count
       - limit
@@ -9481,6 +12626,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedReflectionOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReflectionOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedRegistrationOutputList:
       type: object
       properties:
@@ -9533,6 +12704,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedSlotOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SlotOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedStaffArticleOutputList:
       type: object
       properties:
@@ -9552,6 +12749,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/StaffArticleOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedTransferOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferOutput'
       required:
       - count
       - limit
@@ -9632,6 +12855,20 @@ components:
           nullable: true
       required:
       - node
+    PastoralRoleEnum:
+      enum:
+      - pretre
+      - diacre
+      - religieux
+      - eveque
+      - archeveque
+      type: string
+      description: |-
+        * `pretre` - pretre
+        * `diacre` - diacre
+        * `religieux` - religieux
+        * `eveque` - eveque
+        * `archeveque` - archeveque
     PatchedArticleUpdateInput:
       type: object
       properties:
@@ -9665,6 +12902,33 @@ components:
           format: date
           nullable: true
           description: 'Terminer : date de fin (défaut : aujourd''hui)'
+    PatchedCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        slug:
+          type: string
+          readOnly: true
+          pattern: ^[-a-zA-Z0-9_]+$
+        order:
+          type: integer
+          maximum: 32767
+          minimum: 0
+        is_clergy_only:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedChurchUpdateInput:
       type: object
       properties:
@@ -9720,6 +12984,16 @@ components:
           type: integer
           minimum: 1
           nullable: true
+    PatchedHomilieNoteInput:
+      type: object
+      properties:
+        passage_start_id:
+          type: integer
+        passage_end_id:
+          type: integer
+          nullable: true
+        content:
+          type: string
     PatchedInput:
       type: object
       properties:
@@ -9824,18 +13098,6 @@ components:
           nullable: true
         is_active:
           type: boolean
-    PatchedPriestProfileUpdateInput:
-      type: object
-      properties:
-        accepts_pastoral_chat:
-          type: boolean
-        ordination_year:
-          type: integer
-          maximum: 2100
-          minimum: 1900
-        bio:
-          type: string
-          maxLength: 1000
     PatchedProvinceUpdateInput:
       type: object
       properties:
@@ -9845,6 +13107,57 @@ components:
         code:
           type: string
           maxLength: 10
+    PatchedReflectionUpdateInput:
+      type: object
+      description: |-
+        Édition partielle : tout est optionnel, seuls les champs fournis changent.
+        ``author`` et ``reflection_date`` sont volontairement absents — ils forment
+        l'identité de la réflexion (contrainte unique auteur+jour).
+      properties:
+        content:
+          type: string
+        title:
+          type: string
+        scope_type:
+          $ref: '#/components/schemas/ScopeTypeEnum'
+        scope_parish_id:
+          type: integer
+          nullable: true
+        scope_diocese_id:
+          type: integer
+          nullable: true
+        scope_church_id:
+          type: integer
+          nullable: true
+    PatchedVideoCreateUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        youtube_url:
+          type: string
+          format: uri
+          maxLength: 200
+        category_slug:
+          type: string
+          writeOnly: true
+        is_live:
+          type: boolean
+        is_pinned_live:
+          type: boolean
+    PaymentProviderEnum:
+      enum:
+      - wave
+      - orange_money
+      - free_money
+      - cash
+      type: string
+      description: |-
+        * `wave` - Wave
+        * `orange_money` - Orange Money
+        * `free_money` - Free Money
+        * `cash` - Espèces
     PendingClergyItem:
       type: object
       properties:
@@ -9987,6 +13300,23 @@ components:
       description: |-
         * `secretariat` - Au secrétariat de la paroisse du sacrement
         * `transfer_to_followed_parish` - Transmis à ma paroisse
+    PlaceBrief:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+        node_id:
+          type: string
+          format: uuid
+      required:
+      - address
+      - id
+      - name
+      - node_id
     PlaceCreateInput:
       type: object
       properties:
@@ -10080,6 +13410,48 @@ components:
       - id
       - name
       - node_id
+    PlanningSlot:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        starts_at:
+          type: string
+          format: date-time
+          title: Début
+        ends_at:
+          type: string
+          format: date-time
+          title: Fin
+        status:
+          $ref: '#/components/schemas/Status993Enum'
+        place:
+          $ref: '#/components/schemas/PlaceBrief'
+        priest_id:
+          type: string
+          format: uuid
+          readOnly: true
+        priest_name:
+          type: string
+          readOnly: true
+        is_mine:
+          type: boolean
+          readOnly: true
+        booking:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+      required:
+      - booking
+      - ends_at
+      - id
+      - is_mine
+      - place
+      - priest_id
+      - priest_name
+      - starts_at
     PlatformEnum:
       enum:
       - ios
@@ -10111,52 +13483,6 @@ components:
       - text
       - type
       - type_display
-    PriestProfileCreateInput:
-      type: object
-      properties:
-        user_id:
-          type: string
-          format: uuid
-      required:
-      - user_id
-    PriestProfileOutput:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        user_id:
-          type: string
-          format: uuid
-          readOnly: true
-        full_name:
-          type: string
-          readOnly: true
-        email:
-          type: string
-          format: email
-          readOnly: true
-        accepts_pastoral_chat:
-          type: boolean
-        cgu_accepted_at:
-          type: string
-          format: date-time
-          nullable: true
-        ordination_year:
-          type: integer
-          maximum: 32767
-          minimum: 0
-          nullable: true
-        bio:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-      required:
-      - email
-      - full_name
-      - id
-      - user_id
     ProcessorOutput:
       type: object
       description: 'Vue de la paroisse : identité complète, registre, lieu de retrait.'
@@ -10415,6 +13741,57 @@ components:
       - status_label
       - target_node
       - updated_at
+    RagQuery:
+      type: object
+      properties:
+        query:
+          type: string
+          description: The question or prompt to ask the assistant (e.g., 'Quel mystère
+            aujourd'hui et as-tu un prêtre dispo à Mbour ?')
+          maxLength: 1000
+      required:
+      - query
+    RagResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: La réponse (extractive par défaut, ou générée si activé).
+        context:
+          type: string
+          description: Le contexte brut récupéré en base (peut être vide).
+        intent:
+          type: object
+          additionalProperties: {}
+          description: Métadonnée de routage (intent/domains/entities).
+      required:
+      - answer
+      - context
+      - intent
+    ReachablePriestOutput:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          readOnly: true
+        nodes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        availability:
+          allOf:
+          - $ref: '#/components/schemas/Availability'
+          nullable: true
+      required:
+      - availability
+      - full_name
+      - nodes
+      - user_id
     ReactInput:
       type: object
       properties:
@@ -10476,6 +13853,45 @@ components:
       - matched_verses
       - text
       - type
+    ReadingPlanInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+      required:
+      - title
+    ReadingPlanOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        is_published:
+          type: boolean
+        is_subscribed:
+          type: boolean
+          default: false
+        author_email:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - author_email
+      - created_at
+      - description
+      - id
+      - is_published
+      - title
     ReasonEnum:
       enum:
       - religious_marriage
@@ -10504,6 +13920,85 @@ components:
         * `parish_clergy` - Clergé de la paroisse
         * `diocese_clergy` - Clergé du diocèse
         * `province_bishops` - Évêques de la province
+    ReflectionOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        content:
+          type: string
+          title: Contenu
+        reflection_date:
+          type: string
+          format: date
+          title: Date de la réflexion
+        scope_type:
+          allOf:
+          - $ref: '#/components/schemas/ScopeTypeEnum'
+          title: Portée
+        scope_parish_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        scope_diocese_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        scope_church_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        author_name:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - author_name
+      - content
+      - id
+      - reflection_date
+      - scope_church_id
+      - scope_diocese_id
+      - scope_parish_id
+      - updated_at
+    ReflectionUpsertInput:
+      type: object
+      properties:
+        content:
+          type: string
+        reflection_date:
+          type: string
+          format: date
+        title:
+          type: string
+          default: ''
+        scope_type:
+          allOf:
+          - $ref: '#/components/schemas/ScopeTypeEnum'
+          default: parish
+        scope_parish_id:
+          type: integer
+          nullable: true
+        scope_diocese_id:
+          type: integer
+          nullable: true
+        scope_church_id:
+          type: integer
+          nullable: true
+      required:
+      - content
     RegisterRefInput:
       type: object
       properties:
@@ -10937,6 +14432,85 @@ components:
         * `4` - Friday
         * `5` - Saturday
         * `6` - Sunday
+    RuleCreateInput:
+      type: object
+      properties:
+        place_id:
+          type: integer
+        weekday:
+          type: integer
+          maximum: 6
+          minimum: 0
+          description: 0 = lundi … 6 = dimanche
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        slot_minutes:
+          type: integer
+          maximum: 60
+          minimum: 5
+          default: 10
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - end_time
+      - place_id
+      - start_time
+      - weekday
+    RuleOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        place:
+          $ref: '#/components/schemas/PlaceBrief'
+        weekday:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          title: Jour (0 = lundi)
+        start_time:
+          type: string
+          format: time
+          title: Début
+        end_time:
+          type: string
+          format: time
+          title: Fin
+        slot_minutes:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          title: Durée d'un créneau (minutes)
+        valid_from:
+          type: string
+          format: date
+          nullable: true
+          title: Valable du
+        valid_to:
+          type: string
+          format: date
+          nullable: true
+          title: Valable jusqu'au
+        is_active:
+          type: boolean
+          title: Active
+      required:
+      - end_time
+      - id
+      - place
+      - start_time
+      - weekday
     Schedule:
       type: object
       properties:
@@ -11056,6 +14630,18 @@ components:
         * `diocese` - Diocèse
         * `parish` - Paroisse
         * `church` - Église
+    ScopeTypeEnum:
+      enum:
+      - global
+      - diocese
+      - parish
+      - church
+      type: string
+      description: |-
+        * `global` - Global (toute l'Église du Sénégal)
+        * `diocese` - Diocèse
+        * `parish` - Paroisse
+        * `church` - Église
     SearchBookGroupOutput:
       type: object
       description: Shape of search results grouped by book.
@@ -11147,6 +14733,46 @@ components:
       - id
       - number
       - text
+    SlotCancelInput:
+      type: object
+      properties:
+        message:
+          type: string
+          default: ''
+          description: Message transmis au réservant
+          maxLength: 300
+    SlotOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        starts_at:
+          type: string
+          format: date-time
+          title: Début
+        ends_at:
+          type: string
+          format: date-time
+          title: Fin
+        status:
+          $ref: '#/components/schemas/Status993Enum'
+        place:
+          $ref: '#/components/schemas/PlaceBrief'
+        priest_id:
+          type: string
+          format: uuid
+          readOnly: true
+        priest_name:
+          type: string
+          readOnly: true
+      required:
+      - ends_at
+      - id
+      - place
+      - priest_id
+      - priest_name
+      - starts_at
     StaffArticleOutput:
       type: object
       properties:
@@ -11259,6 +14885,16 @@ components:
       - median_days_to_collect
       - overdue
       - total
+    Status993Enum:
+      enum:
+      - libre
+      - reserve
+      - bloque
+      type: string
+      description: |-
+        * `libre` - Libre
+        * `reserve` - Réservé
+        * `bloque` - Bloqué
     StatusLog:
       type: object
       properties:
@@ -11332,6 +14968,73 @@ components:
       required:
       - day
       - standalone_prayers
+    TransferCreateInput:
+      type: object
+      properties:
+        destination_parish_id:
+          type: integer
+        reason:
+          type: string
+          default: ''
+      required:
+      - destination_parish_id
+    TransferOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/TransferOutputStatusEnum'
+          title: Statut
+        reason:
+          type: string
+          title: Motif
+        rejection_reason:
+          type: string
+          title: Motif de rejet
+        origin_parish_name:
+          type: string
+          readOnly: true
+          nullable: true
+        destination_parish_name:
+          type: string
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - destination_parish_name
+      - id
+      - origin_parish_name
+      - updated_at
+    TransferOutputStatusEnum:
+      enum:
+      - pending
+      - approved_by_origin
+      - acknowledged_by_destination
+      - completed
+      - rejected
+      type: string
+      description: |-
+        * `pending` - En attente
+        * `approved_by_origin` - Approuvée par la paroisse d'origine
+        * `acknowledged_by_destination` - Accusée par la paroisse de destination
+        * `completed` - Finalisée
+        * `rejected` - Rejetée
+    TransferRejectInput:
+      type: object
+      properties:
+        reason:
+          type: string
+      required:
+      - reason
     TransitionInput:
       type: object
       properties:
@@ -11535,6 +15238,67 @@ components:
       - id
       - number
       - text
+    VideoCreateUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 255
+        youtube_url:
+          type: string
+          format: uri
+          maxLength: 200
+        category_slug:
+          type: string
+          writeOnly: true
+        is_live:
+          type: boolean
+        is_pinned_live:
+          type: boolean
+      required:
+      - category_slug
+      - youtube_url
+    VideoList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 255
+        youtube_url:
+          type: string
+          format: uri
+          maxLength: 200
+        youtube_id:
+          type: string
+          readOnly: true
+        embed_url:
+          type: string
+          readOnly: true
+        category:
+          allOf:
+          - $ref: '#/components/schemas/Category'
+          readOnly: true
+        is_live:
+          type: boolean
+        is_pinned_live:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - category
+      - embed_url
+      - id
+      - updated_at
+      - youtube_id
+      - youtube_url
     WeekdayEnum:
       enum:
       - 0

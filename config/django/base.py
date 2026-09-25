@@ -59,6 +59,14 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.news.tasks.articles_publish_due_task",
         "schedule": crontab(minute="*/5"),
     },
+    "confessions_slots_generate": {
+        "task": "apps.confessions.tasks.confession_slots_generate_task",
+        "schedule": crontab(minute=15, hour=2),
+    },
+    "confessions_reminders": {
+        "task": "apps.confessions.tasks.confession_reminders_task",
+        "schedule": crontab(minute="*/15"),
+    },
     "agenda_event_reminders": {
         "task": "apps.agenda.tasks.event_reminders_task",
         "schedule": crontab(minute=0),
@@ -98,6 +106,7 @@ LOCAL_APPS = [
     "apps.common.apps.CommonConfig",
     "apps.org.apps.OrgConfig",
     "apps.hierarchy.apps.HierarchyConfig",
+    "apps.confessions.apps.ConfessionsConfig",
     "apps.tasks.apps.TasksConfig",
     "apps.api.apps.ApiConfig",
     "apps.authentication.apps.AuthenticationConfig",

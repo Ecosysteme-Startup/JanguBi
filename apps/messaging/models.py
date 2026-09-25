@@ -29,6 +29,24 @@ class PriestProfile(BaseModel):
         return f"PriestProfile({self.user_id})"
 
 
+class MessagingAvailability(BaseModel):
+    """Disponibilité d'un prêtre joignable (EF-PRE-07). Absente = disponible, sans plage déclarée."""
+
+    user = models.OneToOneField(BaseUser, on_delete=models.CASCADE, related_name="messaging_availability")
+    accepts_new_conversations = models.BooleanField(_("accepte de nouveaux échanges"), default=True)
+    absent_until = models.DateField(_("absent jusqu'au"), null=True, blank=True)
+    # Plages indicatives de réponse : [{"weekday": 0-6, "start": "HH:MM", "end": "HH:MM"}]
+    reply_windows = models.JSONField(_("plages de réponse"), default=list, blank=True)
+    note = models.CharField(_("note"), max_length=200, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("Disponibilité (messagerie)")
+        verbose_name_plural = _("Disponibilités (messagerie)")
+
+    def __str__(self) -> str:
+        return f"Disponibilité({self.user_id})"
+
+
 class MessagingCguAcceptance(BaseModel):
     """
     Acceptation GLOBALE (par utilisateur) des CGU de messagerie.

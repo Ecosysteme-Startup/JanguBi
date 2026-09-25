@@ -7,6 +7,7 @@ from apps.messaging.models import (
     MessageAttachment,
     MessageBlock,
     MessageReaction,
+    MessagingAvailability,
     Notification,
     PriestProfile,
 )
@@ -76,6 +77,9 @@ class ConversationOutputSerializer(serializers.ModelSerializer):
     participant_b = ConversationParticipantSerializer(read_only=True)
     unread_count = serializers.IntegerField(default=0)
     last_message = serializers.SerializerMethodField()
+    confession_notice = serializers.SerializerMethodField(
+        help_text="Bandeau permanent : pas de confession par message (EF-PRE-05, RG-08)"
+    )
 
     class Meta:
         model = Conversation
@@ -90,8 +94,14 @@ class ConversationOutputSerializer(serializers.ModelSerializer):
             "cgu_accepted_by_b",
             "scheduled_purge_at",
             "unread_count",
+            "confession_notice",
             "created_at",
         ]
+
+    def get_confession_notice(self, obj) -> str:
+        from apps.messaging.services import CONFESSION_NOTICE
+
+        return CONFESSION_NOTICE
 
     def get_last_message(self, obj):
         msg = obj.messages.filter(deleted_at__isnull=True).order_by("-created_at").first()
@@ -264,3 +274,35 @@ class ClergicalMessageOutputSerializer(serializers.ModelSerializer):
         if obj.individual_recipient:
             return obj.individual_recipient.email
         return None
+
+
+# --- V1 : prêtres joignables et disponibilités (L6a) ---------------------------------------
+
+
+class AvailabilitySerializer(serializers.ModelSerializer):
+    reply_windows = serializers.ListField(child=serializers.DictField(), required=False)
+
+    class Meta:
+        model = MessagingAvailability
+        fields = ["accepts_new_conversations", "absent_until", "reply_windows", "note"]
+
+    def validate_reply_windows(self, value):
+        for window in value:
+            if set(window) != {"weekday", "start", "end"} or not 0 <= int(window["weekday"]) <= 6:
+                raise serializers.ValidationError("Chaque plage : {weekday: 0-6, start: 'HH:MM', end: 'HH:MM'}.")
+        return value
+
+
+class ReachablePriestOutputSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField(source="user.id")
+    full_name = serializers.SerializerMethodField()
+    nodes = serializers.SerializerMethodField()
+    availability = AvailabilitySerializer(allow_null=True)
+
+    def get_full_name(self, row) -> str:
+        profile = getattr(row["user"], "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
+        return name or "Prêtre"
+
+    def get_nodes(self, row) -> list[dict]:
+        return [{"id": str(n.pk), "name": n.name, "type": n.type.code} for n in row["nodes"]]

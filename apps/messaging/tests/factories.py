@@ -21,6 +21,8 @@ from apps.users.tests.factories import BaseUserFactory
 
 
 class PriestProfileFactory(DjangoModelFactory):
+    """Prêtre joignable : profil historique + nomination de vicaire (messagerie.recevoir_fideles)."""
+
     user = factory.SubFactory(BaseUserFactory)
     accepts_pastoral_chat = True
     bio = factory.Sequence(lambda n: f"Bio du pretre {n}")
@@ -28,6 +30,26 @@ class PriestProfileFactory(DjangoModelFactory):
 
     class Meta:
         model = PriestProfile
+
+    @factory.post_generation
+    def reachable(obj, create, extracted, **kwargs):  # noqa: N805 — convention factory_boy
+        if not create or extracted is False:
+            return
+        from apps.hierarchy.tests.factories import make_node, nominate
+
+        parish = make_node("paroisse", f"Paroisse de test {obj.user_id}", _test_diocese())
+        nominate(obj.user, "vicaire_paroissial", parish)
+
+
+def _test_diocese():
+    from apps.hierarchy.models import Node
+    from apps.hierarchy.tests.factories import make_node
+
+    diocese = Node.objects.filter(code="MSG-TEST-DIO").first()
+    if diocese is None:
+        province = make_node("province", "Province de test (messagerie)", code="MSG-TEST-PROV")
+        diocese = make_node("diocese", "Diocèse de test (messagerie)", province, code="MSG-TEST-DIO")
+    return diocese
 
 
 class ConversationFactory(DjangoModelFactory):

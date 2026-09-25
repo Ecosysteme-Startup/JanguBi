@@ -11,13 +11,13 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response
 from apps.core.exceptions import ApplicationError
-from apps.messaging.models import Conversation, Message, MessageBlock
+from apps.hierarchy.authz import HasCapability
+from apps.messaging.models import Conversation, Message, MessageBlock, MessagingAvailability
 from apps.messaging.permissions import (
     HasAcceptedMessagingCgu,
     IsBlockOwner,
     IsMessageSender,
     IsParticipant,
-    IsPriestProfileOwner,
 )
 from apps.messaging.selectors import (
     block_list,
@@ -27,9 +27,10 @@ from apps.messaging.selectors import (
     message_list,
     messaging_cgu_get,
     notification_list,
-    priest_list_available,
+    priests_reachable_for,
 )
 from apps.messaging.serializers import (
+    AvailabilitySerializer,
     BlockCreateInputSerializer,
     BlockOutputSerializer,
     ClergicalMessageOutputSerializer,
@@ -43,14 +44,13 @@ from apps.messaging.serializers import (
     MessagingCguStatusSerializer,
     NotificationOutputSerializer,
     NotificationUnreadCountSerializer,
-    PriestProfileCreateInputSerializer,
-    PriestProfileOutputSerializer,
-    PriestProfileUpdateInputSerializer,
     PushDeviceInputSerializer,
     PushDeviceOutputSerializer,
+    ReachablePriestOutputSerializer,
     ReactInputSerializer,
 )
 from apps.messaging.services import (
+    availability_update,
     block_user,
     conversation_accept_cgu,
     conversation_archive,
@@ -65,71 +65,54 @@ from apps.messaging.services import (
     messaging_cgu_accept,
     notification_mark_all_read,
     notification_mark_read,
-    priest_profile_accept_cgu,
-    priest_profile_create,
-    priest_profile_update,
     push_device_register,
     push_device_unregister,
     unblock_user,
 )
 from apps.users.models import BaseUser
-from apps.users.permissions import IsAnyAdmin
 
 
 def _error(exc: ApplicationError) -> Response:
-    return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+    # Code HTTP porté par l'exception (403 pour un mineur, 400 par défaut) et code métier.
+    return Response({"detail": exc.message, "code": exc.code}, status=exc.status_code)
 
 
 # ---------------------------------------------------------------------------
-# PriestProfile
+# Prêtres joignables et disponibilités (EF-PRE-01, -07)
 # ---------------------------------------------------------------------------
-
-
-class PriestProfileCreateApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsAnyAdmin]
-
-    @extend_schema(request=PriestProfileCreateInputSerializer, responses={201: PriestProfileOutputSerializer}, tags=["messaging"], summary="Créer un profil prêtre")
-    def post(self, request):
-        serializer = PriestProfileCreateInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = get_object_or_404(BaseUser, id=serializer.validated_data["user_id"])
-        try:
-            profile = priest_profile_create(user=user, accepted_by=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(PriestProfileOutputSerializer(profile).data, status=status.HTTP_201_CREATED)
-
-
-class PriestProfileCguApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsPriestProfileOwner]
-
-    @extend_schema(request=None, responses={200: PriestProfileOutputSerializer}, tags=["messaging"], summary="Accepter les CGU prêtre")
-    def post(self, request):
-        try:
-            profile = priest_profile_accept_cgu(priest_profile=request.user.priest_profile)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(PriestProfileOutputSerializer(profile).data)
-
-
-class PriestProfileUpdateApi(ApiAuthMixin, APIView):
-    permission_classes = [IsAuthenticated, IsPriestProfileOwner]
-
-    @extend_schema(request=PriestProfileUpdateInputSerializer, responses={200: PriestProfileOutputSerializer}, tags=["messaging"], summary="Mettre à jour le profil prêtre")
-    def patch(self, request):
-        serializer = PriestProfileUpdateInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        profile = priest_profile_update(
-            priest_profile=request.user.priest_profile, **serializer.validated_data
-        )
-        return Response(PriestProfileOutputSerializer(profile).data)
 
 
 class PriestListApi(ApiAuthMixin, APIView):
-    @extend_schema(responses={200: PriestProfileOutputSerializer(many=True)}, tags=["messaging"], summary="Lister les prêtres disponibles")
+    @extend_schema(
+        responses={200: ReachablePriestOutputSerializer(many=True)},
+        tags=["messaging"],
+        summary="Prêtres joignables de ma paroisse suivie et des aumôneries du diocèse",
+    )
     def get(self, request):
-        priests = priest_list_available()
-        return Response(PriestProfileOutputSerializer(priests, many=True).data)
+        return Response(ReachablePriestOutputSerializer(priests_reachable_for(user=request.user), many=True).data)
+
+
+class AvailabilityApi(ApiAuthMixin, APIView):
+    permission_classes = [IsAuthenticated, HasCapability("messagerie.recevoir_fideles")]
+
+    @extend_schema(responses={200: AvailabilitySerializer}, tags=["messaging"], summary="Mes disponibilités (prêtre joignable)")
+    def get(self, request):
+        availability = MessagingAvailability.objects.filter(user=request.user).first() or MessagingAvailability(
+            user=request.user
+        )
+        return Response(AvailabilitySerializer(availability).data)
+
+    @extend_schema(
+        request=AvailabilitySerializer,
+        responses={200: AvailabilitySerializer},
+        tags=["messaging"],
+        summary="Modifier mes disponibilités (nouveaux échanges, absence, plages de réponse)",
+    )
+    def put(self, request):
+        serializer = AvailabilitySerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        availability = availability_update(user=request.user, data=serializer.validated_data)
+        return Response(AvailabilitySerializer(availability).data)
 
 
 # ---------------------------------------------------------------------------
