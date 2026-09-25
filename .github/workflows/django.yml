@@ -87,8 +87,8 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.django.test
           SECRET_KEY: "ci-only-secret-key-not-for-production"
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/jangubi_test
-          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: postgres://postgres:postgres@localhost:${{ vars.CI_PG_HOST_PORT || '5432' }}/jangubi_test
+          REDIS_URL: redis://localhost:${{ vars.CI_REDIS_HOST_PORT || '6379' }}/0
           CELERY_TASK_ALWAYS_EAGER: "True"         
           CELERY_TASK_EAGER_PROPAGATES: "True"
         run: pytest apps/ -v --tb=short
