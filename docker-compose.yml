@@ -232,8 +232,12 @@ services:
       KC_WEB_REDIRECT_URI: ${KC_WEB_REDIRECT_URI:-http://localhost:3000/api/auth/callback/keycloak}
       KC_WEB_POST_LOGOUT_URI: ${KC_WEB_POST_LOGOUT_URI:-http://localhost:3000/}
       KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
+      # Lu par le thème de connexion (bandeau liturgique).
+      JANGUBI_API_URL: ${JANGUBI_API_URL:-http://localhost:8001/api/v1}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Thème de connexion Jàngu Bi (maquettes PUB-Connexion, PUB-Inscription-Compte).
+      - ./infra/keycloak/themes/jangubi:/opt/keycloak/themes/jangubi:ro
     ports:
       - "8180:8080"
     depends_on:

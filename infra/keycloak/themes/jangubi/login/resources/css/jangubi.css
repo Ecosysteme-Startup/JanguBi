@@ -1,0 +1,272 @@
+/* Jàngu Bi · thème de connexion. Palette Ciel (tokens --jb-* du front, clair et sombre). */
+:root {
+  --jb-paper: #FFFFFF;
+  --jb-surface: #F7FAFD;
+  --jb-surface-2: #EDF3F9;
+  --jb-ink: #0E1A2B;
+  --jb-ink-2: #3A4859;
+  --jb-ink-3: #586677;
+  --jb-line: #DDE5EE;
+  --jb-line-field: #8391A4;
+  --jb-line-strong: #0E1A2B;
+  --jb-primary: #0A6BA3;
+  --jb-primary-strong: #085887;
+  --jb-primary-fill: #0A6BA3;
+  --jb-primary-fill-hover: #085887;
+  --jb-on-primary: #F7FAFD;
+  --jb-night: #052F49;
+  --jb-night-2: #06466C;
+  --jb-on-night: #D9EBF7;
+  --jb-on-night-muted: #7FC0E8;
+  --jb-tint-50: #EEF6FC;
+  --jb-tint-100: #D9EBF7;
+  --jb-tint-200: #B3D8F0;
+  --jb-tint-300: #7FC0E8;
+  --jb-tint-400: #3FA3DD;
+  --jb-tint-500: #1A8FCC;
+  --jb-ok: #1F6B5C;
+  --jb-ok-bg: #E4F2EE;
+  --jb-warn: #8A5A0B;
+  --jb-warn-dot: #B7801F;
+  --jb-warn-bg: #FBF1DF;
+  --jb-err: #A12A22;
+  --jb-err-bg: #FBE8E5;
+  --jb-lit-green: #2E6B3F;
+  --jb-lit-violet: #5B3A7E;
+  --jb-lit-gold: #9A7A2C;
+  --jb-lit-gold-text: #7A5E1C;
+  --jb-lit-red: #A3262A;
+  --jb-lit-rose: #C77A93;
+  --jb-lit-rose-text: #8E3F58;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --jb-paper: #0B1118;
+    --jb-surface: #111A24;
+    --jb-surface-2: #18232F;
+    --jb-ink: #E8EEF5;
+    --jb-ink-2: #BAC6D3;
+    --jb-ink-3: #92A2B4;
+    --jb-line: #243142;
+    --jb-line-field: #5F7085;
+    --jb-line-strong: #C7D2DE;
+    --jb-primary: #7CC3EE;
+    --jb-primary-strong: #A8D8F5;
+    --jb-primary-fill: #0A6BA3;
+    --jb-primary-fill-hover: #085E90;
+    --jb-on-primary: #F5F9FC;
+    --jb-night: #061826;
+    --jb-night-2: #082438;
+    --jb-on-night: #D9EBF7;
+    --jb-on-night-muted: #7FC0E8;
+    --jb-tint-50: #0F2233;
+    --jb-tint-100: #13304A;
+    --jb-tint-200: #1B4466;
+    --jb-tint-300: #26618F;
+    --jb-tint-400: #3FA3DD;
+    --jb-tint-500: #5AB3E4;
+    --jb-ok: #7CCBB6;
+    --jb-ok-bg: #13302A;
+    --jb-warn: #E6B865;
+    --jb-warn-dot: #D49B36;
+    --jb-warn-bg: #342710;
+    --jb-err: #F2958B;
+    --jb-err-bg: #3B1815;
+    --jb-lit-green: #86C596;
+    --jb-lit-violet: #BCA0DC;
+    --jb-lit-gold: #C9A55A;
+    --jb-lit-gold-text: #DCC079;
+    --jb-lit-red: #EE8A83;
+    --jb-lit-rose: #D99BB0;
+    --jb-lit-rose-text: #E6A7BB;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html.jb-html { -webkit-text-size-adjust: 100%; }
+body.jb-body {
+  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+  background: var(--jb-paper); color: var(--jb-ink);
+  font-family: 'Libre Franklin', system-ui, sans-serif; font-size: 16px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--jb-primary); text-decoration: none; }
+a:hover { color: var(--jb-primary-strong); }
+:focus-visible { outline: 2px solid var(--jb-primary); outline-offset: 2px; }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--jb-primary); width: 20px; height: 20px; margin: 0; flex: none; }
+.jb-muted { color: var(--jb-ink-3); }
+.jb-skip { position: absolute; left: -9999px; }
+.jb-skip:focus { left: 16px; top: 16px; z-index: 10; padding: 12px; background: var(--jb-paper); }
+
+/* Bandeau liturgique (DS-Fondations §03) */
+.jb-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  min-height: 40px; padding: 0 64px; flex: none;
+  border-bottom: 3px double var(--jb-line-strong);
+  font-size: 12px; letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
+}
+.jb-banner-date { display: flex; gap: 16px; }
+.jb-banner-day { display: flex; align-items: center; gap: 12px; }
+.jb-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px 0 8px; border: 1px solid currentColor; border-radius: 999px; }
+.jb-pill::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.jb-lit-vert { color: var(--jb-lit-green); } .jb-lit-violet { color: var(--jb-lit-violet); }
+.jb-lit-blanc { color: var(--jb-lit-gold-text); } .jb-lit-rouge { color: var(--jb-lit-red); } .jb-lit-rose { color: var(--jb-lit-rose-text); }
+.jb-banner-link { border-bottom: 1px solid var(--jb-tint-200); padding-bottom: 1px; }
+
+/* Mise en page : panneau « nuit » + formulaire */
+.jb-layout { flex: 1; display: grid; grid-template-columns: 600px minmax(0, 1fr); }
+.jb-layout-register { grid-template-columns: 480px minmax(0, 1fr); }
+.jb-aside {
+  position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 40px;
+  padding: 48px 64px; background: var(--jb-night); color: var(--jb-on-night);
+}
+.jb-layout-register .jb-aside { padding: 48px 56px; }
+.jb-arch { position: absolute; inset: 0; width: 100%; height: 100%; color: var(--jb-night-2); pointer-events: none; }
+.jb-aside > :not(.jb-arch) { position: relative; }
+.jb-aside a { color: var(--jb-tint-200); }
+.jb-aside a:hover { color: var(--jb-on-primary); }
+.jb-aside-brand { display: flex; align-items: baseline; gap: 12px; color: var(--jb-on-primary) !important; }
+.jb-brand-name { font-family: 'Source Serif 4', Georgia, serif; font-size: 36px; line-height: 1; letter-spacing: -0.01em; }
+.jb-brand-tag, .jb-aside-eyebrow { font-size: 12px; letter-spacing: 0.01em; color: var(--jb-on-night-muted); font-variant-numeric: tabular-nums; }
+.jb-aside-body { margin: 0; }
+.jb-aside-eyebrow { margin: 0; }
+.jb-quote { margin: 24px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-style: italic; font-size: 41px; line-height: 1.1; letter-spacing: -0.01em; color: var(--jb-on-primary); }
+.jb-quote-sm { font-size: 32px; line-height: 1.15; }
+.jb-aside-caption { margin-top: 24px; font-size: 13px; color: var(--jb-tint-200); font-variant-numeric: tabular-nums; }
+.jb-aside-foot { margin: 0; font-size: 15px; color: var(--jb-tint-200); }
+.jb-aside-rule { display: flex; justify-content: space-between; padding-top: 16px; border-top: 1px solid var(--jb-night-2); font-size: 12px; color: var(--jb-on-night-muted); }
+.jb-benefits { list-style: none; margin: 40px 0 0; padding: 16px 0 0; border-top: 1px solid var(--jb-night-2); display: flex; flex-direction: column; gap: 12px; font-size: 15px; }
+.jb-benefits li { display: flex; gap: 12px; align-items: center; }
+.jb-benefits li::before { content: ''; width: 14px; height: 8px; margin-top: -4px; border-left: 1.5px solid var(--jb-on-night-muted); border-bottom: 1.5px solid var(--jb-on-night-muted); transform: rotate(-45deg); flex: none; }
+
+.jb-main { display: flex; flex-direction: column; justify-content: space-between; gap: 40px; padding: 56px 64px 32px; }
+.jb-column { width: 100%; max-width: 440px; margin: 0 auto; }
+.jb-layout-register .jb-column { max-width: 640px; }
+.jb-eyebrow { margin: 0; font-size: 12px; letter-spacing: 0.01em; color: var(--jb-primary); font-variant-numeric: tabular-nums; }
+.jb-eyebrow-spaced { margin-top: 32px; }
+.jb-title { margin: 12px 0 0; font-family: 'Source Serif 4', Georgia, serif; font-weight: 400; font-size: 40px; line-height: 1.02; letter-spacing: -0.01em; }
+.jb-subtitle { margin: 8px 0 0; font-size: 15px; color: var(--jb-ink-2); }
+.jb-required-note { margin: 8px 0 0; font-size: 13px; color: var(--jb-ink-3); }
+.jb-req { color: var(--jb-err); }
+.jb-attempted { display: flex; gap: 12px; margin: 8px 0 0; font-size: 15px; }
+.jb-attempted span { font-weight: 600; }
+
+/* Étapes (DS-Composants §05) */
+.jb-stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.jb-stepper li { padding-top: 12px; border-top: 2px solid var(--jb-line); font-size: 15px; color: var(--jb-ink-2); }
+.jb-stepper li span { display: block; margin-bottom: 4px; font-size: 12px; color: var(--jb-ink-3); font-variant-numeric: tabular-nums; }
+.jb-stepper li.is-current { border-top-color: var(--jb-line-strong); color: var(--jb-ink); }
+.jb-stepper li.is-current span { color: var(--jb-ink); }
+.jb-stepper strong { font-weight: 600; }
+
+/* Formulaire */
+.jb-form { display: flex; flex-direction: column; gap: 20px; margin-top: 32px; }
+.jb-form-register { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; }
+.jb-form-register > * { grid-column: span 2; }
+.jb-form-register > .jb-group:has(#firstName) { grid-column: span 1; order: 1; }
+.jb-form-register > .jb-group:has(#lastName) { grid-column: span 1; order: 2; }
+.jb-form-register > .jb-group:has(#email) { order: 3; }
+.jb-form-register > .jb-group:has(#password) { order: 4; }
+.jb-form-register > .jb-group:has(#password-confirm) { order: 5; }
+.jb-form-register > .jb-group:not(:has(#firstName, #lastName, #email, #password, #password-confirm)) { order: 6; }
+.jb-form-register > .form-group { order: 7; }
+.jb-form-register > .jb-actions { order: 8; }
+.jb-group { display: flex; flex-direction: column; gap: 8px; margin: 0; min-width: 0; }
+.jb-fieldset { border: 0; padding: 0; }
+.jb-label-wrap { display: flex; gap: 4px; align-items: baseline; font-size: 14px; }
+.jb-label { font-size: 14px; font-weight: 600; color: var(--jb-ink); padding: 0; }
+.jb-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+.jb-link { font-size: 14px; border-bottom: 1px solid currentColor; }
+.jb-input, .jb-input-wrap input:not([type='checkbox']):not([type='radio']), .jb-input-wrap select, .jb-input-wrap textarea {
+  width: 100%; height: 48px; padding: 0 14px; background: var(--jb-surface); color: var(--jb-ink);
+  border: 1px solid var(--jb-line-field); border-radius: 2px; font: inherit; font-size: 16px;
+}
+.jb-input-wrap textarea { height: auto; min-height: 96px; padding: 12px 14px; }
+.jb-input:hover { border-color: var(--jb-ink); }
+.jb-input:focus { outline: 2px solid var(--jb-primary); outline-offset: 0; border-color: var(--jb-primary); }
+.jb-input[aria-invalid='true'] { border-color: var(--jb-err); background: var(--jb-err-bg); }
+.jb-input-otp { font-size: 24px; letter-spacing: 0.4em; font-variant-numeric: tabular-nums; }
+.jb-input-group { position: relative; display: flex; }
+.jb-input-group .jb-input { padding-right: 52px; }
+.jb-eye { position: absolute; top: 4px; right: 4px; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 2px; background: transparent; color: var(--jb-ink-2); cursor: pointer; }
+.jb-eye:hover { background: var(--jb-surface-2); }
+.jb-eye i { width: 20px; height: 20px; background: currentColor; -webkit-mask: var(--jb-eye) center / contain no-repeat; mask: var(--jb-eye) center / contain no-repeat; }
+.jb-eye-show { --jb-eye: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+.jb-eye-hide { --jb-eye: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z'/%3E%3Cpath d='M4 4l16 16'/%3E%3C/svg%3E"); }
+.jb-error { font-size: 14px; color: var(--jb-err); }
+.jb-hint { font-size: 13px; color: var(--jb-ink-3); }
+.jb-check { display: flex; align-items: center; gap: 12px; font-size: 15px; cursor: pointer; min-height: 44px; }
+.jb-options, .jb-options-wrap, .jb-settings { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
+
+/* Robustesse du mot de passe */
+.jb-strength { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.jb-strength span { height: 4px; background: var(--jb-line); border-radius: 2px; }
+.jb-strength[data-level='1'] span:nth-child(-n+1),
+.jb-strength[data-level='2'] span:nth-child(-n+2) { background: var(--jb-warn-dot); }
+.jb-strength[data-level='3'] span:nth-child(-n+3),
+.jb-strength[data-level='4'] span { background: var(--jb-ok); }
+.jb-strength-label { margin: 0; min-height: 1.2em; }
+.jb-rules { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; font-size: 13px; color: var(--jb-ink-3); }
+.jb-rules li { display: flex; align-items: center; gap: 8px; }
+.jb-rules li::before { content: ''; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--jb-line-field); flex: none; }
+.jb-rules li.is-met { color: var(--jb-ok); }
+.jb-rules li.is-met::before { background: var(--jb-ok); border-color: var(--jb-ok); }
+
+/* Boutons (DS-Composants §01) */
+.jb-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  height: 44px; padding: 0 20px; border: 1px solid transparent; border-radius: 2px;
+  font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; text-decoration: none;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.jb-btn-lg { height: 52px; padding: 0 28px; font-size: 16px; }
+.jb-btn-block { width: 100%; margin-top: 4px; }
+.jb-btn-primary { background: var(--jb-primary-fill); border-color: var(--jb-primary-fill); color: var(--jb-on-primary); }
+.jb-btn-primary:hover { background: var(--jb-primary-fill-hover); border-color: var(--jb-primary-fill-hover); color: var(--jb-on-primary); }
+.jb-btn-primary:disabled { opacity: .6; cursor: wait; }
+.jb-btn-secondary { background: transparent; border-color: var(--jb-line-strong); color: var(--jb-ink); }
+.jb-btn-secondary:hover { background: var(--jb-ink); color: var(--jb-paper); }
+.jb-btn-tertiary { padding: 0; color: var(--jb-primary); }
+.jb-link-button { border: 0; background: none; padding: 0; color: var(--jb-primary); font: inherit; font-size: 14px; cursor: pointer; }
+.jb-actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 20px; border-top: 1px solid var(--jb-line); }
+.jb-buttons { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+
+/* Messages */
+.jb-alert { margin-top: 24px; padding: 14px 16px; border: 1px solid; border-radius: 2px; font-size: 15px; }
+.jb-alert-error { border-color: var(--jb-err); background: var(--jb-err-bg); color: var(--jb-err); }
+.jb-alert-warning { border-color: var(--jb-warn); background: var(--jb-warn-bg); color: var(--jb-warn); }
+.jb-alert-success { border-color: var(--jb-ok); background: var(--jb-ok-bg); color: var(--jb-ok); }
+.jb-alert-info { border-color: var(--jb-primary); background: var(--jb-tint-50); color: var(--jb-primary-strong); }
+.jb-info { margin-top: 24px; }
+.jb-register-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0; padding-top: 20px; border-top: 1px solid var(--jb-line); font-size: 15px; color: var(--jb-ink-2); }
+.jb-notice { display: flex; gap: 12px; margin-top: 32px; padding: 16px 20px; background: var(--jb-tint-50); border: 1px solid var(--jb-primary); border-radius: 2px; }
+.jb-notice svg { flex: none; margin-top: 2px; color: var(--jb-primary-strong); }
+.jb-notice-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--jb-primary-strong); }
+.jb-notice-body { margin: 4px 0 0; font-size: 14px; line-height: 1.5; }
+.jb-try-another { margin-top: 16px; }
+
+.jb-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; max-width: 440px; margin: 0 auto; font-size: 12px; color: var(--jb-ink-3); font-variant-numeric: tabular-nums; }
+.jb-layout-register .jb-footer { max-width: 640px; }
+.jb-footer a { color: var(--jb-ink-3); }
+.jb-secure { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Base de Keycloak (pages non réécrites) : on neutralise la grille PatternFly */
+.col-md-10, .col-md-12 { width: 100%; }
+#kc-form-buttons { margin-top: 8px; }
+#kc-form-buttons input[type='submit'] { width: 100%; }
+
+@media (max-width: 1100px) {
+  .jb-layout, .jb-layout-register { grid-template-columns: 1fr; }
+  .jb-aside { padding: 32px 24px; gap: 24px; }
+  .jb-aside .jb-aside-body, .jb-aside .jb-aside-foot, .jb-arch { display: none; }
+  .jb-banner { padding: 0 16px; }
+  .jb-banner-day { display: none; }
+  .jb-main { padding: 32px 16px; }
+}
+@media (max-width: 560px) {
+  .jb-form-register > .jb-group:has(#firstName), .jb-form-register > .jb-group:has(#lastName) { grid-column: span 2; }
+  .jb-rules { grid-template-columns: 1fr; }
+  .jb-actions { flex-direction: column-reverse; align-items: stretch; }
+  .jb-title { font-size: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
