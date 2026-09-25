@@ -7,6 +7,7 @@ ici ; les vues ne font que traduire HTTP.
 
 import datetime
 import logging
+import uuid
 from typing import Any
 
 import nh3
@@ -62,7 +63,8 @@ def _slug(title: str, node: Node | None) -> str:
     candidate = f"{base}-{suffix}"[:210]
     if not Article.objects.filter(slug=candidate).exists():
         return candidate
-    return f"{candidate[:200]}-{Article.objects.filter(slug__startswith=candidate).count() + 1}"
+    # Suffixe aléatoire plutôt qu'un compteur : deux créations simultanées ne se heurtent pas.
+    return f"{candidate[:200]}-{uuid.uuid4().hex[:8]}"
 
 
 def _sunday_check(*, is_sunday_notice: bool, sunday_date: datetime.date | None) -> None:

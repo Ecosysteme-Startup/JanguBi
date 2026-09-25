@@ -1,21 +1,16 @@
 #!/bin/bash
+# Compte de l'admin Django (exploitation seulement : il ne donne aucun droit dans l'API,
+# où l'administrateur plateforme est le rôle Keycloak platform_admin, ADR-015).
 set -a
-# Charger les variables du .env si existant
 [ -f .env ] && source .env
 set +a
 
-echo "==========================================================="
-echo "   Création du Super Administrateur"
-echo "==========================================================="
-
-if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
-    echo "Erreur : Les variables d'environnement ADMIN_EMAIL et ADMIN_PASSWORD doivent être définies."
-    echo "Veuillez les ajouter à votre fichier .env :"
-    echo "ADMIN_EMAIL=admin@email.com"
-    echo "ADMIN_PASSWORD=p@ss0rdH@shed"
+if [ -z "$DJANGO_SUPERUSER_EMAIL" ] || [ -z "$DJANGO_SUPERUSER_PASSWORD" ]; then
+    echo "Définir DJANGO_SUPERUSER_EMAIL et DJANGO_SUPERUSER_PASSWORD dans .env."
     exit 1
 fi
 
-echo "Exécution de la commande sur le container Django..."
-# On passe explicitement les variables d'environnement au cas où docker-compose ne les charge pas automatiquement du même shell
-docker compose exec -T -e ADMIN_EMAIL="$ADMIN_EMAIL" -e ADMIN_PASSWORD="$ADMIN_PASSWORD" django python manage.py init_admin
+docker compose exec -T \
+    -e DJANGO_SUPERUSER_EMAIL="$DJANGO_SUPERUSER_EMAIL" \
+    -e DJANGO_SUPERUSER_PASSWORD="$DJANGO_SUPERUSER_PASSWORD" \
+    django python manage.py createsuperuser --noinput

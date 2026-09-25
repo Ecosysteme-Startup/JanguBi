@@ -132,8 +132,7 @@ def is_overdue(
     if days is None:
         return False
     resolver = resolver or SlaResolver()
-    path = request_obj.target_node.path if request_obj.target_node else None
-    return days >= resolver.for_path(path)[SLA_KEY_BY_STATUS[request_obj.status]]
+    return days >= resolver.for_path(request_obj.target_node.path)[SLA_KEY_BY_STATUS[request_obj.status]]
 
 
 # --- Supervision agrégée (EF-ACT-10) : aucun nom ------------------------------------------

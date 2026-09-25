@@ -89,7 +89,7 @@ def _parish_check(node: Node) -> None:
 
 
 def processor_check(*, user: Any, request_obj: DocumentRequest) -> None:
-    if request_obj.target_node is None or not authz.peut(user, "actes.traiter", request_obj.target_node):
+    if not authz.peut(user, "actes.traiter", request_obj.target_node):
         raise PermissionDeniedError("Cette demande n'est pas dans votre file.", code="not_in_queue")
 
 
@@ -160,8 +160,6 @@ def _notify_parish(request_obj: DocumentRequest, event: str) -> None:
     from apps.hierarchy.selectors_offices import capability_holders
     from apps.messaging.services_notifications import people_notify
 
-    if request_obj.target_node is None:
-        return
     holders = capability_holders(node=request_obj.target_node, capability="actes.traiter", direct_only=True)
     people_notify(
         user_ids=list(holders.values_list("pk", flat=True)),

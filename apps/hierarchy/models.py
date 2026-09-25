@@ -96,8 +96,6 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
         verbose_name=_("situé dans"),
         help_text=_("Lien géographique d'un nœud non territorial (ex. communauté située dans un diocèse)."),
     )
-    legacy_model = models.CharField(_("modèle d'origine"), max_length=40, blank=True, default="")
-    legacy_id = models.BigIntegerField(_("identifiant d'origine"), null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -105,11 +103,6 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
         verbose_name = _("nœud")
         verbose_name_plural = _("nœuds")
         constraints = [
-            models.UniqueConstraint(
-                fields=["legacy_model", "legacy_id"],
-                condition=Q(legacy_id__isnull=False),
-                name="hierarchy_node_unique_legacy",
-            ),
         ]
         indexes = [
             models.Index(fields=["type", "status"], name="hierarchy_node_type_status"),
@@ -134,7 +127,6 @@ class PlaceOfWorship(BaseModel):
     lat = models.DecimalField(_("latitude"), max_digits=9, decimal_places=6, null=True, blank=True)
     lng = models.DecimalField(_("longitude"), max_digits=9, decimal_places=6, null=True, blank=True)
     is_active = models.BooleanField(_("actif"), default=True)
-    legacy_id = models.BigIntegerField(_("identifiant d'origine (org.Church)"), null=True, blank=True, unique=True)
 
     class Meta:
         verbose_name = _("lieu de culte")

@@ -115,7 +115,7 @@ def test_conversation_list_requires_authentication(anon_client):
 
 @pytest.mark.django_db
 def test_conversation_create_returns_201(auth_client):
-    # Arrange — le destinataire doit être un prêtre éligible (PriestProfile acceptant).
+    # Arrange — le destinataire doit être un prêtre éligible (capacité messagerie.recevoir_fideles, disponibilité ouverte).
     priest_user = BaseUserFactory()
     reachable_priest(priest_user)
     url = reverse("api:messaging:conversation-create")
@@ -132,7 +132,7 @@ def test_conversation_create_returns_201(auth_client):
 @pytest.mark.django_db
 def test_conversation_create_rejected_for_non_clergy_recipient(auth_client):
     # Garde pastorale : impossible d'ouvrir une conversation avec un non-prêtre.
-    other_user = BaseUserFactory()  # aucun PriestProfile
+    other_user = BaseUserFactory()  # aucune capacité messagerie.recevoir_fideles
     url = reverse("api:messaging:conversation-create")
 
     response = auth_client.post(

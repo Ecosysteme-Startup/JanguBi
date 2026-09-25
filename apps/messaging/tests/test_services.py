@@ -63,18 +63,13 @@ _CACHE = "apps.messaging.services.cache"
 
 
 # ---------------------------------------------------------------------------
-# PriestProfile services
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # Conversation services
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_conversation_get_or_create_creates_new():
-    # Arrange — le destinataire doit être un prêtre éligible (PriestProfile acceptant).
+    # Arrange — le destinataire doit être un prêtre éligible (capacité messagerie.recevoir_fideles, disponibilité ouverte).
     fidele = BaseUserFactory()
     priest = BaseUserFactory()
     reachable_priest(priest)

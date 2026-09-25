@@ -13,7 +13,7 @@ _STATE = {
 }
 
 
-def _make_user(email, pastoral_role="fidele"):
+def _make_user(email, etat="fidele"):
     user = BaseUser.objects.create_user(
         email=email,
         password="StrongPassw0rd!",
@@ -21,7 +21,7 @@ def _make_user(email, pastoral_role="fidele"):
         is_active=True,
         is_verified=True,
     )
-    user.etat_de_vie, user.degre_ordre = _STATE[pastoral_role]
+    user.etat_de_vie, user.degre_ordre = _STATE[etat]
     user.statut_verification = "verifie"
     user.save(update_fields=["etat_de_vie", "degre_ordre", "statut_verification"])
     return user

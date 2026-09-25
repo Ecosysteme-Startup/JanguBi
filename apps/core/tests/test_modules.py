@@ -16,16 +16,6 @@ from apps.core.modules import (
     task_module,
 )
 
-FROZEN_ROUTES = [
-    "/api/v1/donations/",
-    "/api/v1/mass-intentions/",
-    "/api/v1/transfers/",
-    "/api/v1/spiritual/",
-    "/api/v1/tv/",
-    "/api/v1/rag/",
-    "/api/v1/clergy-accounts/",
-]
-
 
 class _V1UrlConf:
     """Urlconf construit avec les modules par défaut de la V1."""
@@ -68,11 +58,6 @@ def test_v1_default_excludes_every_frozen_module():
 # --- routes ------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("url", FROZEN_ROUTES)
-def test_frozen_route_returns_404_with_v1_defaults(url):
-    assert not _resolves(url, _V1UrlConf())
-
-
 @pytest.mark.parametrize(
     "prefix", ["me/", "bible/", "liturgy/", "rosary/", "messaging/", "documents/", "news/", "agenda/", "hierarchy/"]
 )
@@ -80,17 +65,6 @@ def test_v1_routes_stay_exposed(prefix):
     from apps.api.urls import build_v1_patterns
 
     assert prefix in {str(p.pattern) for p in build_v1_patterns(active=V1_DEFAULT_MODULES)}
-
-
-@pytest.mark.django_db
-def test_frozen_route_is_404_over_http(client, settings):
-    settings.ROOT_URLCONF = _V1UrlConf()
-    clear_url_caches()
-    try:
-        response = client.get("/api/v1/donations/")
-    finally:
-        clear_url_caches()
-    assert response.status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -119,7 +93,7 @@ def test_frozen_submodule_routes_are_removed(module, submodule, url, kept_url):
 
 
 def test_task_module_is_derived_from_task_path():
-    assert task_module("apps.donations.tasks.remind") == "donations"
+    assert task_module("apps.messaging.tasks.purge") == "messaging"
     assert task_module("celery.backend_cleanup") is None
 
 
