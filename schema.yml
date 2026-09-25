@@ -5503,6 +5503,9 @@ components:
           nullable: true
         node_name:
           type: string
+        node_type:
+          type: string
+          description: Code du type de nœud ; « plateforme » hors arbre.
         herite:
           type: boolean
         office:
@@ -5512,6 +5515,7 @@ components:
       - herite
       - node_id
       - node_name
+      - node_type
       - office
     CardinalityEnum:
       enum:
