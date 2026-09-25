@@ -6187,7 +6187,7 @@ components:
           title: Fin
         status:
           allOf:
-          - $ref: '#/components/schemas/AssignmentOutputStatusEnum'
+          - $ref: '#/components/schemas/AssignmentStatusEnum'
           title: Statut
         appointed_by_id:
           type: string
@@ -6212,7 +6212,7 @@ components:
       - office_label
       - person
       - start_date
-    AssignmentOutputStatusEnum:
+    AssignmentStatusEnum:
       enum:
       - proposee
       - active
@@ -7745,30 +7745,6 @@ components:
       - author_name
       - content
       - id
-    Kind1cdEnum:
-      enum:
-      - eglise_paroissiale
-      - succursale
-      - chapelle
-      - station
-      - sanctuaire
-      type: string
-      description: |-
-        * `eglise_paroissiale` - Église paroissiale
-        * `succursale` - Succursale
-        * `chapelle` - Chapelle
-        * `station` - Station
-        * `sanctuaire` - Sanctuaire
-    Kind275Enum:
-      enum:
-      - messe
-      - confession
-      - adoration
-      type: string
-      description: |-
-        * `messe` - Messe
-        * `confession` - Confession
-        * `adoration` - Adoration
     LiturgicalDate:
       type: object
       description: |-
@@ -8151,7 +8127,7 @@ components:
           maxLength: 64
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusA5bEnum'
+          - $ref: '#/components/schemas/NodeStatusEnum'
           default: erige
         address:
           type: string
@@ -8204,7 +8180,7 @@ components:
           maxLength: 64
         status:
           allOf:
-          - $ref: '#/components/schemas/StatusA5bEnum'
+          - $ref: '#/components/schemas/NodeStatusEnum'
           title: Statut
         address:
           type: string
@@ -8276,6 +8252,16 @@ components:
       - id
       - name
       - type
+    NodeStatusEnum:
+      enum:
+      - en_fondation
+      - erige
+      - supprime
+      type: string
+      description: |-
+        * `en_fondation` - En fondation
+        * `erige` - Érigé
+        * `supprime` - Supprimé
     NodeTypeOutput:
       type: object
       properties:
@@ -9009,7 +8995,7 @@ components:
           type: string
           maxLength: 64
         status:
-          $ref: '#/components/schemas/StatusA5bEnum'
+          $ref: '#/components/schemas/NodeStatusEnum'
         address:
           type: string
         city:
@@ -9053,7 +9039,7 @@ components:
           type: string
           maxLength: 200
         kind:
-          $ref: '#/components/schemas/Kind1cdEnum'
+          $ref: '#/components/schemas/PlaceKindEnum'
         is_main:
           type: boolean
         address:
@@ -9236,7 +9222,7 @@ components:
           maxLength: 200
         kind:
           allOf:
-          - $ref: '#/components/schemas/Kind1cdEnum'
+          - $ref: '#/components/schemas/PlaceKindEnum'
           default: chapelle
         is_main:
           type: boolean
@@ -9260,6 +9246,20 @@ components:
           nullable: true
       required:
       - name
+    PlaceKindEnum:
+      enum:
+      - eglise_paroissiale
+      - succursale
+      - chapelle
+      - station
+      - sanctuaire
+      type: string
+      description: |-
+        * `eglise_paroissiale` - Église paroissiale
+        * `succursale` - Succursale
+        * `chapelle` - Chapelle
+        * `station` - Station
+        * `sanctuaire` - Sanctuaire
     PlaceOutput:
       type: object
       properties:
@@ -9276,7 +9276,7 @@ components:
           maxLength: 200
         kind:
           allOf:
-          - $ref: '#/components/schemas/Kind1cdEnum'
+          - $ref: '#/components/schemas/PlaceKindEnum'
           title: Type
         is_main:
           type: boolean
@@ -9728,11 +9728,11 @@ components:
           readOnly: true
         kind:
           allOf:
-          - $ref: '#/components/schemas/Kind275Enum'
+          - $ref: '#/components/schemas/ScheduleKindEnum'
           default: messe
         weekday:
           allOf:
-          - $ref: '#/components/schemas/ScheduleWeekdayEnum'
+          - $ref: '#/components/schemas/WeekdayEnum'
           description: |-
             0 = lundi … 6 = dimanche
 
@@ -9784,7 +9784,7 @@ components:
           format: date
         kind:
           allOf:
-          - $ref: '#/components/schemas/Kind275Enum'
+          - $ref: '#/components/schemas/ScheduleKindEnum'
           default: messe
         cancelled:
           type: boolean
@@ -9805,6 +9805,16 @@ components:
       required:
       - date
       - id
+    ScheduleKindEnum:
+      enum:
+      - messe
+      - confession
+      - adoration
+      type: string
+      description: |-
+        * `messe` - Messe
+        * `confession` - Confession
+        * `adoration` - Adoration
     ScheduleReplaceInput:
       type: object
       properties:
@@ -9815,24 +9825,6 @@ components:
           description: 'Semaine type complète : remplace les horaires existants.'
       required:
       - items
-    ScheduleWeekdayEnum:
-      enum:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      type: integer
-      description: |-
-        * `0` - Lundi
-        * `1` - Mardi
-        * `2` - Mercredi
-        * `3` - Jeudi
-        * `4` - Vendredi
-        * `5` - Samedi
-        * `6` - Dimanche
     ScopeEnum:
       enum:
       - global
@@ -9976,16 +9968,6 @@ components:
         * `draft` - Brouillon
         * `published` - Publié
         * `unpublished` - Dépublié
-    StatusA5bEnum:
-      enum:
-      - en_fondation
-      - erige
-      - supprime
-      type: string
-      description: |-
-        * `en_fondation` - En fondation
-        * `erige` - Érigé
-        * `supprime` - Supprimé
     StatusActionWithCommentInput:
       type: object
       properties:
@@ -10249,3 +10231,21 @@ components:
       - id
       - number
       - text
+    WeekdayEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      type: integer
+      description: |-
+        * `0` - Lundi
+        * `1` - Mardi
+        * `2` - Mercredi
+        * `3` - Jeudi
+        * `4` - Vendredi
+        * `5` - Samedi
+        * `6` - Dimanche
