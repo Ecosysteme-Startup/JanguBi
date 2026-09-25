@@ -253,3 +253,31 @@ def test_reactions_api(world):
 
 def test_public_detail_of_a_draft_is_404(world):
     assert APIClient().get(f"/api/v1/news/{draft(world).pk}/").status_code == 404
+
+
+def test_scheduled_article_cannot_be_deleted(world):
+    later = timezone.now() + datetime.timedelta(hours=2)
+    article = article_publish(article=draft(world), editor=world.secretaire, publish_at=later)
+    with pytest.raises(ApplicationError):
+        article_delete(article=article, editor=world.secretaire)
+
+
+def test_one_failing_scheduled_article_does_not_block_the_others(world, monkeypatch):
+    from apps.news import services
+
+    later = timezone.now() + datetime.timedelta(minutes=5)
+    first = article_publish(article=draft(world, title="A"), editor=world.secretaire, publish_at=later)
+    second = article_publish(article=draft(world, title="B"), editor=world.secretaire, publish_at=later)
+    real = services._publish_now
+
+    def flaky(*, article, at):
+        if article.pk == first.pk:
+            raise RuntimeError("panne simulée")
+        real(article=article, at=at)
+
+    monkeypatch.setattr(services, "_publish_now", flaky)
+    with freeze_time(later + datetime.timedelta(minutes=1)):
+        assert articles_publish_due() == 1
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert (first.status, second.status) == (Article.Status.SCHEDULED, Article.Status.PUBLISHED)

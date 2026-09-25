@@ -10,10 +10,8 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin, PermissionClassesType
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
-from apps.core.exceptions import NotFoundError
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
-from apps.hierarchy.models import PlaceOfWorship
 from apps.news import selectors, services
 from apps.news.serializers import (
     ArticleCreateInputSerializer,
@@ -153,11 +151,7 @@ def _resolve_scope(data: dict[str, Any]) -> dict[str, Any]:
     node_id = data.pop("node_id", None)
     place_id = data.pop("place_id", None)
     data["node"] = hierarchy_selectors.node_get(node_id=node_id) if node_id else None
-    data["place"] = None
-    if place_id:
-        data["place"] = PlaceOfWorship.objects.filter(pk=place_id).first()
-        if data["place"] is None:
-            raise NotFoundError("Lieu de culte introuvable.", {"place_id": place_id})
+    data["place"] = hierarchy_selectors.place_get(place_id=place_id) if place_id else None
     if "category_id" in data:
         data["category"] = selectors.category_get(category_id=data.pop("category_id"))
     return data

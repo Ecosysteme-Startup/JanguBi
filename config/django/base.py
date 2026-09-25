@@ -238,7 +238,9 @@ AUTH_USER_MODEL = "users.BaseUser"
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+# Dakar = UTC+0 toute l'année (pas d'heure d'été) : même horloge que UTC, mais les
+# plages de silence des notifications et les dates affichées sont explicitement locales.
+TIME_ZONE = "Africa/Dakar"
 
 USE_I18N = True
 

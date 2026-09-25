@@ -318,6 +318,7 @@ class ArticleRead(models.Model):
         verbose_name = _("Lecture d'un article")
         verbose_name_plural = _("Lectures d'articles")
         constraints = [models.UniqueConstraint(fields=["article", "user"], name="unique_article_read_per_user")]
+        indexes = [models.Index(fields=["user", "-read_at"], name="article_read_user_idx")]
 
     def __str__(self) -> str:
         return f"{self.user_id} a lu {self.article_id}"

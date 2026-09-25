@@ -165,3 +165,23 @@ def test_unregister(world):
     client.post(f"/api/v1/agenda/{e.pk}/register/")
     assert client.delete(f"/api/v1/agenda/{e.pk}/register/").status_code == 204
     assert not EventRegistration.objects.filter(event=e, user=fidele).exists()
+
+
+def test_one_failing_reminder_does_not_cancel_the_others(world, monkeypatch):
+    from apps.agenda import services
+
+    start = timezone.now() + datetime.timedelta(hours=12)
+    failing = event(world, title="A", start_at=start, end_at=start + datetime.timedelta(hours=1))
+    ok = event(world, title="B", start_at=start, end_at=start + datetime.timedelta(hours=1))
+    real = services._event_remind
+
+    def flaky(*, event, now):
+        if event.pk == failing.pk:
+            raise RuntimeError("panne simulée")
+        real(event=event, now=now)
+
+    monkeypatch.setattr(services, "_event_remind", flaky)
+    assert event_reminders_send() == 1
+    failing.refresh_from_db()
+    ok.refresh_from_db()
+    assert failing.reminder_sent_at is None and ok.reminder_sent_at is not None

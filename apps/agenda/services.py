@@ -5,6 +5,7 @@ Autorisation : ``evenements.gerer`` sur le nœud de l'événement ; portée glob
 """
 
 import datetime
+import logging
 from functools import partial
 from typing import Any
 
@@ -17,6 +18,7 @@ from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node, PlaceOfWorship
 
+logger = logging.getLogger(__name__)
 UPDATABLE_FIELDS = ("title", "description", "event_type", "start_at", "end_at", "location", "max_participants")
 
 
@@ -155,36 +157,55 @@ def event_unregister(*, event: Event, user: Any) -> None:
         raise ApplicationError("Vous n'êtes pas inscrit à cet événement.", code="not_registered")
 
 
-@transaction.atomic
 def event_reminders_send(*, now: datetime.datetime | None = None) -> int:
-    """Rappel la veille aux inscrits (EF-PAROI-08), une seule fois par événement."""
-    from apps.messaging.services_notifications import people_notify
+    """Rappel la veille aux inscrits (EF-PAROI-08), une seule fois par événement.
 
+    Un événement par transaction : une erreur n'annule pas les rappels déjà envoyés
+    (sinon ils repartiraient en double au passage suivant)."""
     now = now or timezone.now()
-    due = Event.objects.select_for_update(skip_locked=True).filter(
-        cancelled_at__isnull=True,
-        reminder_sent_at__isnull=True,
-        start_at__gt=now,
-        start_at__lte=now + datetime.timedelta(hours=24),
+    due_ids = list(
+        Event.objects.filter(
+            cancelled_at__isnull=True,
+            reminder_sent_at__isnull=True,
+            start_at__gt=now,
+            start_at__lte=now + datetime.timedelta(hours=24),
+        ).values_list("pk", flat=True)
     )
     count = 0
-    for event in due:
-        user_ids = list(event.registrations.values_list("user_id", flat=True))
-        people_notify(
-            user_ids=user_ids,
-            topic="evenements",
-            event_type="agenda.reminder",
-            payload={"event_id": event.pk, "title": event.title, "start_at": event.start_at.isoformat()},
-            email_template="evenement_rappel",
-            email_context={
-                "title": event.title,
-                "start_at": timezone.localtime(event.start_at),
-                "location": event.location,
-                "event_id": event.pk,
-            },
-            now=now,
-        )
-        event.reminder_sent_at = now
-        event.save(update_fields=["reminder_sent_at", "updated_at"])
-        count += 1
+    for event_id in due_ids:
+        try:
+            with transaction.atomic():
+                event = (
+                    Event.objects.select_for_update(skip_locked=True)
+                    .filter(pk=event_id, reminder_sent_at__isnull=True)
+                    .first()
+                )
+                if event is None:
+                    continue
+                _event_remind(event=event, now=now)
+                count += 1
+        except Exception:  # noqa: BLE001 — journalisé, repris au prochain passage
+            logger.exception("agenda.reminder_failed", extra={"event_id": event_id})
     return count
+
+
+def _event_remind(*, event: Event, now: datetime.datetime) -> None:
+    from apps.messaging.services_notifications import people_notify
+
+    user_ids = list(event.registrations.values_list("user_id", flat=True))
+    people_notify(
+        user_ids=user_ids,
+        topic="evenements",
+        event_type="agenda.reminder",
+        payload={"event_id": event.pk, "title": event.title, "start_at": event.start_at.isoformat()},
+        email_template="evenement_rappel",
+        email_context={
+            "title": event.title,
+            "start_at": timezone.localtime(event.start_at),
+            "location": event.location,
+            "event_id": event.pk,
+        },
+        now=now,
+    )
+    event.reminder_sent_at = now
+    event.save(update_fields=["reminder_sent_at", "updated_at"])

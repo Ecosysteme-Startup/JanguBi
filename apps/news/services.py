@@ -6,6 +6,7 @@ ici ; les vues ne font que traduire HTTP.
 """
 
 import datetime
+import logging
 from typing import Any
 
 import nh3
@@ -18,6 +19,8 @@ from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node, PlaceOfWorship
 from apps.news.models import Article, ArticleCategory, ArticleReaction, ArticleRead
+
+logger = logging.getLogger(__name__)
 
 # Types publiables en V1 : la lettre pastorale est gelée (ADR-006).
 V1_CONTENT_TYPES = (Article.ContentType.ANNOUNCEMENT, Article.ContentType.ARTICLE)
@@ -152,6 +155,8 @@ def article_update(*, article: Article, editor: Any, data: dict[str, Any]) -> Ar
 def article_publish(*, article: Article, editor: Any, publish_at: datetime.datetime | None = None) -> Article:
     """Publie tout de suite, ou programme la publication (EF-PAROI-03)."""
     article_publish_check(user=editor, node=article.scope_node)
+    # Relu sous verrou : la tâche de publication programmée peut agir en même temps.
+    article = Article.objects.select_for_update(of=("self",)).select_related("scope_node").get(pk=article.pk)
     if article.status == Article.Status.PUBLISHED:
         raise ApplicationError("L'article est déjà publié.", code="already_published")
     now = timezone.now()
@@ -176,18 +181,31 @@ def _publish_now(*, article: Article, at: datetime.datetime) -> None:
     transaction.on_commit(lambda: article_published_notify(article_id=str(article.pk)))
 
 
-@transaction.atomic
 def articles_publish_due(*, now: datetime.datetime | None = None) -> int:
-    """Tâche Beat : publie les articles programmés arrivés à échéance."""
+    """Tâche Beat : publie les articles programmés arrivés à échéance.
+
+    Un article par transaction : un article en erreur n'empêche pas la publication des autres
+    (et un article publié ne repasse pas en « programmé » à cause d'un voisin)."""
     now = now or timezone.now()
-    due = Article.objects.select_for_update(skip_locked=True).filter(
-        status=Article.Status.SCHEDULED, publish_at__lte=now
+    due_ids = list(
+        Article.objects.filter(status=Article.Status.SCHEDULED, publish_at__lte=now).values_list("pk", flat=True)
     )
     count = 0
-    for article in due:
-        _publish_now(article=article, at=article.publish_at or now)
-        audit_log(actor=None, action="annonce.publication", target=article, node=article.scope_node)
-        count += 1
+    for article_id in due_ids:
+        try:
+            with transaction.atomic():
+                article = (
+                    Article.objects.select_for_update(skip_locked=True)
+                    .filter(pk=article_id, status=Article.Status.SCHEDULED)
+                    .first()
+                )
+                if article is None:
+                    continue
+                _publish_now(article=article, at=article.publish_at or now)
+                audit_log(actor=None, action="annonce.publication", target=article, node=article.scope_node)
+                count += 1
+        except Exception:  # noqa: BLE001 — journalisé, l'article sera repris au prochain passage
+            logger.exception("news.publish_due_failed", extra={"article_id": str(article_id)})
     return count
 
 
@@ -211,8 +229,10 @@ def article_unpublish(*, article: Article, editor: Any, reason: str = "") -> Art
 @transaction.atomic
 def article_delete(*, article: Article, editor: Any) -> None:
     article_publish_check(user=editor, node=article.scope_node)
-    if article.status == Article.Status.PUBLISHED:
-        raise ApplicationError("Un article publié ne peut pas être supprimé. Retirez-le d'abord.", code="published")
+    if article.status in (Article.Status.PUBLISHED, Article.Status.SCHEDULED):
+        raise ApplicationError(
+            "Un article publié ou programmé ne peut pas être supprimé. Retirez-le d'abord.", code="published"
+        )
     audit_log(actor=editor, action="annonce.suppression", target=article, node=article.scope_node)
     article.delete()
 

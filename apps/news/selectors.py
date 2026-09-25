@@ -103,7 +103,7 @@ def article_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) 
     scope = Q(scope_node__in=allowed)
     if authz.peut(user, "plateforme.admin", None):
         scope |= Q(scope_node__isnull=True)
-    qs = Article.objects.filter(scope).select_related(*_BASE_RELATED).annotate(reads_count=Count("reads"))
+    qs = Article.objects.filter(scope).select_related(*_BASE_RELATED).annotate(reads_count=Count("reads", distinct=True))
     if node_id := filters.get("node"):
         node = Node.objects.filter(pk=node_id).first()
         if node is None:

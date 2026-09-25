@@ -58,7 +58,7 @@ def event_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) ->
         qs = qs.filter(scope_node__path__startswith=node.path)
     if not filters.get("include_past"):
         qs = qs.filter(end_at__gte=timezone.now())
-    return _annotate(qs).order_by("start_at")
+    return _annotate(qs, viewer=user).order_by("start_at")
 
 
 def event_get_for_staff(*, user: Any, event_id: int) -> Event:

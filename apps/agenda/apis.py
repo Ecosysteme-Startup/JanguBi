@@ -23,11 +23,9 @@ from apps.agenda.serializers import (
 from apps.api.mixins import ApiAuthMixin, PermissionClassesType
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
-from apps.core.exceptions import NotFoundError
 from apps.hierarchy import authz
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
-from apps.hierarchy.models import PlaceOfWorship
 
 TAG = ["agenda"]
 _PAGINATION = [
@@ -142,11 +140,7 @@ class StaffEventListCreateApi(_StaffApi):
         data = dict(serializer.validated_data)
         node_id, place_id = data.pop("node_id", None), data.pop("place_id", None)
         node = hierarchy_selectors.node_get(node_id=node_id) if node_id else None
-        place = None
-        if place_id:
-            place = PlaceOfWorship.objects.filter(pk=place_id).first()
-            if place is None:
-                raise NotFoundError("Lieu de culte introuvable.", {"place_id": place_id})
+        place = hierarchy_selectors.place_get(place_id=place_id) if place_id else None
         event = services.event_create(organizer=request.user, node=node, place=place, **data)
         return Response(
             EventOutputSerializer(selectors.event_get_for_staff(user=request.user, event_id=event.pk)).data,

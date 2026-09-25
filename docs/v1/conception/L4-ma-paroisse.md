@@ -27,3 +27,10 @@
 - Nouvelle annonce publiée sur la paroisse suivie (ou un ancêtre) → notification in-app immédiate ; e-mail envoyé hors silence, sinon différé à la fin de la plage de silence.
 - Rappel d'événement la veille aux inscrits (tâche Beat horaire).
 - `GET/PUT /me/notification-preferences/`. La liste `GET /notifications/` et `POST /notifications/read-all/` existent déjà.
+
+## 5. Revue (25/09/2026)
+
+- Tâches par lot (publication programmée, rappels) : une transaction par élément ; un élément en erreur est journalisé et repris au passage suivant, sans annuler ni redoubler les autres.
+- Diffusion aux fidèles par tranches de 500 (un diocèse peut compter des dizaines de milliers de fidèles).
+- Contenus publiés **publics** (SRS §7 : `GET /news/` sans authentification), y compris ceux d'une paroisse : une annonce paroissiale est faite pour être lue. Les brouillons, programmés et retirés ne sont visibles que du staff du nœud.
+- `TIME_ZONE = "Africa/Dakar"` (UTC+0 sans heure d'été) : les plages de silence sont exprimées dans l'heure locale.
