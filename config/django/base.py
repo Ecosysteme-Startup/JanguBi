@@ -90,6 +90,9 @@ ADMIN_ACCOUNT_EXPIRY_DAYS = env.int("ADMIN_ACCOUNT_EXPIRY_DAYS", default=7)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 
+DJANGO_ADMIN_ENABLED = env.bool("DJANGO_ADMIN_ENABLED", default=True)
+DJANGO_ADMIN_URL = env.str("DJANGO_ADMIN_URL", default="admin/")
+
 ALLOWED_HOSTS = ["*"]
 
 # WebSocket : origins explicites (schéma+hôte du FRONT) pour OriginValidator.
@@ -304,6 +307,7 @@ REST_FRAMEWORK = {
         'user': '240/min',
         'rag': '20/min',
         'login': env.str("LOGIN_THROTTLE_RATE", default="10/min"),
+        'register': env.str("REGISTER_THROTTLE_RATE", default="10/hour"),
     },
     # Nombre de proxys de confiance DEVANT l'application. Réglage de SÉCURITÉ,
     # pas de confort : sans lui, DRF laissé à `None` construit l'identité de

@@ -33,7 +33,7 @@ from django.http import Http404
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import serializers, status
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
@@ -147,8 +147,14 @@ class UserListPaginatedResponseSerializer(serializers.Serializer):
 # INSCRIPTION
 # ===========================================================================
 
+class _RegisterThrottle(AnonRateThrottle):
+    scope = "register"
+
+
 @extend_schema(tags=["Authentification"])
 class FideleRegisterApi(APIView):
+    throttle_classes = [_RegisterThrottle]
+
     class InputSerializer(serializers.Serializer):
         email = serializers.EmailField()
         phone_number = serializers.CharField(max_length=20)
@@ -167,7 +173,8 @@ class FideleRegisterApi(APIView):
         request=InputSerializer,
         responses={
             201: OpenApiResponse(description="Compte créé, email de vérification envoyé"),
-            400: OpenApiResponse(description="Données invalides ou email déjà utilisé"),
+            400: OpenApiResponse(description="Données invalides (mot de passe trop faible…)"),
+            429: OpenApiResponse(description="Trop d'inscriptions depuis cette adresse"),
         },
     )
     def post(self, request):
@@ -178,8 +185,9 @@ class FideleRegisterApi(APIView):
         except ApplicationError as exc:
             return Response({"detail": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Réponse identique que l'adresse soit nouvelle ou déjà inscrite (anti-énumération).
         return Response(
-            {"detail": "Compte créé. Vérifiez votre email pour activer votre compte."},
+            {"detail": "Si cette adresse n'est pas déjà inscrite, un e-mail d'activation vient d'être envoyé."},
             status=status.HTTP_201_CREATED,
         )
 

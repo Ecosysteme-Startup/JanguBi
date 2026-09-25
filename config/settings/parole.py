@@ -24,3 +24,11 @@ BIBLE_EDITIONS = {
 LITURGY_EPIPHANY_ON_SUNDAY = env.bool("LITURGY_EPIPHANY_ON_SUNDAY", default=True)
 LITURGY_ASCENSION_ON_SUNDAY = env.bool("LITURGY_ASCENSION_ON_SUNDAY", default=False)
 LITURGY_CORPUS_CHRISTI_ON_SUNDAY = env.bool("LITURGY_CORPUS_CHRISTI_ON_SUNDAY", default=True)
+
+if LITURGY_SOURCE == "crampon_refs" and not BIBLE_EDITION:
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "BIBLE_EDITION vide en mode crampon_refs : toutes les éditions en base sont servies, "
+        "y compris un texte AELF importé. Positionner BIBLE_EDITION=crampon1923 après l'import (ADR-008)."
+    )

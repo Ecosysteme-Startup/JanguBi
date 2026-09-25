@@ -8880,7 +8880,9 @@ paths:
         '201':
           description: Compte créé, email de vérification envoyé
         '400':
-          description: Données invalides ou email déjà utilisé
+          description: Données invalides (mot de passe trop faible…)
+        '429':
+          description: Trop d'inscriptions depuis cette adresse
   /api/v1/users/role-assignments/:
     get:
       operationId: v1_users_role_assignments_list

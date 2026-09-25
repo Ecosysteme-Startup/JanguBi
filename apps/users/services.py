@@ -154,14 +154,18 @@ def user_register_fidele(
     last_name: str,
     title: str,
     ip: str | None = None,
-) -> BaseUser:
+) -> BaseUser | None:
     """
-    Inscrit un fidèle.
+    Inscrit un fidèle (``None`` si l'adresse existe déjà : voir l'anti-énumération).
     Compte créé inactif + non-vérifié → email de vérification envoyé.
     Le groupe Django 'fidele' est assigné à l'activation du compte.
     """
-    if BaseUser.objects.filter(email__iexact=email).exists():
-        raise ApplicationError("Un compte avec cet email existe déjà.")
+    # Anti-énumération : être inscrit révèle une appartenance religieuse (donnée sensible).
+    # Même réponse que pour une création ; la personne concernée est prévenue par e-mail.
+    existing = BaseUser.objects.filter(email__iexact=email).first()
+    if existing is not None:
+        _send_email_safe("account_exists", {"user": existing}, existing.email)
+        return None
 
     try:
         validate_password(password)

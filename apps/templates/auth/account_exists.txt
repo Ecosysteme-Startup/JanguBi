@@ -1,0 +1,9 @@
+Bonjour,
+
+Quelqu'un (peut-être vous) a tenté de créer un compte Jàngu Bi avec cette adresse, qui en possède déjà un.
+
+Si c'était vous, connectez-vous (lien « Mot de passe oublié » sur la page de connexion) : {{ frontend_url }}/login
+
+Si ce n'était pas vous, ignorez ce message : votre compte n'a pas été modifié.
+
+Jàngu Bi

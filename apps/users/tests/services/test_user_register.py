@@ -76,14 +76,13 @@ class UserRegisterFideleTests(TestCase):
         user = user_register_fidele(**data)
         self.assertEqual(user.email, "alice@example.com")
 
-    def test_duplicate_email_raises(self):
-        # Arrange
+    def test_duplicate_email_is_silent_and_notifies_owner(self):
+        # Anti-énumération : aucune erreur visible, le titulaire de l'adresse est prévenu.
         BaseUserFactory(email="alice@example.com")
-        # Act & Assert
-        with self.assertRaises(ApplicationError) as ctx:
-            with patch(PATCH_EMAIL), patch(PATCH_TOKEN):
-                user_register_fidele(**self.VALID_DATA)
-        self.assertIn("existe déjà", str(ctx.exception))
+        with patch(PATCH_EMAIL) as send, patch(PATCH_TOKEN):
+            result = user_register_fidele(**self.VALID_DATA)
+        self.assertIsNone(result)
+        self.assertEqual(send.call_args.args[0], "account_exists")
 
     def test_weak_password_raises(self):
         data = {**self.VALID_DATA, "password": "123"}

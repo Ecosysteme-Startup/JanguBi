@@ -6,6 +6,17 @@ from .base import *  # noqa
 
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
+# Pas de MFA sur l'admin Django (revue de sécurité L9) : fermée sauf décision explicite.
+DJANGO_ADMIN_ENABLED = env.bool("DJANGO_ADMIN_ENABLED", default=False)
+
+import logging as _logging  # noqa: E402
+
+if env.bool("LEGACY_JWT_ENABLED", default=True):
+    _logging.getLogger(__name__).warning(
+        "LEGACY_JWT_ENABLED=true : l'ancien JWT reste accepté (repli super-admin, jeton WebSocket "
+        "dans l'URL). À désactiver dès la bascule du front sur Keycloak (ADR-004)."
+    )
+
 SECRET_KEY = env("SECRET_KEY")
 
 # Chiffrement des conversations pastorales (apps/messaging/fields.py).

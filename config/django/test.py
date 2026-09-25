@@ -53,6 +53,7 @@ REST_FRAMEWORK = {
         "user": None,
         "rag": None,
         "login": None,
+        "register": None,
     },
 }
 
