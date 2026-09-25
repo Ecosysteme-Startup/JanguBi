@@ -11,6 +11,17 @@ from apps.core.exceptions import NotFoundError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 
+PERSON_CANCEL_DEADLINE = datetime.timedelta(hours=1)
+
+
+def booking_can_cancel(booking: ConfessionBooking, *, now: datetime.datetime | None = None) -> bool:
+    """Le fidèle annule jusqu'à une heure avant le rendez-vous."""
+    return (
+        booking.status == ConfessionBooking.Status.RESERVEE
+        and booking.slot.starts_at - (now or timezone.now()) >= PERSON_CANCEL_DEADLINE
+    )
+
+
 _SLOT_RELATED = ("priest", "priest__profile", "place", "place__node")
 PLANNING_DAYS = 28
 

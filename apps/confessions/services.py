@@ -13,6 +13,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.confessions.models import ConfessionBooking, ConfessionSlot, ConfessionSlotRule
+from apps.confessions.selectors import PERSON_CANCEL_DEADLINE
 from apps.core.exceptions import ApplicationError, ConflictError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
@@ -21,7 +22,6 @@ from apps.hierarchy.models import PlaceOfWorship
 logger = logging.getLogger(__name__)
 
 HORIZON_DAYS = 28  # 4 semaines glissantes
-PERSON_CANCEL_DEADLINE = datetime.timedelta(hours=1)
 MAX_ACTIVE_BOOKINGS = 2  # réservations à venir par personne (anti-accaparement)
 REMINDER_DAY = datetime.timedelta(hours=24)
 REMINDER_HOURS = datetime.timedelta(hours=2)
@@ -106,18 +106,18 @@ def _rule_generate(*, rule: ConfessionSlotRule, today: datetime.date) -> int:
     if not slots:
         return 0
     # Idempotent : (prêtre, début) est unique ; deux règles qui se chevauchent ne doublonnent pas.
-    # bulk_create(ignore_conflicts) renvoie tous les objets : on compte les lignes réellement créées.
-    existing = ConfessionSlot.objects.filter(priest_id=rule.priest_id, starts_at__in=[s.starts_at for s in slots])
-    before = existing.count()
+    # bulk_create(ignore_conflicts) renvoie aussi les objets ignorés : on compte avant et après.
+    same_starts = ConfessionSlot.objects.filter(priest_id=rule.priest_id, starts_at__in=[s.starts_at for s in slots])
+    before = same_starts.count()
     ConfessionSlot.objects.bulk_create(slots, ignore_conflicts=True)
-    return existing.count() - before
+    return same_starts.count() - before
 
 
 def slots_generate(*, today: datetime.date | None = None) -> int:
     """Tâche quotidienne : prolonge l'horizon de 4 semaines pour chaque règle active."""
     today = today or timezone.localdate()
     total = 0
-    for rule in ConfessionSlotRule.objects.filter(is_active=True, place__is_active=True):
+    for rule in ConfessionSlotRule.objects.filter(is_active=True, place__is_active=True).iterator():
         try:
             with transaction.atomic():
                 total += _rule_generate(rule=rule, today=today)
@@ -159,6 +159,9 @@ def booking_create(*, slot: ConfessionSlot, person: Any) -> ConfessionBooking:
 
 
 def _lock_booking(booking: ConfessionBooking) -> ConfessionBooking:
+    """Ordre des verrous commun à tout le module : le créneau, PUIS la réservation
+    (sinon l'annulation du prêtre et celle du fidèle s'interbloquent)."""
+    ConfessionSlot.objects.select_for_update().filter(pk=booking.slot_id).first()
     locked = (
         ConfessionBooking.objects.select_for_update(of=("self",))
         .select_related("slot", "slot__place")
@@ -204,7 +207,11 @@ def slot_cancel_by_priest(*, slot: ConfessionSlot, actor: Any, message: str = ""
     if locked.status == ConfessionSlot.Status.BLOQUE:
         return locked
     now = timezone.now()
-    booking = ConfessionBooking.objects.filter(slot=locked, status=ConfessionBooking.Status.RESERVEE).first()
+    booking = (
+        ConfessionBooking.objects.select_for_update()
+        .filter(slot=locked, status=ConfessionBooking.Status.RESERVEE)
+        .first()
+    )
     if booking is not None:
         booking.status = ConfessionBooking.Status.ANNULEE_PRETRE
         booking.cancelled_at = now
@@ -286,6 +293,8 @@ def bookings_remind(*, now: datetime.datetime | None = None) -> int:
     for field, booking_id in due:
         try:
             with transaction.atomic():
+                # Pas de verrou sur le créneau ici : skip_locked écarte une réservation en cours
+                # d'annulation, reprise au passage suivant (pas d'attente, pas d'interblocage).
                 booking = (
                     ConfessionBooking.objects.select_for_update(of=("self",), skip_locked=True)
                     .select_related("slot", "slot__place")

@@ -3,6 +3,7 @@ from typing import Any
 from rest_framework import serializers
 
 from apps.confessions.models import ConfessionBooking, ConfessionSlot, ConfessionSlotRule
+from apps.confessions.selectors import booking_can_cancel
 
 
 def _full_name(user: Any) -> str:
@@ -92,14 +93,7 @@ class BookingOutputSerializer(serializers.ModelSerializer):
         fields = ["id", "status", "slot", "cancel_message", "cancelled_at", "can_cancel", "created_at"]
 
     def get_can_cancel(self, obj: ConfessionBooking) -> bool:
-        from django.utils import timezone
-
-        from apps.confessions.services import PERSON_CANCEL_DEADLINE
-
-        return (
-            obj.status == ConfessionBooking.Status.RESERVEE
-            and obj.slot.starts_at - timezone.now() >= PERSON_CANCEL_DEADLINE
-        )
+        return booking_can_cancel(obj)
 
 
 class RuleOutputSerializer(serializers.ModelSerializer):

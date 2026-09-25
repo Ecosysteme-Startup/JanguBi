@@ -215,11 +215,11 @@ def availability_update(*, user: BaseUser, data: dict) -> MessagingAvailability:
         from apps.core.exceptions import PermissionDeniedError
 
         raise PermissionDeniedError("Réservé aux prêtres joignables.", code="not_reachable")
-    availability, _ = MessagingAvailability.objects.get_or_create(user=user)
-    for field in ("accepts_new_conversations", "absent_until", "reply_windows", "note"):
-        if field in data:
-            setattr(availability, field, data[field])
-    availability.save()
+    availability, _ = MessagingAvailability.objects.select_for_update().get_or_create(user=user)
+    fields = [f for f in ("accepts_new_conversations", "absent_until", "reply_windows", "note") if f in data]
+    for field in fields:
+        setattr(availability, field, data[field])
+    availability.save(update_fields=[*fields, "updated_at"])
     return availability
 
 
