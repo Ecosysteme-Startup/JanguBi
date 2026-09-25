@@ -28,6 +28,7 @@ FREEZABLE_MODULES: tuple[str, ...] = (
     "documents",
     "news",
     "org",
+    "hierarchy",
     "agenda",
     "dashboards",
     "clergy_accounts",

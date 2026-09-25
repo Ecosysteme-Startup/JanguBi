@@ -24,6 +24,8 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("documents", "documents/", "apps.documents.urls", "documents"),
     ("news", "news/", "apps.news.urls", "news"),
     ("org", "org/", "apps.org.urls", "org"),
+    ("hierarchy", "hierarchy/", "apps.hierarchy.urls", "hierarchy"),
+    ("hierarchy", "public/", "apps.hierarchy.urls_public", "public"),
     ("clergy_accounts", "clergy-accounts/", "apps.clergy_accounts.urls", "clergy-accounts"),
     ("agenda", "agenda/", "apps.agenda.urls", "agenda"),
     ("mass_intentions", "mass-intentions/", "apps.mass_intentions.urls", "mass-intentions"),
