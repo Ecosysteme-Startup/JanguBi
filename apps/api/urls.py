@@ -26,6 +26,7 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("org", "org/", "apps.org.urls", "org"),
     ("hierarchy", "hierarchy/", "apps.hierarchy.urls", "hierarchy"),
     ("hierarchy", "public/", "apps.hierarchy.urls_public", "public"),
+    ("users", "me/", "apps.users.urls_me", "me-profile"),
     ("hierarchy", "me/", "apps.hierarchy.urls_me", "me"),
     ("hierarchy", "audit/", "apps.hierarchy.urls_audit", "audit"),
     ("clergy_accounts", "clergy-accounts/", "apps.clergy_accounts.urls", "clergy-accounts"),

@@ -52,6 +52,9 @@ def v1_exception_handler(exc: Exception, ctx: dict[str, Any]) -> Response | None
         return response
 
     code = next((c for cls, c in _DRF_CODES.items() if isinstance(exc, cls)), exc.default_code)
+    specific = exc.get_codes()
+    if isinstance(specific, str) and specific != exc.default_code:
+        code = specific  # ex. PermissionDenied(code="mfa_required")
     if isinstance(exc, exceptions.ValidationError):
         message, details = "Les données envoyées sont invalides.", response.data
     else:

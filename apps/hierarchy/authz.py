@@ -15,9 +15,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Q, QuerySet
 from django.utils import timezone
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
 
 from apps.hierarchy.enums import AssignmentStatus
@@ -48,15 +50,38 @@ def _check_capability(capability: str) -> None:
 
 
 def is_platform_admin(user: Any) -> bool:
-    """Administrateur Numerisen.
+    """Administrateur Numerisen : rôle de realm Keycloak ``platform_admin`` (ADR-004).
 
-    TODO(L3) : lire le rôle de realm Keycloak ``platform_admin``. D'ici là : super-admin legacy.
+    Pour une requête authentifiée par l'ancien JWT (transition), le super-admin legacy compte
+    encore, tant que ``LEGACY_JWT_ENABLED`` est vrai ; après la bascule, plus jamais.
     """
     if not getattr(user, "is_authenticated", False):
+        return False
+    identity = getattr(user, "keycloak_identity", None)
+    if identity is not None:
+        return settings.KEYCLOAK_PLATFORM_ADMIN_ROLE in identity.realm_roles
+    if not settings.LEGACY_JWT_ENABLED:
         return False
     from apps.users.enums import UserRole
 
     return bool(getattr(user, "is_superuser", False) or getattr(user, "role", None) == UserRole.SUPER_ADMIN)
+
+
+def mfa_satisfied(user: Any) -> bool:
+    """EF-AUTH-05 : un titulaire d'office (ou la plateforme) connecté par Keycloak doit l'être avec MFA."""
+    identity = getattr(user, "keycloak_identity", None)
+    if identity is None or not settings.KEYCLOAK_REQUIRE_MFA_FOR_STAFF:
+        return True
+    if not grants(user):
+        return True  # fidèle : aucun endpoint staff
+    return bool(identity.mfa)
+
+
+def mfa_check(user: Any) -> None:
+    if not mfa_satisfied(user):
+        raise PermissionDenied(
+            "Authentification à deux facteurs requise pour les fonctions de responsable.", code="mfa_required"
+        )
 
 
 def active_assignments(*, user: Any, on: Any = None) -> QuerySet[OfficeAssignment]:
@@ -96,7 +121,8 @@ def _grants_compute(user: Any) -> list[Grant]:
 def _cache_key(user: Any) -> str:
     global_version = cache.get_or_set(_GLOBAL_VERSION_KEY, 1, None)
     user_version = cache.get_or_set(f"authz:uv:{user.pk}", 1, None)
-    return f"authz:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{user.pk}"
+    platform = int(is_platform_admin(user))  # le rôle vient du jeton : il fait partie de la clé
+    return f"authz:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{platform}:{user.pk}"
 
 
 def grants(user: Any) -> list[Grant]:
@@ -184,8 +210,12 @@ def HasCapability(capability: str, *, node_resolver: NodeResolver | None = None)
             if not getattr(user, "is_authenticated", False):
                 return False
             if node_resolver is None:
-                return a_la_capacite(user, capability)
-            return peut(user, capability, node_resolver(request, view))
+                allowed = a_la_capacite(user, capability)
+            else:
+                allowed = peut(user, capability, node_resolver(request, view))
+            if allowed:
+                mfa_check(user)
+            return allowed
 
     _HasCapability.__name__ = f"HasCapability_{capability.replace('.', '_')}"
     return _HasCapability

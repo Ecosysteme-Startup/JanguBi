@@ -3,7 +3,7 @@ from typing import Any
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -48,8 +48,16 @@ def _ip(request: Request) -> str | None:
     return request.META.get("REMOTE_ADDR")
 
 
+class _StaffMfa(BasePermission):
+    """Un responsable (titulaire d'office) connecté par Keycloak doit l'être avec MFA."""
+
+    def has_permission(self, request: Request, view: Any) -> bool:
+        authz.mfa_check(request.user)
+        return True
+
+
 class AuthedV1Api(V1ApiMixin, ApiAuthMixin, APIView):
-    permission_classes: PermissionClassesType = (IsAuthenticated,)
+    permission_classes: PermissionClassesType = (IsAuthenticated, _StaffMfa)
 
 
 # --- Offices et nominations -------------------------------------------------------------
@@ -136,7 +144,7 @@ class AssignmentDetailApi(AuthedV1Api):
 
 
 class AssignmentImportApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("offices.nommer"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("offices.nommer"))
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     @extend_schema(
@@ -172,7 +180,7 @@ def _person_status(person: Any) -> dict[str, Any]:
 
 
 class VerificationListApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("personnes.verifier"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("personnes.verifier"))
 
     @extend_schema(
         tags=TAG,
@@ -191,7 +199,7 @@ class VerificationListApi(AuthedV1Api):
 
 
 class VerificationDecisionApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("personnes.verifier"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("personnes.verifier"))
 
     @extend_schema(
         tags=TAG,
@@ -216,7 +224,7 @@ class VerificationDecisionApi(AuthedV1Api):
 
 
 class CapabilityOverrideListCreateApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("plateforme.admin"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("plateforme.admin"))
 
     @extend_schema(tags=TAG, summary="Retraits de capacités par diocèse", responses=CapabilityOverrideSerializer(many=True))
     def get(self, request: Request) -> Response:
@@ -245,7 +253,7 @@ class CapabilityOverrideListCreateApi(AuthedV1Api):
 
 
 class CapabilityOverrideDeleteApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("plateforme.admin"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("plateforme.admin"))
 
     @extend_schema(tags=TAG, summary="Annuler un retrait de capacité (plateforme.admin)", responses={204: None})
     def delete(self, request: Request, override_id: int) -> Response:
@@ -300,7 +308,7 @@ class MeDeclarationApi(AuthedV1Api):
 
 
 class AuditListApi(AuthedV1Api):
-    permission_classes = (IsAuthenticated, HasCapability("audit.voir"))
+    permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("audit.voir"))
 
     @extend_schema(
         tags=AUDIT_TAG,

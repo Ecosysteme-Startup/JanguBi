@@ -7,6 +7,7 @@ from rest_framework.authentication import BaseAuthentication, SessionAuthenticat
 from rest_framework.permissions import BasePermission, IsAuthenticated
 
 from apps.authentication.authentication import JwtKeyEnforcingJWTAuthentication
+from apps.authentication.keycloak import KeycloakJWTAuthentication
 
 
 def get_auth_header(headers):
@@ -73,6 +74,7 @@ else:
 
 class ApiAuthMixin:
     authentication_classes: Sequence[Type[BaseAuthentication]] = [
+        KeycloakJWTAuthentication,
         JwtKeyEnforcingJWTAuthentication,
         CsrfExemptedSessionAuthentication,
         SessionAsHeaderAuthentication,

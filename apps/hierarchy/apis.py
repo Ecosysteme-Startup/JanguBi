@@ -50,8 +50,12 @@ class _CanWrite(BasePermission):
 
     def has_permission(self, request: Request, view: Any) -> bool:
         if view.write_on_any_node:
-            return authz.a_la_capacite(request.user, view.write_capability)
-        return authz.peut(request.user, view.write_capability, view.get_write_node())
+            allowed = authz.a_la_capacite(request.user, view.write_capability)
+        else:
+            allowed = authz.peut(request.user, view.write_capability, view.get_write_node())
+        if allowed:
+            authz.mfa_check(request.user)
+        return allowed
 
 
 class HierarchyBaseApi(V1ApiMixin, ApiAuthMixin, APIView):

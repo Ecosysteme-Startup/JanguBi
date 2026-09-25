@@ -42,13 +42,14 @@ tasks.py       → Tâches Celery. Import des services dans le corps de la fonct
 - Droits de base du fidèle (sans capacité) : SRS §6.1.
 - Les files de travail appartiennent au **nœud**, pas à la personne (RG-04).
 
-## 4. Authentification — Keycloak (ADR-004, à partir de L3)
+## 4. Authentification — Keycloak (ADR-004, livré en L3)
 
-- OIDC : le front obtient le jeton (PKCE), l'API le valide via JWKS (`apps/authentication/keycloak.py`), le WebSocket valide le même jeton au handshake.
-- Rôles de realm : `fidele`, `staff` (MFA exigée), `platform_admin` (MFA exigée). **Aucune hiérarchie dans Keycloak.**
-- Realm versionné : `infra/keycloak/realm-jangubi.json`.
-- En tests : fixture JWKS locale, jamais de Keycloak réel en CI.
-- Jusqu'à la fin de L3, SimpleJWT reste actif : ne pas l'étendre.
+- OIDC : le front obtient le jeton (Auth.js, PKCE, client `jangubi-web`), l'API le valide via JWKS (`apps/authentication/keycloak.py`, audience `jangubi-api`), le WebSocket valide le même jeton au handshake (`?token=`, fermeture 4401 si invalide).
+- Rôles de realm : `fidele`, `staff` (synchronisé depuis les nominations, MFA exigée), `platform_admin` (à la main, MFA exigée). **Aucune hiérarchie dans Keycloak.** L'API exige `amr ∋ otp` pour tout endpoint à capacité.
+- Realm versionné : `infra/keycloak/realm-jangubi.json` ; `make kc-up` (http://localhost:8180), `make kc-export`, `make kc-test` (intégration réelle, hors CI).
+- En tests : clé RSA et JWKS locaux, jamais de Keycloak réel en CI.
+- **Bascule par réglage** : `KEYCLOAK_ENABLED=true` active Keycloak ; SimpleJWT reste accepté tant que `LEGACY_JWT_ENABLED=true` (transition du front). Ne pas étendre SimpleJWT ; `jwt_key` et les routes `/api/v1/auth/jwt/*` partent en L9.
+- Migration des comptes : `manage.py migrate_users_to_keycloak [--apply]` (hachages pbkdf2 importés, pas de réinitialisation).
 
 ## 5. Règles métier à ne jamais enfreindre
 

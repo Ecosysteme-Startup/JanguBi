@@ -29,9 +29,21 @@ OPEN_STATUSES = (AssignmentStatus.PROPOSEE, AssignmentStatus.ACTIVE)
 
 def _invalidate(user_id: Any) -> None:
     """Invalide les droits en cache tout de suite (même transaction) et après validation
-    (une requête concurrente a pu recalculer l'ancien état entre-temps)."""
+    (une requête concurrente a pu recalculer l'ancien état entre-temps), puis resynchronise
+    le rôle Keycloak ``staff`` (EF-AUTH-04)."""
     authz.invalidate_user(user_id)
     transaction.on_commit(partial(authz.invalidate_user, user_id))
+    transaction.on_commit(partial(_staff_sync_enqueue, user_id))
+
+
+def _staff_sync_enqueue(user_id: Any) -> None:
+    from django.conf import settings
+
+    if not settings.KEYCLOAK_ENABLED:
+        return
+    from apps.authentication.tasks import keycloak_staff_sync_task
+
+    keycloak_staff_sync_task.delay(str(user_id))
 
 
 # --- Contrôles -------------------------------------------------------------------------

@@ -51,6 +51,10 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.messaging.tasks.notify_purge_upcoming",
         "schedule": crontab(hour=3, minute=30),
     },
+    "keycloak_staff_reconcile": {
+        "task": "apps.authentication.tasks.keycloak_staff_reconcile_task",
+        "schedule": crontab(hour=0, minute=45),
+    },
     "hierarchy_assignments_sync": {
         "task": "apps.hierarchy.tasks.assignments_sync_task",
         "schedule": crontab(hour=0, minute=15),
@@ -250,6 +254,9 @@ REST_FRAMEWORK = {
     # retombe sur le défaut DRF (Session+Basic) et IGNORE le Bearer JWT — c'était
     # la cause du 401 systématique de la Liturgie des Heures côté SPA/mobile.
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        # Keycloak d'abord (inactif tant que KEYCLOAK_ENABLED=false) ; SimpleJWT ensuite,
+        # tant que LEGACY_JWT_ENABLED=true (transition du front, ADR-004).
+        'apps.authentication.keycloak.KeycloakJWTAuthentication',
         'apps.authentication.authentication.JwtKeyEnforcingJWTAuthentication',
         'apps.api.mixins.CsrfExemptedSessionAuthentication',
         'apps.api.mixins.SessionAsHeaderAuthentication',
@@ -301,7 +308,9 @@ CACHES = {
         "LOCATION": env("REDIS_URL", default="redis://:root@127.0.0.1:6379/1"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "KEY_PREFIX": "guiss_talli",
+            # Préfixe propre à Jàngu Bi (l'ancien, « guiss_talli », venait d'un autre projet
+            # hébergé sur le même serveur : risque de collision de clés sur un Redis partagé).
+            "KEY_PREFIX": "jangubi",
         }
     }
 }
@@ -338,6 +347,7 @@ from config.settings.email_sending import *  # noqa
 from config.settings.files_and_storages import *  # noqa
 #from config.settings.google_oauth2 import *  # noqa
 from config.settings.jwt import *  # noqa
+from config.settings.keycloak import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa

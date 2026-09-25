@@ -2574,6 +2574,47 @@ paths:
                 items:
                   $ref: '#/components/schemas/Reading'
           description: ''
+  /api/v1/me/:
+    get:
+      operationId: v1_me_retrieve
+      summary: Mon profil
+      tags:
+      - Profil
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonProfil'
+              examples:
+                ExempleFidèle:
+                  value:
+                    id: 1
+                    email: jean.dupont@example.com
+                    role: fidele
+                    pastoral_role: null
+                    onboarding_state: completed
+                    is_active: true
+                    is_verified: true
+                    is_admin: false
+                    is_staff: false
+                    diocese:
+                      id: 2
+                      name: Diocèse de Thiès
+                    province:
+                      id: 1
+                      name: Province de Dakar
+                    profile:
+                      first_name: Jean
+                      last_name: Dupont
+                      title: MR
+                      phone: '+221770000000'
+                      primary_parish:
+                        id: 5
+                        name: Paroisse Saint-Pierre
+                      avatar: null
+                  summary: Exemple Fidèle
+          description: ''
   /api/v1/me/capacites/:
     get:
       operationId: v1_me_capacites_list

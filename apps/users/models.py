@@ -28,7 +28,7 @@ class BaseUserManager(DjangoBaseUserManager):
         self,
         email: str,
         role: str,
-        phone_number: str,
+        phone_number: str | None,
         password: str | None = None,
         is_verified: bool = False,
         is_active: bool = False,
@@ -102,6 +102,9 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         _("numéro de téléphone"),
         unique=True,
         db_index=True,
+        # Facultatif depuis L3 : un compte créé par Keycloak n'a pas de téléphone.
+        null=True,
+        blank=True,
     )
     role = models.CharField(
         _("rôle"),

@@ -8,7 +8,7 @@ export
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-senegal seed-hierarchy seed-demo seed-reset \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf init-tv-categories \
-	ci-list ci act hooks ci-docker ci-docker-act \
+	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
 
 # ==============================================================================
@@ -201,6 +201,26 @@ seed: seed-senegal seed-demo
 # de passer l'étape (audit beta 2026-07-20). `seed_senegal` est idempotent.
 init-all: init-data seed-senegal seed-hierarchy
 
+
+# ==============================================================================
+# KEYCLOAK (ADR-004) — realm versionné dans infra/keycloak/realm-jangubi.json
+# ==============================================================================
+# Démarre Keycloak (http://localhost:8180, admin/admin en local) et importe le realm.
+kc-up:
+	docker compose --profile keycloak up -d keycloak
+
+kc-down:
+	docker compose --profile keycloak stop keycloak keycloak-db
+
+# Exporte le realm courant (après un réglage fait dans la console) pour le versionner.
+# Relire le diff : l'export contient des secrets de clients à remplacer par ${...}.
+kc-export:
+	docker compose --profile keycloak exec keycloak /opt/keycloak/bin/kc.sh export --realm jangubi --file /tmp/realm-jangubi.json --users skip
+	docker compose --profile keycloak cp keycloak:/tmp/realm-jangubi.json infra/keycloak/realm-jangubi.export.json
+
+# Test d'intégration contre le Keycloak local (hors CI).
+kc-test:
+	docker compose exec -e KEYCLOAK_E2E_URL=http://keycloak:8080 django pytest -m keycloak apps/authentication -q
 
 # ==============================================================================
 # CI LOCALE (act) — reproduit .github/workflows/django.yml en local

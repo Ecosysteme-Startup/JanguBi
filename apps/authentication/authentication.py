@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
@@ -15,6 +16,12 @@ class JwtKeyEnforcingJWTAuthentication(JWTAuthentication):
     custom du refresh vers l'access) : un refresh antérieur à la rotation produit
     donc un access immédiatement rejeté ici.
     """
+
+    def authenticate(self, request):
+        # Après la bascule Keycloak (LEGACY_JWT_ENABLED=false), les anciens jetons ne valent plus rien.
+        if not settings.LEGACY_JWT_ENABLED:
+            return None
+        return super().authenticate(request)
 
     def get_user(self, validated_token):
         user = super().get_user(validated_token)
