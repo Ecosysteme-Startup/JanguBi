@@ -12,6 +12,7 @@ from functools import partial
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.exceptions import ApplicationError, PermissionDeniedError
@@ -25,6 +26,7 @@ from apps.documents.models import (
 )
 from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
+from apps.hierarchy.enums import NodeStatus
 from apps.hierarchy.models import Node, PlaceOfWorship
 
 logger = logging.getLogger(__name__)
@@ -82,7 +84,7 @@ def _parish_check(node: Node) -> None:
     """RG-02 : la demande va à la paroisse du sacrement, un nœud qui tient les registres."""
     if not node.type.holds_registers:
         raise ApplicationError("Choisissez la paroisse où le sacrement a été célébré.", code="not_a_parish")
-    if node.status == "supprime":
+    if node.status == NodeStatus.SUPPRIME:
         raise ApplicationError("Cette paroisse n'existe plus.", code="parish_deleted")
 
 
@@ -148,7 +150,9 @@ def _notify_requester(request_obj: DocumentRequest, extra: str = "", *, status: 
         body += f"<p>{extra}</p>"
     if status == S.READY_FOR_PICKUP:
         body += f"<p>{ORIGINAL_NOTICE}</p>"
-    _email(to=request_obj.contact_email, subject=f"[Jàngu Bi] {message}", html=body)
+    # Vers l'adresse du COMPTE (vérifiée), jamais vers contact_email saisi librement :
+    # sinon n'importe qui ferait écrire à un tiers au sujet d'une démarche religieuse.
+    _email(to=request_obj.requester.email, subject=f"[Jàngu Bi] {message}", html=body)
 
 
 def _notify_parish(request_obj: DocumentRequest, event: str) -> None:
@@ -240,7 +244,7 @@ def _attach(*, request_obj: DocumentRequest, file_id: int, uploaded_by: Any) -> 
     file_obj = File.objects.filter(pk=file_id).first()
     if file_obj is None:
         raise ApplicationError("Fichier introuvable.", {"file_id": file_id}, code="file_not_found")
-    if getattr(file_obj, "uploaded_by_id", uploaded_by.pk) != uploaded_by.pk:
+    if file_obj.uploaded_by_id is None or file_obj.uploaded_by_id != uploaded_by.pk:
         raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
     if not file_obj.is_valid:
         raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
@@ -250,6 +254,14 @@ def _attach(*, request_obj: DocumentRequest, file_id: int, uploaded_by: Any) -> 
         uploaded_by=uploaded_by,
         attachment_type=DocumentRequest.AttachmentType.USER_SUPPORTING,
     )
+
+
+def _lock(request_obj: DocumentRequest) -> DocumentRequest:
+    """Relit la demande sous verrou : deux transitions concurrentes ne s'appliquent pas
+    toutes les deux à partir du même statut."""
+    return DocumentRequest.objects.select_for_update(of=("self",)).select_related(
+        "target_node", "target_node__type", "requester"
+    ).get(pk=request_obj.pk)
 
 
 def _requester_check(*, request_obj: DocumentRequest, user: Any) -> None:
@@ -263,6 +275,8 @@ def document_request_submit_supplement(
     attachment_file_id: int | None = None,
 ) -> DocumentRequest:
     _requester_check(request_obj=request_obj, user=requester)
+    request_obj = _lock(request_obj)
+    document_details = {k: v for k, v in (document_details or {}).items() if str(v).strip()}
     if not (additional_info.strip() or document_details or attachment_file_id):
         raise ApplicationError("Le complément est vide.", code="empty_supplement")
     _transition(request_obj=request_obj, action="supplement", actor=requester, comment="Complément fourni par le demandeur.")
@@ -282,8 +296,9 @@ def document_request_submit_supplement(
 def document_request_cancel(*, request_obj: DocumentRequest, requester: Any) -> DocumentRequest:
     """EF-ACT-07 : annulation par le fidèle tant que la demande est soumise ou en complément."""
     _requester_check(request_obj=request_obj, user=requester)
+    request_obj = _lock(request_obj)
     _transition(request_obj=request_obj, action="cancel", actor=requester)
-    request_obj.save()
+    request_obj.save(update_fields=["status", "closed_at", "updated_at"])
     transaction.on_commit(partial(_notify_parish, request_obj, "cancelled"))
     return request_obj
 
@@ -305,6 +320,7 @@ def document_request_process(
     if action not in TRANSITIONS or TRANSITIONS[action][2] != "paroisse":
         raise ApplicationError("Action inconnue.", {"action": action}, code="unknown_action")
     processor_check(user=actor, request_obj=request_obj)
+    request_obj = _lock(request_obj)
     if action == "reject" and not message.strip():
         raise ApplicationError("Le motif du rejet est obligatoire.", code="reason_required")
     if action == "request_info" and not message.strip():
@@ -336,7 +352,9 @@ def document_request_register_ref_set(*, request_obj: DocumentRequest, actor: An
     for field in fields:
         if field in data:
             setattr(request_obj, field, data[field])
-    request_obj.save(update_fields=[*fields, "updated_at"])
+    # Sans updated_at : une saisie de registre n'est pas une étape de la démarche et ne doit
+    # pas repousser les relances (updated_at sert de référence aux délais).
+    request_obj.save(update_fields=fields)
     audit_log(actor=actor, action="acte.registre", target=request_obj, node=request_obj.target_node)
     return request_obj
 
@@ -352,23 +370,42 @@ def document_request_add_internal_note(*, request_obj: DocumentRequest, author: 
 # --- SLA, relances, purge (EF-ACT-08, -09) -------------------------------------------------
 
 
-def sla_for_node(node: Node | None) -> dict[str, int]:
-    """Réglage du plus proche ancêtre (ou du nœud), sinon les valeurs par défaut."""
-    if node is None:
-        return dict(DEFAULT_SLA)
-    from apps.hierarchy.selectors import node_ancestors
+class SlaResolver:
+    """Délais applicables à un nœud : réglage du plus proche ancêtre (ou du nœud), sinon défaut.
 
-    lineage = [node, *reversed(list(node_ancestors(node=node)))]
-    settings_by_node = {s.node_id: s for s in DocumentSlaSetting.objects.filter(node__in=lineage)}
-    for candidate in lineage:
-        setting = settings_by_node.get(candidate.pk)
-        if setting is not None:
-            return {
-                "escalate_days": setting.escalate_days,
-                "requester_reminder_days": setting.requester_reminder_days,
-                "pickup_reminder_days": setting.pickup_reminder_days,
-            }
-    return dict(DEFAULT_SLA)
+    Charge tous les réglages une fois (ils sont peu nombreux) et résout en mémoire par préfixe
+    de chemin : pas de requête par demande dans une file ou un tableau de bord."""
+
+    def __init__(self) -> None:
+        rows = DocumentSlaSetting.objects.select_related("node").only(
+            "node__path", "escalate_days", "requester_reminder_days", "pickup_reminder_days"
+        )
+        self._by_path = sorted(
+            (
+                (
+                    s.node.path,
+                    {
+                        "escalate_days": s.escalate_days,
+                        "requester_reminder_days": s.requester_reminder_days,
+                        "pickup_reminder_days": s.pickup_reminder_days,
+                    },
+                )
+                for s in rows
+            ),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        )
+
+    def for_path(self, path: str | None) -> dict[str, int]:
+        if path:
+            for prefix, values in self._by_path:
+                if path.startswith(prefix):
+                    return dict(values)
+        return dict(DEFAULT_SLA)
+
+
+def sla_for_node(node: Node | None) -> dict[str, int]:
+    return SlaResolver().for_path(node.path if node is not None else None)
 
 
 SLA_KEY_BY_STATUS: dict[str, str] = {
@@ -383,24 +420,37 @@ def document_requests_remind(*, now: datetime.datetime | None = None) -> int:
     """Relance quotidienne : la paroisse (soumise / en vérification), le fidèle (complément,
     retrait). Au plus une relance par seuil écoulé (``last_reminded_at``)."""
     now = now or timezone.now()
+    resolver = SlaResolver()
     count = 0
     open_requests = DocumentRequest.objects.filter(status__in=SLA_KEY_BY_STATUS).select_related(
         "target_node", "requester"
     )
     for request_obj in open_requests.iterator():
-        days = sla_for_node(request_obj.target_node)[SLA_KEY_BY_STATUS[request_obj.status]]
+        days = resolver.for_path(request_obj.target_node.path if request_obj.target_node else None)[
+            SLA_KEY_BY_STATUS[request_obj.status]
+        ]
         threshold = now - datetime.timedelta(days=days)
         if request_obj.updated_at > threshold:
             continue
-        if request_obj.last_reminded_at is not None and request_obj.last_reminded_at > threshold:
-            continue
-        with transaction.atomic():
-            if request_obj.status in (S.SUBMITTED, S.UNDER_VERIFICATION):
-                _notify_parish(request_obj, "overdue")
-            else:
-                _notify_requester(request_obj, "Rappel : votre demande attend une action de votre part.", status=request_obj.status)
-            DocumentRequest.objects.filter(pk=request_obj.pk).update(last_reminded_at=now)
-        count += 1
+        try:
+            with transaction.atomic():
+                # Réservation atomique : deux passages concurrents n'envoient pas deux relances.
+                claimed = (
+                    DocumentRequest.objects.filter(pk=request_obj.pk, status=request_obj.status)
+                    .filter(Q(last_reminded_at__isnull=True) | Q(last_reminded_at__lte=threshold))
+                    .update(last_reminded_at=now)
+                )
+                if not claimed:
+                    continue
+                if request_obj.status in (S.SUBMITTED, S.UNDER_VERIFICATION):
+                    _notify_parish(request_obj, "overdue")
+                else:
+                    _notify_requester(
+                        request_obj, "Rappel : votre demande attend une action de votre part.", status=request_obj.status
+                    )
+            count += 1
+        except Exception:  # noqa: BLE001 — journalisé, repris au passage suivant
+            logger.exception("documents.remind_failed", extra={"request_id": str(request_obj.pk)})
     return count
 
 

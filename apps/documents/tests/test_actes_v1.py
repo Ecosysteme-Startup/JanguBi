@@ -159,7 +159,7 @@ def test_rejection_needs_a_reason(world):
     process(world, r, "start_verification")
     with pytest.raises(ApplicationError):
         process(world, r, "reject")
-    process(world, r, "reject", message="Aucun acte à ce nom dans nos registres.")
+    r = process(world, r, "reject", message="Aucun acte à ce nom dans nos registres.")
     assert r.status == S.REJECTED and r.closed_at is not None
 
 
@@ -327,3 +327,33 @@ def test_platform_admin_does_not_process_acts(world):
 def test_options_endpoint(world):
     data = client_for(world.fidele).get("/api/v1/documents/requests/options/").data
     assert {m["value"] for m in data["pickup_modes"]} == {"secretariat", "transfer_to_followed_parish"}
+
+
+def test_queue_listing_does_not_query_sla_per_row(world, django_assert_max_num_queries):
+    for _ in range(8):
+        submit(world)
+    client = client_for(world.secretaire)
+    with django_assert_max_num_queries(12):
+        response = client.get("/api/v1/staff/documents/", {"overdue": "false"})
+    assert response.data["count"] == 8
+
+
+def test_register_refs_do_not_reset_the_sla_clock(world):
+    with freeze_time("2026-09-01 09:00:00"):
+        r = submit(world)
+    with freeze_time("2026-09-05 09:00:00"):
+        document_request_register_ref_set(request_obj=r, actor=world.secretaire, data={"register_volume": "B-1"})
+    r.refresh_from_db()
+    assert r.updated_at.date() == datetime.date(2026, 9, 1)
+
+
+def test_notifications_go_to_the_account_email_not_the_free_contact(world, django_capture_on_commit_callbacks):
+    with django_capture_on_commit_callbacks(execute=True):
+        submit(world, contact_email="autre-personne@test.sn")
+    assert [m.to for m in mail.outbox] == [["awa@test.sn"]]
+
+
+def test_file_without_owner_cannot_be_attached(world):
+    orphan = ValidFileFactory(uploaded_by=None)
+    with pytest.raises(PermissionDeniedError):
+        submit(world, attachment_file_id=orphan.pk)

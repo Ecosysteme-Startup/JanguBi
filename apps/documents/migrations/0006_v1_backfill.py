@@ -31,7 +31,9 @@ def forwards(apps, schema_editor):
 def backwards(apps, schema_editor):
     DocumentRequest = apps.get_model("documents", "DocumentRequest")
     DocumentRequest.objects.filter(status="ready_for_pickup").update(status="validated")
-    DocumentRequest.objects.update(target_node=None)
+    # Seules les demandes venues d'org perdent leur nœud ; celles créées en V1 (sans
+    # target_parish) le gardent, sinon la file de la paroisse serait perdue au retour.
+    DocumentRequest.objects.filter(target_parish__isnull=False).update(target_node=None)
 
 
 class Migration(migrations.Migration):

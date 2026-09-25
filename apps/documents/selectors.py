@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.core.exceptions import NotFoundError
 from apps.documents.models import DocumentRequest, DocumentRequestAttachment, DocumentRequestStatusLog, InternalNote
-from apps.documents.services import SLA_KEY_BY_STATUS, sla_for_node
+from apps.documents.services import SLA_KEY_BY_STATUS, SlaResolver
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 
@@ -70,8 +70,20 @@ def queue_for(*, user: Any, filters: dict[str, Any] | None = None) -> QuerySet[D
             | Q(requester_first_names__icontains=search)
         )
     if filters.get("overdue"):
-        qs = qs.filter(pk__in=[r.pk for r in qs if is_overdue(r)])
+        qs = qs.filter(pk__in=overdue_ids(qs))
     return qs.order_by("-created_at")
+
+
+def overdue_ids(qs: QuerySet[DocumentRequest], *, now: datetime.datetime | None = None) -> list[Any]:
+    """Demandes en retard : une requête (colonnes utiles seulement) + réglages SLA en mémoire."""
+    now = now or timezone.now()
+    resolver = SlaResolver()
+    rows = qs.filter(status__in=list(SLA_KEY_BY_STATUS)).values_list("pk", "status", "updated_at", "target_node__path")
+    return [
+        pk
+        for pk, status, updated_at, path in rows
+        if (now - updated_at).days >= resolver.for_path(path)[SLA_KEY_BY_STATUS[status]]
+    ]
 
 
 def request_get_for_processor(*, user: Any, request_id: Any) -> DocumentRequest:
@@ -113,11 +125,15 @@ def age_days(request_obj: DocumentRequest, *, now: datetime.datetime | None = No
     return max(0, ((now or timezone.now()) - request_obj.updated_at).days)
 
 
-def is_overdue(request_obj: DocumentRequest, *, now: datetime.datetime | None = None) -> bool:
+def is_overdue(
+    request_obj: DocumentRequest, *, now: datetime.datetime | None = None, resolver: SlaResolver | None = None
+) -> bool:
     days = age_days(request_obj, now=now)
     if days is None:
         return False
-    return days >= sla_for_node(request_obj.target_node)[SLA_KEY_BY_STATUS[request_obj.status]]
+    resolver = resolver or SlaResolver()
+    path = request_obj.target_node.path if request_obj.target_node else None
+    return days >= resolver.for_path(path)[SLA_KEY_BY_STATUS[request_obj.status]]
 
 
 # --- Supervision agrégée (EF-ACT-10) : aucun nom ------------------------------------------
@@ -128,9 +144,8 @@ def supervision_stats(*, user: Any, node_id: Any = None) -> dict[str, Any]:
     qs = _node_filter(qs, node_id)
     closed = qs.filter(status="collected", closed_at__isnull=False).values_list("created_at", "closed_at")
     durations = [(end - start).days for start, end in closed if start is not None and end is not None]
-    open_requests = qs.filter(status__in=list(SLA_KEY_BY_STATUS)).select_related("target_node")
     return {
         **status_counts(queryset=qs),
         "median_days_to_collect": statistics.median(durations) if durations else None,
-        "overdue": sum(1 for r in open_requests if is_overdue(r)),
+        "overdue": len(overdue_ids(qs)),
     }

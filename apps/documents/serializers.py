@@ -217,8 +217,15 @@ class QueueItemSerializer(_BaseOutputSerializer):
 
     def get_is_overdue(self, obj: DocumentRequest) -> bool:
         from apps.documents.selectors import is_overdue
+        from apps.documents.services import SlaResolver
 
-        return is_overdue(obj)
+        # Un résolveur par réponse (réglages chargés une fois), pas une requête par ligne.
+        root: Any = self.parent if self.parent is not None else self
+        resolver = getattr(root, "_sla_resolver", None)
+        if resolver is None:
+            resolver = SlaResolver()
+            root._sla_resolver = resolver
+        return is_overdue(obj, resolver=resolver)
 
 
 class ProcessorOutputSerializer(RequesterOutputSerializer):
