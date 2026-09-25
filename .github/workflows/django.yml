@@ -109,7 +109,7 @@ jobs:
 
       - name: Docker metadata (tags + labels)
         id: meta
-        uses: docker/metadata-action@3caf19fbe3db1a1a6a8bdce189e09ac0ed35d513 #v6.1.0
+        uses: docker/metadata-action@8e671d84a3bd81afdfc4fdbb96a42b07c2a80934 #v6.1.0
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/jangubi-backend
           tags: |
