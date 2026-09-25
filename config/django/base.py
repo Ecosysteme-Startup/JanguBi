@@ -14,9 +14,15 @@ import os
 
 from celery.schedules import crontab
 
+from apps.core.modules import V1_DEFAULT_MODULES, filter_beat_schedule
 from config.env import APPS_DIR, BASE_DIR, env
 
 env.read_env(os.path.join(BASE_DIR, ".env"))
+
+# Modules actifs (ADR-006). Les modules gelés gardent code et migrations, mais
+# leurs routes et leurs tâches Beat sont retirées. Surcharge par variable
+# d'environnement : JANGUBI_MODULES=bible,liturgy,...
+JANGUBI_MODULES = env.list("JANGUBI_MODULES", default=list(V1_DEFAULT_MODULES))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
@@ -24,7 +30,7 @@ env.read_env(os.path.join(BASE_DIR, ".env"))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "=ug_ucl@yi6^mrcjyz%(u0%&g2adt#bz3@yos%#@*t#t!ypx=a"
 
-CELERY_BEAT_SCHEDULE = {
+_CELERY_BEAT_SCHEDULE_ALL = {
     "fetch_aelf_daily_readings": {
         "task": "apps.bible.tasks.fetch_aelf_daily",
         "schedule": crontab(hour=2, minute=0),
@@ -50,6 +56,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=8, minute=0),
     },
 }
+CELERY_BEAT_SCHEDULE = filter_beat_schedule(_CELERY_BEAT_SCHEDULE_ALL, active=JANGUBI_MODULES)
 
 EMAIL_FROM_ADDRESS = env.str("EMAIL_FROM_ADDRESS", default="noreply@jangubi.sn")
 ADMIN_ACCOUNT_EXPIRY_DAYS = env.int("ADMIN_ACCOUNT_EXPIRY_DAYS", default=7)

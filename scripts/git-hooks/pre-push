@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Bloque tout push vers develop/stage/main si le gate CI local n'est pas vert
+# (ADR-010, docs/v1/04-CI-LOCALE-ET-GIT.md §5). Installation : make hooks.
+protected='^(develop|stage|main)$'
+while read -r local_ref local_sha remote_ref remote_sha; do
+  branch="${remote_ref#refs/heads/}"
+  if [[ "$branch" =~ $protected ]]; then
+    echo "→ Push vers $branch : exécution du gate CI local (make act)…"
+    if ! make act; then
+      echo "✗ make act a échoué : push annulé. Corrigez, ou utilisez le plan B (voir docs/v1/04-CI-LOCALE-ET-GIT.md)."
+      exit 1
+    fi
+  fi
+done
+exit 0

@@ -138,3 +138,6 @@ google_client_secret.json
 .idea/
 .python-version
 pyrightconfig.json
+
+# Secrets locaux pour act (voir .secrets.example)
+.secrets

@@ -1,33 +1,50 @@
+from collections.abc import Iterable
+
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-urlpatterns = [
-    path("v1/", include([
-        path("auth/", include(("apps.authentication.urls", "authentication"))),
-        path("users/", include(("apps.users.urls", "users"))),
-        path("errors/", include(("apps.errors.urls", "errors"))),
-        path("files/", include(("apps.files.urls", "files"))),
-        path("bible/", include(("apps.bible.urls", "bible"))),
-        path("rosary/", include(("apps.rosary.urls", "rosary"))),
-        path("tv/", include(("apps.tv.urls", "tv"))),
-        path("rag/", include(("apps.rag.urls", "rag"))),
-        path("liturgy/", include(("apps.liturgy.urls", "liturgy"))),
-        path("messaging/", include(("apps.messaging.urls", "messaging"))),
-        # Notifications top-level (web + mobile RN) — les routes historiques
-        # /messaging/notifications/ restent pour compatibilité.
-        path("notifications/", include(("apps.messaging.urls_notifications", "notifications"))),
-        path("documents/", include(("apps.documents.urls", "documents"))),
-        path("news/", include(("apps.news.urls", "news"))),
-        path("org/", include(("apps.org.urls", "org"))),
-        path("clergy-accounts/", include(("apps.clergy_accounts.urls", "clergy-accounts"))),
-        path("agenda/", include(("apps.agenda.urls", "agenda"))),
-        path("mass-intentions/", include(("apps.mass_intentions.urls", "mass-intentions"))),
-        path("donations/", include(("apps.donations.urls", "donations"))),
-        path("dashboards/", include(("apps.dashboards.urls", "dashboards"))),
-        path("spiritual/", include(("apps.spiritual.urls", "spiritual"))),
-        path("transfers/", include(("apps.transfers.urls", "transfers"))),
-    ])),
+from apps.core.modules import is_module_active
 
+# (module, préfixe d'URL, urlconf, namespace). Les modules gelés (ADR-006,
+# réglage JANGUBI_MODULES) ne sont pas inclus : leurs routes renvoient 404.
+API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
+    ("authentication", "auth/", "apps.authentication.urls", "authentication"),
+    ("users", "users/", "apps.users.urls", "users"),
+    ("errors", "errors/", "apps.errors.urls", "errors"),
+    ("files", "files/", "apps.files.urls", "files"),
+    ("bible", "bible/", "apps.bible.urls", "bible"),
+    ("rosary", "rosary/", "apps.rosary.urls", "rosary"),
+    ("tv", "tv/", "apps.tv.urls", "tv"),
+    ("rag", "rag/", "apps.rag.urls", "rag"),
+    ("liturgy", "liturgy/", "apps.liturgy.urls", "liturgy"),
+    ("messaging", "messaging/", "apps.messaging.urls", "messaging"),
+    # Notifications top-level (web + mobile RN) — les routes historiques
+    # /messaging/notifications/ restent pour compatibilité.
+    ("notifications", "notifications/", "apps.messaging.urls_notifications", "notifications"),
+    ("documents", "documents/", "apps.documents.urls", "documents"),
+    ("news", "news/", "apps.news.urls", "news"),
+    ("org", "org/", "apps.org.urls", "org"),
+    ("clergy_accounts", "clergy-accounts/", "apps.clergy_accounts.urls", "clergy-accounts"),
+    ("agenda", "agenda/", "apps.agenda.urls", "agenda"),
+    ("mass_intentions", "mass-intentions/", "apps.mass_intentions.urls", "mass-intentions"),
+    ("donations", "donations/", "apps.donations.urls", "donations"),
+    ("dashboards", "dashboards/", "apps.dashboards.urls", "dashboards"),
+    ("spiritual", "spiritual/", "apps.spiritual.urls", "spiritual"),
+    ("transfers", "transfers/", "apps.transfers.urls", "transfers"),
+)
+
+
+def build_v1_patterns(*, active: Iterable[str] | None = None) -> list:
+    active_list = None if active is None else list(active)
+    return [
+        path(prefix, include((urlconf, namespace)))
+        for module, prefix, urlconf, namespace in API_V1_ROUTES
+        if is_module_active(module, active=active_list)
+    ]
+
+
+urlpatterns = [
+    path("v1/", include(build_v1_patterns())),
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('swagger-ui/', SpectacularSwaggerView.as_view(url_name='api:schema'), name='swagger-ui'),
     path('redoc/', SpectacularRedocView.as_view(url_name='api:schema'), name='redoc'),

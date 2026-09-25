@@ -8,7 +8,7 @@ export
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-senegal seed-demo seed-reset \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf init-tv-categories \
-	ci-list ci act ci-docker ci-docker-act \
+	ci-list ci act hooks ci-docker ci-docker-act \
 	build-prod up-prod down-prod logs-prod
 
 # ==============================================================================
@@ -213,6 +213,11 @@ ci:
 
 # Alias pratique.
 act: ci
+
+# Installe le hook pre-push (make act avant tout push vers develop/stage/main).
+hooks:
+	git config core.hooksPath scripts/git-hooks
+	@echo "Hook pre-push installé (scripts/git-hooks/pre-push)."
 
 # Valide EN LOCAL le build de l'image de production (ce que construit le job
 # build-docker). NE POUSSE PAS — pour débugger le Dockerfile avant un tag/push.

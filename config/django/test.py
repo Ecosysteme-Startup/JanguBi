@@ -12,6 +12,12 @@ from .base import *  # noqa
 # Based on https://www.hacksoft.io/blog/optimize-django-build-to-run-faster-on-github-actions
 
 DEBUG = False
+
+# La suite de tests exerce TOUS les modules, y compris gelés (ADR-006 : le code
+# gelé reste maintenu). Le gel lui-même est testé dans apps/core/tests/test_modules.py.
+from apps.core.modules import FREEZABLE_MODULES  # noqa: E402
+
+JANGUBI_MODULES = list(FREEZABLE_MODULES)
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 CELERY_BROKER_BACKEND = "memory"
