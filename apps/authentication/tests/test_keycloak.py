@@ -110,6 +110,7 @@ def test_valid_token_authenticates_and_provisions_once(keys):
         ({"aud": ["autre-api"]}, "audience"),
         ({"azp": "client-pirate"}, "client"),
         ({"typ": "Refresh"}, "type"),
+        ({"azp": None}, "client absent"),
     ],
 )
 def test_invalid_keycloak_tokens_are_401(keys, overrides, reason):
@@ -274,6 +275,32 @@ async def test_websocket_accepts_a_keycloak_token(keys):
     connected, _ = await communicator.connect()
     assert connected
     await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_websocket_single_use_ticket(keys):
+    from asgiref.sync import sync_to_async
+
+    from apps.authentication.ws_tickets import ws_ticket_issue
+    from config.asgi import application
+
+    user = await sync_to_async(BaseUserFactory.create)()
+    ticket = await sync_to_async(ws_ticket_issue)(user=user)
+    origin = [(b"origin", b"http://localhost:3000")]
+
+    first = WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}", headers=origin)
+    assert (await first.connect())[0]
+    await first.disconnect()
+
+    replay = WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}", headers=origin)
+    connected, code = await replay.connect()
+    assert not connected and code == 4401
+
+
+def test_ws_ticket_api_requires_authentication_and_returns_a_ticket(keys):
+    assert APIClient().post("/api/v1/me/ws-ticket/").status_code in (401, 403)
+    response = api(keys.token(email="t@test.sn")).post("/api/v1/me/ws-ticket/")
+    assert response.status_code == 200 and response.data["expires_in"] == 60 and len(response.data["ticket"]) > 30
 
 
 # --- Synchronisation du rôle staff (EF-AUTH-04) -------------------------------------------

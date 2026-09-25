@@ -79,7 +79,7 @@ def _signing_key(kid: str) -> Any:
     for attempt in range(2):
         jwks = jwks_get(force_refresh=attempt == 1)
         for key in jwks.get("keys", []):
-            if key.get("kid") == kid and key.get("use", "sig") == "sig":
+            if key.get("kid") == kid and key.get("use", "sig") == "sig" and key.get("kty") == "RSA":
                 return jwt.PyJWK(key).key
         # kid inconnu : rotation des clés possible → un seul rechargement par minute.
         if attempt == 0 and not cache.add(_JWKS_REFRESH_LOCK_KEY, 1, 60):
@@ -115,7 +115,7 @@ def token_validate(token: str) -> KeycloakIdentity:
             audience=settings.KEYCLOAK_AUDIENCE,
             issuer=settings.KEYCLOAK_ISSUER,
             leeway=settings.KEYCLOAK_LEEWAY_SECONDS,
-            options={"require": ["exp", "iat", "sub", "iss", "aud"]},
+            options={"require": ["exp", "iat", "sub", "iss", "aud", "azp"]},
         )
     except jwt.ExpiredSignatureError as exc:
         raise KeycloakTokenError("Jeton expiré.", code="token_expired") from exc
@@ -124,8 +124,7 @@ def token_validate(token: str) -> KeycloakIdentity:
 
     if claims.get("typ", "Bearer") != "Bearer":
         raise KeycloakTokenError("Seul un jeton d'accès est accepté.")
-    azp = claims.get("azp")
-    if azp is not None and azp not in settings.KEYCLOAK_ALLOWED_CLIENTS:
+    if claims.get("azp") not in settings.KEYCLOAK_ALLOWED_CLIENTS:
         raise KeycloakTokenError("Client OIDC non autorisé.")
     return KeycloakIdentity(
         sub=str(claims["sub"]),

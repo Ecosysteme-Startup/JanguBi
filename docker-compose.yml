@@ -227,8 +227,10 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
       KC_HEALTH_ENABLED: "true"
       # Substitués dans infra/keycloak/realm-jangubi.json à l'import.
-      KC_ADMIN_SYNC_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-dev-only-change-me}
-      KC_WEB_REDIRECT_URI: ${KC_WEB_REDIRECT_URI:-http://localhost:3000/*}
+      # Aucun secret par défaut : make kc-up refuse de démarrer sans KEYCLOAK_ADMIN_CLIENT_SECRET.
+      KC_ADMIN_SYNC_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      KC_WEB_REDIRECT_URI: ${KC_WEB_REDIRECT_URI:-http://localhost:3000/api/auth/callback/keycloak}
+      KC_WEB_POST_LOGOUT_URI: ${KC_WEB_POST_LOGOUT_URI:-http://localhost:3000/}
       KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro

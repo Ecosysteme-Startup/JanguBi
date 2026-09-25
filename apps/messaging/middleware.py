@@ -56,12 +56,19 @@ def _get_user_from_token(token: str):
         raise _InvalidToken from exc
 
 
+@database_sync_to_async
+def _get_user_from_ticket(ticket: str):
+    from apps.authentication.ws_tickets import ws_ticket_consume
+
+    return ws_ticket_consume(ticket=ticket)
+
+
 class JwtAuthMiddleware:
     """
-    Extrait le jeton de ``?token=<jwt>`` (les navigateurs ne posent pas d'en-tête
-    Authorization sur une WebSocket) et remplit ``scope["user"]``.
+    Authentifie la socket par ``?ticket=<ticket>`` (recommandé : ticket à usage unique
+    obtenu par ``POST /api/v1/me/ws-ticket/``) ou, pendant la transition, ``?token=<jwt>``.
 
-    Sans jeton : utilisateur anonyme (le consommateur décide). Jeton présent mais
+    Sans ticket ni jeton : utilisateur anonyme (le consommateur décide). Ticket ou jeton
     invalide ou expiré : la connexion est fermée avec le code 4401.
     """
 
@@ -69,9 +76,17 @@ class JwtAuthMiddleware:
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
-        query_string = scope.get("query_string", b"").decode()
-        token = parse_qs(query_string).get("token", [None])[0]
+        params = parse_qs(scope.get("query_string", b"").decode())
+        ticket = params.get("ticket", [None])[0]
+        token = params.get("token", [None])[0]
 
+        if ticket:
+            user = await _get_user_from_ticket(ticket)
+            if user is None:
+                await _reject(receive, send)
+                return None
+            scope["user"] = user
+            return await self.inner(scope, receive, send)
         if not token:
             scope["user"] = AnonymousUser()
             return await self.inner(scope, receive, send)

@@ -87,14 +87,14 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "redirectUris": [
-        "${KC_WEB_REDIRECT_URI:http://localhost:3000/*}"
+        "${KC_WEB_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}"
       ],
       "webOrigins": [
         "${KC_WEB_ORIGIN:http://localhost:3000}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "${KC_WEB_REDIRECT_URI:http://localhost:3000/*}"
+        "post.logout.redirect.uris": "${KC_WEB_POST_LOGOUT_URI:http://localhost:3000/}"
       },
       "protocolMappers": [
         {
@@ -134,7 +134,7 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "${KC_ADMIN_SYNC_SECRET:dev-only-change-me}",
+      "secret": "${KC_ADMIN_SYNC_SECRET}",
       "serviceAccountsEnabled": true,
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
@@ -243,5 +243,12 @@
         }
       ]
     }
+  ],
+  "eventsEnabled": true,
+  "eventsExpiration": 7776000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "eventsListeners": [
+    "jboss-logging"
   ]
 }

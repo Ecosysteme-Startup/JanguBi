@@ -207,6 +207,7 @@ init-all: init-data seed-senegal seed-hierarchy
 # ==============================================================================
 # Démarre Keycloak (http://localhost:8180, admin/admin en local) et importe le realm.
 kc-up:
+	@grep -Eq '^KEYCLOAK_ADMIN_CLIENT_SECRET=.{16,}' .env || { echo "✗ KEYCLOAK_ADMIN_CLIENT_SECRET absent ou trop court dans .env (openssl rand -hex 32)."; exit 1; }
 	docker compose --profile keycloak up -d keycloak
 
 kc-down:

@@ -10,12 +10,13 @@ Keycloak dit **qui** est connecté ; l'application dit **ce qu'il peut faire, o�
 
 | Élément | Réglage |
 |---|---|
-| Client `jangubi-web` | public, Authorization Code + **PKCE S256**, pas de flux implicite ni direct grant ; redirections : `http://localhost:3000/*` et le domaine du front ; mapper d'audience ajoutant `jangubi-api` à `aud` ; mapper `amr` |
+| Client `jangubi-web` | public, Authorization Code + **PKCE S256**, pas de flux implicite ni direct grant ; redirection **exacte** vers le rappel Auth.js (`/api/auth/callback/keycloak`, jamais de joker) ; mapper d'audience ajoutant `jangubi-api` à `aud` ; mapper `amr` |
 | Client `jangubi-api` | bearer-only (aucune connexion) : c'est l'**audience** attendue par l'API |
 | Client `jangubi-admin-sync` | confidentiel, compte de service seulement, rôles `realm-management` : `view-users`, `manage-users`, `view-realm` (synchronisation du rôle `staff`, migration des comptes) |
 | Rôles | `fidele` (rôle par défaut), `staff`, `platform_admin` |
 | MFA | politique TOTP (6 chiffres, 30 s) ; flux navigateur `browser-mfa` : OTP conditionnel, **toujours exigé** pour les rôles `staff` et `platform_admin` ; références `amr` : `pwd`, `otp` |
-| Sécurité | brute force activé, vérification de l'e-mail, mot de passe ≥ 10 caractères, jetons d'accès de 10 min (ENF-02), SSO 12 h |
+| Sécurité | brute force activé, vérification de l'e-mail, mot de passe ≥ 10 caractères, jetons d'accès de 10 min (ENF-02), SSO 12 h, journal des connexions et des actions d'administration (90 jours) |
+| Secrets | **aucune valeur par défaut** pour le secret de `jangubi-admin-sync` (il peut attribuer des rôles) : `make kc-up` refuse de démarrer sans `KEYCLOAK_ADMIN_CLIENT_SECRET` |
 
 ## 3. API (DRF)
 
@@ -29,7 +30,7 @@ Keycloak dit **qui** est connecté ; l'application dit **ce qu'il peut faire, o�
 
 ## 4. WebSocket (EF-AUTH-03)
 
-`?token=<jwt>` au handshake (les navigateurs ne posent pas d'en-tête). Même validation que l'API. Jeton présent mais invalide → fermeture **4401** avant tout traitement. Le client rouvre la socket avec un jeton rafraîchi (Auth.js).
+Les navigateurs ne posent pas d'en-tête sur une WebSocket. Pour ne pas mettre le jeton d'accès (valable sur toute l'API) dans l'URL, où il finit dans les journaux, le client échange son jeton contre un **ticket à usage unique de 60 s** (`POST /api/v1/me/ws-ticket/`) et ouvre `/ws/...?ticket=<ticket>`. `?token=<jwt>` reste accepté pendant la transition (même validation que l'API). Ticket ou jeton invalide → fermeture **4401** avant tout traitement.
 
 ## 5. Synchronisation du rôle `staff` (EF-AUTH-04)
 
@@ -38,6 +39,8 @@ Toute création, fin ou annulation de nomination, et la tâche quotidienne, déc
 ## 6. Migration des comptes (EF-AUTH-06)
 
 `manage.py migrate_users_to_keycloak [--apply]` : simulation par défaut. Les hachages `pbkdf2_sha256$<itérations>$<sel>$<hash>` de Django sont importés tels quels (credential Keycloak `pbkdf2-sha256`, sel encodé en base64) : aucun mot de passe à réinitialiser. Les comptes sans mot de passe utilisable ou avec un autre algorithme reçoivent l'action requise `UPDATE_PASSWORD`. Le `sub` Keycloak est enregistré dans `BaseUser.keycloak_sub`.
+
+Avant `--apply` en production : auditer les comptes `is_verified=True` (le drapeau est repris tel quel dans Keycloak, et un e-mail vérifié permet le rattachement automatique d'un compte).
 
 ## 7. Bascule et retrait de SimpleJWT
 
