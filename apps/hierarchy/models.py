@@ -96,6 +96,28 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
         verbose_name=_("situé dans"),
         help_text=_("Lien géographique d'un nœud non territorial (ex. communauté située dans un diocèse)."),
     )
+    # --- Vie paroissiale : secrétariat et demandes d'actes (modifiables avec horaires.gerer) ---
+    phone = models.CharField(_("téléphone du secrétariat"), max_length=30, blank=True, default="", db_default="")
+    email = models.EmailField(_("e-mail du secrétariat"), blank=True, default="", db_default="")
+    office_hours = models.JSONField(
+        _("horaires d'accueil"),
+        default=list,
+        db_default=[],
+        blank=True,
+        help_text=_("Liste de créneaux : [{« days » : « Lun. – ven. », « hours » : « 9 h-12 h »}]."),
+    )
+    secretariat_public = models.BooleanField(
+        _("secrétariat publié"),
+        default=False,
+        db_default=False,
+        help_text=_("Téléphone, e-mail et horaires d'accueil affichés sur la fiche publique."),
+    )
+    acts_delay_days = models.PositiveSmallIntegerField(
+        _("délai indicatif des actes (jours ouvrés)"), null=True, blank=True
+    )
+    acts_welcome_message = models.TextField(
+        _("message d'accueil des demandes d'actes"), blank=True, default="", db_default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

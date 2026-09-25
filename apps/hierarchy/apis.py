@@ -17,7 +17,7 @@ from apps.api.mixins import ApiAuthMixin
 from apps.api.pagination import LimitOffsetPagination, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
 from apps.core.exceptions import ApplicationError
-from apps.hierarchy import authz, selectors, services
+from apps.hierarchy import authz, selectors, selectors_public, services
 from apps.hierarchy.enums import NodeStatus
 from apps.hierarchy.imports import nodes_import_csv, places_import_csv
 from apps.hierarchy.models import Node, PlaceOfWorship
@@ -40,6 +40,12 @@ from apps.hierarchy.serializers import (
     ScheduleSerializer,
     WeekQuerySerializer,
 )
+from apps.hierarchy.serializers_parish import (
+    NodeSettingsOutputSerializer,
+    NodeSettingsUpdateInputSerializer,
+    PublicNodeDetailOutputSerializer,
+    PublicNodeOutputSerializer,
+)
 
 TAG = ["hierarchy"]
 PUBLIC_TAG = ["public"]
@@ -49,10 +55,12 @@ class _CanWrite(BasePermission):
     message = "Vous n'avez pas la capacité requise sur ce nœud."
 
     def has_permission(self, request: Request, view: Any) -> bool:
+        capabilities = view.write_capabilities or (view.write_capability,)
         if view.write_on_any_node:
-            allowed = authz.a_la_capacite(request.user, view.write_capability)
+            allowed = any(authz.a_la_capacite(request.user, c) for c in capabilities)
         else:
-            allowed = authz.peut(request.user, view.write_capability, view.get_write_node())
+            node = view.get_write_node()
+            allowed = any(authz.peut(request.user, c, node) for c in capabilities)
         if allowed:
             authz.mfa_check(request.user)
         return allowed
@@ -67,6 +75,7 @@ class HierarchyBaseApi(V1ApiMixin, ApiAuthMixin, APIView):
     """
 
     write_capability = "structure.gerer"
+    write_capabilities: tuple[str, ...] = ()  # si non vide : l'une de ces capacités suffit
     write_on_any_node = False
 
     def get_write_node(self) -> Node | None:
@@ -180,6 +189,40 @@ class NodeDetailApi(HierarchyBaseApi):
         serializer.is_valid(raise_exception=True)
         services.node_update(node=node, data=_resolve_node_refs(serializer.validated_data))
         return Response(_node_data(selectors.node_get(node_id=node.pk)))
+
+
+class NodeSettingsApi(HierarchyBaseApi):
+    """Paramètres « vie paroissiale » (secrétariat, accueil, actes) : le secrétariat les tient
+    avec ``horaires.gerer`` ; nom, code, statut et rattachement restent sous ``structure.gerer``
+    (PATCH du nœud). La lecture est réservée aux mêmes capacités : le public ne voit que ce que
+    la paroisse publie (fiche publique)."""
+
+    write_capabilities = ("horaires.gerer", "structure.gerer")
+    get_write_node = HierarchyBaseApi._kwarg_node
+
+    def get_permissions(self):
+        return [IsAuthenticated(), _CanWrite()]
+
+    @extend_schema(
+        tags=TAG,
+        summary="Paramètres du secrétariat d'un nœud (horaires.gerer ou structure.gerer)",
+        responses=NodeSettingsOutputSerializer,
+    )
+    def get(self, request: Request, node_id: str) -> Response:
+        return Response(NodeSettingsOutputSerializer(selectors.node_get(node_id=node_id)).data)
+
+    @extend_schema(
+        tags=TAG,
+        summary="Modifier les paramètres du secrétariat (horaires.gerer ou structure.gerer)",
+        request=NodeSettingsUpdateInputSerializer,
+        responses=NodeSettingsOutputSerializer,
+    )
+    def patch(self, request: Request, node_id: str) -> Response:
+        node = selectors.node_get(node_id=node_id)
+        serializer = NodeSettingsUpdateInputSerializer(data=request.data)  # champs tous facultatifs
+        serializer.is_valid(raise_exception=True)
+        node = services.node_settings_update(node=node, data=dict(serializer.validated_data), actor=request.user)
+        return Response(NodeSettingsOutputSerializer(node).data)
 
 
 class NodeChildrenApi(HierarchyBaseApi):
@@ -366,6 +409,17 @@ class PlaceImportApi(_ImportApi):
 # --- Public ---------------------------------------------------------------------
 
 
+def _public_context(nodes: list[Node]) -> dict[str, Any]:
+    """Juridiction et messes du dimanche d'une page de nœuds, en requêtes groupées."""
+    lineage = selectors_public.nodes_lineage(nodes=nodes)
+    sunday = selectors_public.next_sunday(today=timezone.localdate())
+    return {
+        "lineage": lineage,
+        "parent_ids": {path: str(n.pk) for path, n in lineage.items()},
+        "sunday_masses": selectors_public.nodes_sunday_masses(nodes=nodes, sunday=sunday),
+    }
+
+
 class PublicDirectoryApi(HierarchyBaseApi):
     @extend_schema(
         tags=PUBLIC_TAG,
@@ -375,7 +429,7 @@ class PublicDirectoryApi(HierarchyBaseApi):
             OpenApiParameter("limit", int, description="Nombre de résultats (défaut 10, max 50)"),
             OpenApiParameter("offset", int, description="Décalage"),
         ],
-        responses=paginated_response_serializer(NodeOutputSerializer),
+        responses=paginated_response_serializer(PublicNodeOutputSerializer),
     )
     def get(self, request: Request) -> Response:
         filters = DirectoryFilterSerializer(data=request.query_params)
@@ -383,17 +437,25 @@ class PublicDirectoryApi(HierarchyBaseApi):
         data = dict(filters.validated_data)
         if diocese := data.pop("diocese", None):
             data["within"] = diocese
-        return _node_list_response(request=request, view=self, queryset=selectors.node_list(filters=data))
+        paginator = LimitOffsetPagination()
+        page = paginator.paginate_queryset(selectors.node_list(filters=data), request, view=self) or []
+        serializer = PublicNodeOutputSerializer(page, many=True, context=_public_context(page))
+        return paginator.get_paginated_response(serializer.data)
 
 
 class PublicNodeByCodeApi(HierarchyBaseApi):
     @extend_schema(
         tags=PUBLIC_TAG,
         summary="Fiche publique d'un nœud par son code (URL /paroisses/<code> du site public)",
-        responses=NodeOutputSerializer,
+        responses=PublicNodeDetailOutputSerializer,
     )
     def get(self, request: Request, code: str) -> Response:
-        return Response(_node_data(selectors.node_get_by_code(code=code)))
+        node = selectors.node_get_by_code(code=code)
+        context = {
+            **_public_context([node]),
+            "clergy": selectors_public.node_public_clergy(node=node, today=timezone.localdate()),
+        }
+        return Response(PublicNodeDetailOutputSerializer(node, context=context).data)
 
 
 class PublicNodeWeekApi(HierarchyBaseApi):

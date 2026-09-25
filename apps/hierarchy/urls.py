@@ -6,6 +6,7 @@ urlpatterns = [
     path("node-types/", apis.NodeTypeListApi.as_view(), name="node-type-list"),
     path("nodes/", apis.NodeListCreateApi.as_view(), name="node-list"),
     path("nodes/<uuid:node_id>/", apis.NodeDetailApi.as_view(), name="node-detail"),
+    path("nodes/<uuid:node_id>/settings/", apis.NodeSettingsApi.as_view(), name="node-settings"),
     path("nodes/<uuid:node_id>/children/", apis.NodeChildrenApi.as_view(), name="node-children"),
     path("nodes/<uuid:node_id>/ancestors/", apis.NodeAncestorsApi.as_view(), name="node-ancestors"),
     path("nodes/<uuid:node_id>/places/", apis.NodePlaceListCreateApi.as_view(), name="node-places"),
