@@ -30,8 +30,7 @@ class DocumentRequestFactory(DjangoModelFactory):
     contact_email = factory.Sequence(lambda n: f"contact{n}@example.com")
     father_last_name = "Diallo"
     mother_last_name = "Ndiaye"
-    parish_name = "Paroisse Test"
-    diocese = "Dakar"
+    target_node = factory.LazyFunction(lambda: _test_parish())
     sacrament_approximate_date = "2005"
     sacrament_location = "Dakar"
     consent_given = True
@@ -48,3 +47,15 @@ class ValidFileFactory(DjangoModelFactory):
     file_type = "application/pdf"
     uploaded_by = factory.SubFactory(BaseUserFactory)
     upload_finished_at = factory.LazyFunction(timezone.now)
+
+
+def _test_parish():
+    from apps.hierarchy.models import Node
+    from apps.hierarchy.tests.factories import make_node
+
+    parish = Node.objects.filter(code="DOC-TEST-PAR").first()
+    if parish is None:
+        province = make_node("province", "Province de test (actes)", code="DOC-TEST-PROV")
+        diocese = make_node("diocese", "Diocèse de test (actes)", province, code="DOC-TEST-DIO")
+        parish = make_node("paroisse", "Paroisse de test (actes)", diocese, code="DOC-TEST-PAR")
+    return parish

@@ -65,7 +65,6 @@ def event_create(
         max_participants=max_participants,
         scope_node=node,
         scope_place=place,
-        scope_type=Event.ScopeType.GLOBAL if node is None else Event.ScopeType.PARISH,
     )
     audit_log(actor=organizer, action="evenement.creation", target=event, node=node)
     return event

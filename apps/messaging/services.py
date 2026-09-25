@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Optional
-from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -20,12 +19,11 @@ from apps.messaging.models import (
     MessagingAvailability,
     MessagingCguAcceptance,
     Notification,
-    PriestProfile,
 )
 from apps.users.models import BaseUser
 
 if TYPE_CHECKING:  # annotations seules ; l'import runtime reste local (anti-circulaire)
-    from apps.messaging.models import ClergicalMessage, PushDevice
+    from apps.messaging.models import PushDevice
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -94,48 +92,6 @@ def _fanout_notification(user: BaseUser, event_type: str, payload: dict) -> None
         f"user_{user.id}",
         {"type": "notification.push", "event_type": event_type, **payload},
     )
-
-
-# ---------------------------------------------------------------------------
-# PriestProfile
-# ---------------------------------------------------------------------------
-
-
-@transaction.atomic
-def priest_profile_create(*, user: BaseUser, accepted_by: BaseUser) -> PriestProfile:
-    if hasattr(user, "priest_profile"):
-        raise ApplicationError("Cet utilisateur a déjà un profil prêtre.")
-    profile = PriestProfile.objects.create(user=user)
-    return profile
-
-
-@transaction.atomic
-def priest_profile_accept_cgu(*, priest_profile: PriestProfile) -> PriestProfile:
-    if priest_profile.cgu_accepted_at is not None:
-        raise ApplicationError("CGU déjà acceptées.")
-    priest_profile.cgu_accepted_at = timezone.now()
-    priest_profile.save(update_fields=["cgu_accepted_at", "updated_at"])
-    return priest_profile
-
-
-@transaction.atomic
-def priest_profile_update(
-    *,
-    priest_profile: PriestProfile,
-    accepts_pastoral_chat: Optional[bool] = None,
-    ordination_year: Optional[int] = None,
-    bio: Optional[str] = None,
-) -> PriestProfile:
-    if accepts_pastoral_chat is not None:
-        priest_profile.accepts_pastoral_chat = accepts_pastoral_chat
-    if ordination_year is not None:
-        priest_profile.ordination_year = ordination_year
-    if bio is not None:
-        priest_profile.bio = bio
-    priest_profile.save(
-        update_fields=["accepts_pastoral_chat", "ordination_year", "bio", "updated_at"]
-    )
-    return priest_profile
 
 
 # ---------------------------------------------------------------------------
@@ -623,84 +579,3 @@ def _generate_export_pdf(data: dict) -> bytes:
     c.save()
     buffer.seek(0)
     return buffer.read()
-
-
-# ---------------------------------------------------------------------------
-# ClergicalMessage services
-# ---------------------------------------------------------------------------
-
-@transaction.atomic
-def clerical_message_send(
-    *,
-    sender: "BaseUser",
-    subject: str,
-    body: str,
-    recipient_scope: str,
-    scope_id: int | None = None,
-    individual_recipient_id: str | UUID | None = None,  # PK BaseUser = UUID (pas int)
-) -> "ClergicalMessage":
-    from apps.core.exceptions import ApplicationError
-    from apps.messaging.models import ClergicalMessage
-    from apps.messaging.selectors import clerical_message_territory_ids
-    from apps.users.enums import CLERGY_PASTORAL_ROLES, PastoralRole
-
-    if sender.pastoral_role not in CLERGY_PASTORAL_ROLES:
-        raise ApplicationError("Seul le clergé peut envoyer des messages inter-clergé.")
-
-    if recipient_scope == ClergicalMessage.RecipientScope.PROVINCE_BISHOPS:
-        if sender.pastoral_role not in (PastoralRole.EVEQUE, PastoralRole.ARCHEVEQUE):
-            raise ApplicationError("Seuls les évêques et archevêques peuvent diffuser aux évêques de province.")
-
-    # Cloisonnement territorial des diffusions.
-    #
-    # Seul le RÔLE était vérifié, jamais le territoire visé : `scope_id` venait
-    # du client sans contrôle. Un curé pouvait donc diffuser au clergé de
-    # n'importe quel diocèse en changeant un identifiant — il suffisait de
-    # l'incrémenter. On exige désormais que la portée demandée fasse partie des
-    # territoires auxquels l'expéditeur appartient réellement.
-    # Clés en `str` : `recipient_scope` arrive de la couche HTTP sous forme de
-    # chaîne (valeur du TextChoices), pas d'instance d'énumération.
-    _BROADCAST_TERRITORY_KEY: dict[str, tuple[str, str]] = {
-        ClergicalMessage.RecipientScope.PARISH_CLERGY.value: ("parish_ids", "cette paroisse"),
-        ClergicalMessage.RecipientScope.DIOCESE_CLERGY.value: ("diocese_ids", "ce diocèse"),
-        ClergicalMessage.RecipientScope.PROVINCE_BISHOPS.value: ("province_ids", "cette province"),
-    }
-
-    if recipient_scope in _BROADCAST_TERRITORY_KEY:
-        territory_key, label = _BROADCAST_TERRITORY_KEY[recipient_scope]
-
-        if scope_id is None:
-            raise ApplicationError("Une diffusion doit préciser le territoire visé.")
-
-        if scope_id not in clerical_message_territory_ids(sender)[territory_key]:
-            raise ApplicationError(f"Vous ne pouvez pas diffuser à {label}.")
-
-    elif recipient_scope == ClergicalMessage.RecipientScope.INDIVIDUAL and individual_recipient_id is None:
-        # Sans destinataire ni portée, le message n'atteindrait personne et
-        # partirait pourtant en 201 — exactement le mode d'échec silencieux que
-        # cette correction élimine.
-        raise ApplicationError("Un message individuel doit préciser son destinataire.")
-
-    msg = ClergicalMessage.objects.create(
-        sender=sender,
-        subject=subject,
-        body=body,
-        recipient_scope=recipient_scope,
-        scope_id=scope_id,
-        individual_recipient_id=individual_recipient_id,
-    )
-    return msg
-
-
-@transaction.atomic
-def clerical_message_mark_read(*, message: "ClergicalMessage", reader: "BaseUser") -> "ClergicalMessage":
-    from django.utils import timezone
-
-    if message.individual_recipient != reader:
-        from apps.core.exceptions import ApplicationError
-        raise ApplicationError("Vous ne pouvez marquer que vos propres messages comme lus.")
-
-    if not message.read_at:
-        message.read_at = timezone.now()
-        message.save(update_fields=["read_at", "updated_at"])
-    return message

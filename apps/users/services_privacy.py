@@ -136,7 +136,6 @@ def _forget_traces(user: Any) -> None:
     from django.db.models import Q
 
     from apps.messaging.models import (
-        ClergicalMessage,
         MessageBlock,
         MessageReaction,
         MessagingAvailability,
@@ -151,7 +150,6 @@ def _forget_traces(user: Any) -> None:
     MessageReaction.objects.filter(user=user).delete()
     MessagingCguAcceptance.objects.filter(user=user).delete()
     PushDevice.objects.filter(user=user).delete()
-    ClergicalMessage.objects.filter(Q(sender=user) | Q(individual_recipient=user)).delete()
     ArticleReaction.objects.filter(user=user).delete()
     Notification.objects.filter(user=user).delete()
     NotificationPreference.objects.filter(user=user).delete()

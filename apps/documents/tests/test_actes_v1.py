@@ -80,7 +80,6 @@ def client_for(user) -> APIClient:
 def test_request_goes_to_the_parish_of_the_sacrament(world):
     request_obj = submit(world)
     assert request_obj.target_node == world.saint_dominique
-    assert request_obj.parish_name == "Saint-Dominique" and request_obj.diocese == "Archidiocèse de Dakar"
     assert AuditEvent.objects.filter(action="acte.depot", target_id=str(request_obj.pk)).exists()
 
 

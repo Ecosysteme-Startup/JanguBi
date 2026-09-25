@@ -8,16 +8,7 @@ from apps.messaging.models import (
     MessageBlock,
     MessageReaction,
     Notification,
-    PriestProfile,
 )
-
-
-@admin.register(PriestProfile)
-class PriestProfileAdmin(admin.ModelAdmin):
-    list_display = ["id", "user", "accepts_pastoral_chat", "cgu_accepted_at", "ordination_year"]
-    list_filter = ["accepts_pastoral_chat"]
-    search_fields = ["user__email", "user__first_name", "user__last_name"]
-    raw_id_fields = ["user"]
 
 
 @admin.register(Conversation)

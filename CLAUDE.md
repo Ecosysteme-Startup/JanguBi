@@ -11,7 +11,8 @@ Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (br
 
 - Refonte **sur place** (ADR-001), par lots L0 → L9 (`docs/v1/01-PLAN-BACKEND-V1.md`).
 - Périmètre V1 : Parole · Ma paroisse · Demandes d'actes · Parler à un prêtre (+ rendez-vous de confession) · tableaux de bord · conformité.
-- **Modules gelés** (ADR-006, réglage `JANGUBI_MODULES`) : `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `testing_examples`, plus la Lectio et les plans de lecture (`bible`), les Offices des Heures (`liturgy`) et le chapelet communautaire (`rosary`). **Ne pas les modifier ni les réactiver** sans décision écrite.
+- **Modules hors V1 supprimés** (ADR-016) : `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `org`, la messagerie inter-clergé (l'historique Git les conserve).
+- **Sous-modules gelés** (ADR-006, réglage `JANGUBI_MODULES`) : la Lectio et les plans de lecture (`bible.avance`), la Liturgie des Heures (`liturgy.heures`), le chapelet communautaire (`rosary.communautaire`). **Ne pas les réactiver** sans décision écrite.
 
 ## 2. Architecture — HackSoft Styleguide (CRITIQUE)
 
@@ -33,7 +34,7 @@ tasks.py       → Tâches Celery. Import des services dans le corps de la fonct
 
 ## 3. Autorisation — offices et capacités (ADR-003)
 
-> **L'ancien modèle `UserRole` × `PastoralRole` × `RoleAssignment` est abandonné.** Il reste lisible jusqu'au lot L9, mais **aucun nouveau code ne doit s'en servir**. `IsAnyAdmin` et `IsSuperAdmin` sont interdits dans les apps V1.
+> **L'ancien modèle (`UserRole`, `PastoralRole`, `RoleAssignment`, `Membership`, `org.*`) est supprimé** (ADR-016). L'état de vie d'une personne : `etat_de_vie`, `degre_ordre`, `statut_verification` (`apps.hierarchy.persons`) ; ses droits : les offices et capacités.
 
 - Arbre des juridictions : `apps.hierarchy` (`NodeType`, `Node` en treebeard `MP_Node`, `PlaceOfWorship`, horaires).
 - Offices et nominations : `OfficeType`, `OfficeAssignment` (datées, nommées par la bonne autorité).

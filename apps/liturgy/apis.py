@@ -19,14 +19,12 @@ from apps.liturgy.serializers import (
 )
 from apps.liturgy.services import AelfService
 
-CLERGY_ROLES = {"religieux", "diacre", "pretre", "eveque", "archeveque"}
-
 
 def user_can_access_hours(user) -> bool:
-    """La Liturgie des Heures est réservée au clergé/religieux (SRS §16)."""
-    role = getattr(user, "role", None)
-    pastoral = getattr(user, "pastoral_role", None)
-    return role in CLERGY_ROLES or (pastoral is not None and pastoral in CLERGY_ROLES)
+    """La Liturgie des Heures (gelée en V1) est réservée aux clercs et consacrés vérifiés."""
+    from apps.hierarchy.persons import is_clerc_or_consecrated
+
+    return is_clerc_or_consecrated(user)
 
 
 class CanAccessLiturgyOfHours(IsAuthenticated):

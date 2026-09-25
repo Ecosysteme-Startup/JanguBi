@@ -15,30 +15,21 @@ from apps.messaging.models import (
     MessageBlock,
     MessageReaction,
     Notification,
-    PriestProfile,
 )
 from apps.users.tests.factories import BaseUserFactory
 
 
-class PriestProfileFactory(DjangoModelFactory):
-    """Prêtre joignable : profil historique + nomination de vicaire (messagerie.recevoir_fideles)."""
+def reachable_priest(user=None, *, accepts: bool = True):
+    """Prêtre joignable : nomination de vicaire (capacité messagerie.recevoir_fideles) et
+    disponibilité qui accepte, ou non, de nouveaux échanges."""
+    from apps.hierarchy.tests.factories import make_node, nominate
+    from apps.messaging.models import MessagingAvailability
 
-    user = factory.SubFactory(BaseUserFactory)
-    accepts_pastoral_chat = True
-    bio = factory.Sequence(lambda n: f"Bio du pretre {n}")
-    ordination_year = 2000
-
-    class Meta:
-        model = PriestProfile
-
-    @factory.post_generation
-    def reachable(obj, create, extracted, **kwargs):  # noqa: N805 — convention factory_boy
-        if not create or extracted is False:
-            return
-        from apps.hierarchy.tests.factories import make_node, nominate
-
-        parish = make_node("paroisse", f"Paroisse de test {obj.user_id}", _test_diocese())
-        nominate(obj.user, "vicaire_paroissial", parish)
+    user = user or BaseUserFactory()
+    parish = make_node("paroisse", f"Paroisse de test {user.pk}", _test_diocese())
+    nominate(user, "vicaire_paroissial", parish)
+    MessagingAvailability.objects.update_or_create(user=user, defaults={"accepts_new_conversations": accepts})
+    return user
 
 
 def _test_diocese():

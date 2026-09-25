@@ -281,3 +281,18 @@ def test_one_failing_scheduled_article_does_not_block_the_others(world, monkeypa
     first.refresh_from_db()
     second.refresh_from_db()
     assert (first.status, second.status) == (Article.Status.SCHEDULED, Article.Status.PUBLISHED)
+
+
+def test_priest_publishes_a_meditation_of_the_day(world):
+    """EF-PAR-05 : la méditation est un type d'article publiable par annonces.publier."""
+    from apps.news.services import article_create
+
+    article = article_create(
+        author=world.secretaire,
+        title="Méditation du jour",
+        content="…",
+        category=world.category,
+        node=world.saint_dominique,
+        content_type=Article.ContentType.MEDITATION,
+    )
+    assert article.content_type == "meditation"

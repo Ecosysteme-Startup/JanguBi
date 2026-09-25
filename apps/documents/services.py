@@ -138,7 +138,7 @@ def _notify_requester(request_obj: DocumentRequest, extra: str = "", *, status: 
     from apps.messaging.services import notification_send
 
     status = status or request_obj.status
-    parish = request_obj.target_node.name if request_obj.target_node else request_obj.parish_name
+    parish = request_obj.target_node.name
     message = _REQUESTER_MESSAGES[status].format(ref=request_obj.reference, parish=parish)
     notification_send(
         user=request_obj.requester,
@@ -198,9 +198,6 @@ def document_request_create(*, requester: Any, target_node: Node, data: dict[str
     if not data.get("consent_given"):
         raise ApplicationError("Le consentement est nécessaire pour transmettre la demande.", code="consent_required")
 
-    from apps.hierarchy.selectors import node_ancestor_of_type
-
-    diocese = node_ancestor_of_type(node=target_node, type_code="diocese")
     request_obj = DocumentRequest.objects.create(
         reference=_reference(),
         requester=requester,
@@ -218,8 +215,6 @@ def document_request_create(*, requester: Any, target_node: Node, data: dict[str
         registered_first_names=data.get("registered_first_names", ""),
         father_last_name=data["father_last_name"],
         mother_last_name=data["mother_last_name"],
-        parish_name=target_node.name,
-        diocese=diocese.name if diocese else "",
         target_node=target_node,
         sacrament_approximate_date=data["sacrament_approximate_date"],
         sacrament_location=data["sacrament_location"],

@@ -61,7 +61,7 @@ def test_submodule_requires_its_parent():
 
 def test_v1_default_excludes_every_frozen_module():
     assert not FROZEN_BY_DEFAULT & set(V1_DEFAULT_MODULES)
-    for module in ("bible", "liturgy", "rosary", "messaging", "documents", "news", "agenda", "dashboards", "org"):
+    for module in ("bible", "liturgy", "rosary", "messaging", "documents", "news", "agenda", "dashboards", "confessions"):
         assert module in V1_DEFAULT_MODULES
 
 
@@ -74,7 +74,7 @@ def test_frozen_route_returns_404_with_v1_defaults(url):
 
 
 @pytest.mark.parametrize(
-    "prefix", ["me/", "bible/", "liturgy/", "rosary/", "messaging/", "documents/", "news/", "agenda/", "org/"]
+    "prefix", ["me/", "bible/", "liturgy/", "rosary/", "messaging/", "documents/", "news/", "agenda/", "hierarchy/"]
 )
 def test_v1_routes_stay_exposed(prefix):
     from apps.api.urls import build_v1_patterns
@@ -125,7 +125,7 @@ def test_task_module_is_derived_from_task_path():
 
 def test_frozen_task_is_absent_from_beat_schedule():
     schedule = {
-        "donations_reminder": {"task": "apps.donations.tasks.remind", "schedule": crontab(hour=1)},
+        "lectio_reminder": {"task": "apps.bible.tasks.remind", "schedule": crontab(hour=1), "module": "bible.avance"},
         "purge_conversations": {"task": "apps.messaging.tasks.purge", "schedule": crontab(hour=3)},
         "hours_sync": {"task": "apps.liturgy.tasks.sync_hours", "schedule": crontab(hour=2), "module": "liturgy.heures"},
         "celery_cleanup": {"task": "celery.backend_cleanup", "schedule": crontab(hour=4)},

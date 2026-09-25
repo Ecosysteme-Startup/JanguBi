@@ -4,15 +4,13 @@ from datetime import date
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management import call_command
 from rest_framework.test import APIClient
 
 from apps.core.exceptions import ApplicationError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.enums import AssignmentStatus, StatutVerification
 from apps.hierarchy.imports import assignments_import_csv
-from apps.hierarchy.legacy_rights import legacy_rights_apply, legacy_rights_plan, plan_to_csv
-from apps.hierarchy.models import AuditEvent, Node, OfficeAssignment
+from apps.hierarchy.models import AuditEvent, OfficeAssignment
 from apps.hierarchy.services_offices import person_declaration_submit, person_verification_decide
 from apps.hierarchy.tests.factories import make_node, nominate, office, person, priest
 from apps.users.tests.factories import SuperAdminFactory
@@ -136,71 +134,6 @@ def test_annual_movement_errors(world):
     assert "Action inconnue" in report.lines[0].message
     assert "Aucun compte" in report.lines[1].message
     assert "Aucune nomination" in report.lines[2].message
-
-
-# --- Migration des anciens droits (L2.9) ------------------------------------------------------
-
-
-@pytest.fixture
-def legacy(db):
-    """Un curé prêtre, un second prêtre admin, un laïc admin, un admin d'église et un doyen, dans org."""
-    from apps.org.models import Church, Deanery, Diocese, Parish, Province
-    from apps.users.models import Membership, RoleAssignment
-
-    province = Province.objects.create(name="Province de Dakar", code="DAKP")
-    diocese = Diocese.objects.create(name="Archidiocèse de Dakar", code="DAK", province=province)
-    deanery = Deanery.objects.create(name="Plateau", diocese=diocese)
-    parish = Parish.objects.create(name="Saint-Dominique", diocese=diocese, deanery=deanery)
-    church = Church.objects.create(parish=parish, name="Église", is_main=True)
-    # Les nœuds hérités : ce que fait la migration 0003 sur des données existantes.
-    # Depuis 0001 : un test transactionnel antérieur a pu vider les types (migration de données 0002).
-    call_command("migrate", "hierarchy", "0001", verbosity=0)
-    call_command("migrate", verbosity=0)
-
-    cure = priest("cure@legacy.sn", pastoral_role="pretre", verified=False)
-    vicaire = priest("vicaire@legacy.sn", pastoral_role="pretre", verified=False)
-    laic = person("laic@legacy.sn")
-    eglise = person("eglise@legacy.sn")
-    doyen = priest("doyen@legacy.sn", pastoral_role="pretre", verified=False)
-    deanery.dean = doyen
-    deanery.save()
-    RoleAssignment.objects.create(user=cure, role="parish_admin", scope="parish", parish=parish, is_principal=True)
-    RoleAssignment.objects.create(user=vicaire, role="parish_admin", scope="parish", parish=parish)
-    RoleAssignment.objects.create(user=laic, role="parish_admin", scope="parish", parish=parish)
-    RoleAssignment.objects.create(user=eglise, role="church_admin", scope="church", church=church)
-    RoleAssignment.objects.create(user=SuperAdminFactory.create(), role="super_admin", scope="global")
-    Membership.objects.create(user=laic, church=church, is_primary=True)
-    return {"cure": cure, "vicaire": vicaire, "laic": laic, "eglise": eglise, "doyen": doyen}
-
-
-@pytest.mark.django_db(transaction=True)
-def test_legacy_rights_plan_writes_nothing_then_applies(legacy):
-    plan = legacy_rights_plan()
-    by_email = {(r.email, r.action): r for r in plan}
-
-    assert OfficeAssignment.objects.count() == 0
-    assert by_email[("cure@legacy.sn", "creer")].office == "cure"
-    assert by_email[("vicaire@legacy.sn", "creer")].office == "vicaire_paroissial"
-    assert by_email[("laic@legacy.sn", "creer")].office == "referent_numerique"
-    assert "À VALIDER" in by_email[("eglise@legacy.sn", "creer")].remarque
-    assert by_email[("doyen@legacy.sn", "creer")].office == "doyen"
-    assert "paroisse_suivie" in by_email[("laic@legacy.sn", "profil")].remarque
-    assert "source,email,ancien,office,node_code,action,remarque" in plan_to_csv(plan)
-
-    simulated = legacy_rights_apply(rows=plan, dry_run=True)
-    assert simulated["nominations"] == 5 and OfficeAssignment.objects.count() == 0
-
-    counts = legacy_rights_apply(rows=plan)
-    assert counts["nominations"] == 5
-    parish = Node.objects.get(legacy_model="org.Parish")
-    assert authz.peut(legacy["cure"], "actes.traiter", parish)
-    legacy["laic"].refresh_from_db()
-    assert legacy["laic"].paroisse_suivie == parish
-    legacy["cure"].refresh_from_db()
-    assert (legacy["cure"].etat_de_vie, legacy["cure"].statut_verification) == ("clerc", "declare")
-
-    again = legacy_rights_apply(rows=legacy_rights_plan())
-    assert again["nominations"] == 0 and again["sautees"] == 5
 
 
 # --- API ---------------------------------------------------------------------------------

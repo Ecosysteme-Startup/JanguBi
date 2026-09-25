@@ -1,20 +1,16 @@
 from django.db import transaction
 
 from apps.core.exceptions import ApplicationError
-
-CLERGY_ROLES = {"diacre", "pretre", "eveque", "archeveque", "religieux"}
-PRIEST_ROLES = {"pretre", "eveque", "archeveque"}
+from apps.hierarchy.persons import is_clerc_or_consecrated, is_priest_or_bishop
 
 
 def _require_clergy(user) -> None:
-    role = getattr(user, "pastoral_role", None)
-    if role not in CLERGY_ROLES:
+    if not is_clerc_or_consecrated(user):
         raise ApplicationError("Réservé aux membres du clergé.")
 
 
 def _require_priest_or_above(user) -> None:
-    role = getattr(user, "pastoral_role", None)
-    if role not in PRIEST_ROLES:
+    if not is_priest_or_bishop(user):
         raise ApplicationError("Réservé aux prêtres et évêques.")
 
 

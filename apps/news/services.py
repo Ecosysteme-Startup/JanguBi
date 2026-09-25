@@ -23,7 +23,7 @@ from apps.news.models import Article, ArticleCategory, ArticleReaction, ArticleR
 logger = logging.getLogger(__name__)
 
 # Types publiables en V1 : la lettre pastorale est gelée (ADR-006).
-V1_CONTENT_TYPES = (Article.ContentType.ANNOUNCEMENT, Article.ContentType.ARTICLE)
+V1_CONTENT_TYPES = (Article.ContentType.ANNOUNCEMENT, Article.ContentType.ARTICLE, Article.ContentType.MEDITATION)
 UPDATABLE_FIELDS = (
     "title",
     "excerpt",
@@ -118,7 +118,6 @@ def article_create(
         scope_node=node,
         scope_place=place,
         # Ancienne colonne conservée jusqu'en L9 : cohérente pour les lecteurs historiques.
-        scope_type=Article.ScopeType.GLOBAL if node is None else Article.ScopeType.PARISH,
         is_sunday_notice=is_sunday_notice,
         sunday_date=sunday_date,
         announcement_date=sunday_date,

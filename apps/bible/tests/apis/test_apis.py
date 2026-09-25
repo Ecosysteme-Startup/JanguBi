@@ -133,7 +133,7 @@ class BibleApiTests(APITestCase):
         # Norm user
         user = BaseUser.objects.create_user(
             email="test@test.com", password="pwd",
-            role="fidele", phone_number="+221771000001",
+            phone_number="+221771000001",
             is_active=True, is_verified=True,
         )
         self.client.force_authenticate(user=user)

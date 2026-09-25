@@ -102,7 +102,7 @@ def request_get_for_processor(*, user: Any, request_id: Any) -> DocumentRequest:
 
 
 def status_counts(*, queryset: QuerySet[DocumentRequest]) -> dict[str, Any]:
-    counts = {s: 0 for s in DocumentRequest.Status.values if s not in ("validated", "document_deposited")}
+    counts = dict.fromkeys(DocumentRequest.Status.values, 0)
     for row in queryset.order_by().values("status").annotate(total=Count("id")):
         counts[row["status"]] = row["total"]
     return {"counts": counts, "total": sum(counts.values())}

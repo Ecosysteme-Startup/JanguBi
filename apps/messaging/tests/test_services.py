@@ -49,7 +49,7 @@ from .factories import (
     MessageFactory,
     MessageReactionFactory,
     NotificationFactory,
-    PriestProfileFactory,
+    reachable_priest,
 )
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,7 @@ def test_conversation_get_or_create_creates_new():
     # Arrange — le destinataire doit être un prêtre éligible (PriestProfile acceptant).
     fidele = BaseUserFactory()
     priest = BaseUserFactory()
-    PriestProfileFactory(user=priest, accepts_pastoral_chat=True)
+    reachable_priest(priest)
 
     # Act
     conversation, created = conversation_get_or_create(fidele=fidele, priest=priest)
@@ -96,7 +96,7 @@ def test_conversation_get_or_create_returns_existing():
     existing = ConversationFactory()
     a = existing.participant_a
     b = existing.participant_b
-    PriestProfileFactory(user=b, accepts_pastoral_chat=True)
+    reachable_priest(b)
 
     # Act
     conversation, created = conversation_get_or_create(fidele=a, priest=b)
@@ -124,8 +124,8 @@ def test_conversation_get_or_create_rejected_when_priest_not_accepting():
 
     fidele = BaseUserFactory()
     priest = BaseUserFactory()
-    PriestProfileFactory(user=priest)
-    MessagingAvailability.objects.create(user=priest, accepts_new_conversations=False)
+    reachable_priest(priest, accepts=False)
+    assert not MessagingAvailability.objects.get(user=priest).accepts_new_conversations
 
     with pytest.raises(ApplicationError, match="nouveaux échanges"):
         conversation_get_or_create(fidele=fidele, priest=priest)

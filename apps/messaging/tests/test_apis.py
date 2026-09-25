@@ -31,7 +31,7 @@ from .factories import (
     MessageFactory,
     MessageReactionFactory,
     NotificationFactory,
-    PriestProfileFactory,
+    reachable_priest,
 )
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ def test_conversation_list_requires_authentication(anon_client):
 def test_conversation_create_returns_201(auth_client):
     # Arrange — le destinataire doit être un prêtre éligible (PriestProfile acceptant).
     priest_user = BaseUserFactory()
-    PriestProfileFactory(user=priest_user, accepts_pastoral_chat=True)
+    reachable_priest(priest_user)
     url = reverse("api:messaging:conversation-create")
 
     # Act

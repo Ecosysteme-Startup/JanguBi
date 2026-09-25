@@ -9,44 +9,7 @@ from apps.messaging.models import (
     MessageReaction,
     MessagingAvailability,
     Notification,
-    PriestProfile,
 )
-
-
-class PriestProfileOutputSerializer(serializers.ModelSerializer):
-    user_id = serializers.UUIDField(source="user.id", read_only=True)
-    full_name = serializers.SerializerMethodField()
-    email = serializers.EmailField(source="user.email", read_only=True)
-
-    class Meta:
-        model = PriestProfile
-        fields = [
-            "id",
-            "user_id",
-            "full_name",
-            "email",
-            "accepts_pastoral_chat",
-            "cgu_accepted_at",
-            "ordination_year",
-            "bio",
-            "created_at",
-        ]
-
-    def get_full_name(self, obj) -> str:
-        profile = getattr(obj.user, "profile", None)
-        if profile:
-            return f"{profile.first_name} {profile.last_name}".strip() or obj.user.email
-        return obj.user.email
-
-
-class PriestProfileCreateInputSerializer(serializers.Serializer):
-    user_id = serializers.UUIDField()
-
-
-class PriestProfileUpdateInputSerializer(serializers.Serializer):
-    accepts_pastoral_chat = serializers.BooleanField(required=False)
-    ordination_year = serializers.IntegerField(required=False, min_value=1900, max_value=2100)
-    bio = serializers.CharField(required=False, max_length=1000, allow_blank=True)
 
 
 class MessagingCguStatusSerializer(serializers.Serializer):
@@ -243,40 +206,6 @@ class PushDeviceOutputSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     platform = serializers.CharField()
     created_at = serializers.DateTimeField()
-
-
-class ClergicalMessageSendInputSerializer(serializers.Serializer):
-    subject = serializers.CharField(max_length=200)
-    body = serializers.CharField()
-    recipient_scope = serializers.ChoiceField(choices=[
-        ("individual", "Individuel"),
-        ("parish_clergy", "Clergé de la paroisse"),
-        ("diocese_clergy", "Clergé du diocèse"),
-        ("province_bishops", "Évêques de la province"),
-    ])
-    scope_id = serializers.IntegerField(required=False, allow_null=True)
-    individual_recipient_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-class ClergicalMessageOutputSerializer(serializers.ModelSerializer):
-    sender_email = serializers.EmailField(source="sender.email", read_only=True)
-    recipient_email = serializers.SerializerMethodField()
-
-    class Meta:
-        from apps.messaging.models import ClergicalMessage
-        model = ClergicalMessage
-        fields = [
-            "id", "sender_email", "recipient_scope", "scope_id",
-            "recipient_email", "subject", "body", "read_at", "created_at",
-        ]
-
-    def get_recipient_email(self, obj) -> str | None:
-        if obj.individual_recipient:
-            return obj.individual_recipient.email
-        return None
-
-
-# --- V1 : prêtres joignables et disponibilités (L6a) ---------------------------------------
 
 
 class AvailabilitySerializer(serializers.ModelSerializer):

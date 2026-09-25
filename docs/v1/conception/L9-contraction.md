@@ -1,7 +1,7 @@
-# L9 — Contraction des migrations : plan (non exécuté)
+# L9 — Contraction des migrations : exécutée (ADR-016)
 
 > Plan §2 L9 : suppression de `org.*`, `RoleAssignment`, `pastoral_role`, `UserRole`, `Membership`, SimpleJWT. Version du 25/09/2026.
-> **Rien n'est supprimé dans ce lot.** Ces migrations détruisent des données et du code encore utilisés. Elles demandent trois décisions préalables et une sauvegarde vérifiée.
+> **Exécutée le 25/09/2026** (ADR-015 puis ADR-016) : l'application n'a jamais été en production, aucune donnée n'était à préserver. Le détail de ce qui a été supprimé est dans ADR-016 ; le texte ci-dessous est conservé pour mémoire.
 
 ## 1. Pourquoi pas maintenant
 

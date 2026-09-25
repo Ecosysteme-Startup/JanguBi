@@ -144,8 +144,6 @@ def token_validate(token: str) -> KeycloakIdentity:
 def person_from_identity(identity: KeycloakIdentity) -> Any:
     """Personne liée au ``sub`` ; à défaut, compte existant de même e-mail **vérifié**
     (comptes migrés) ; sinon création d'un fidèle. Idempotent."""
-    from apps.users.enums import UserOnboardingState, UserRole
-
     User = get_user_model()
     person = User.objects.filter(keycloak_sub=identity.sub).first()
     if person is not None:
@@ -166,13 +164,11 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
         with transaction.atomic():
             person = User.objects.create_user(
                 email=identity.email,
-                role=UserRole.FIDELE,
                 phone_number=None,
                 password=None,
                 is_active=True,
                 is_verified=identity.email_verified,
                 keycloak_sub=identity.sub,
-                onboarding_state=UserOnboardingState.PENDING_PARISH_SELECTION,
             )
     except IntegrityError as exc:
         # Course entre deux premières requêtes simultanées, ou e-mail déjà pris par un

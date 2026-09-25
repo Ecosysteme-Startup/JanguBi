@@ -31,8 +31,7 @@ class DocumentRequest(BaseModel):
         OTHER = "other", _("Autre")
 
     class Status(models.TextChoices):
-        # Cycle V1 (SRS §8.1). VALIDATED et DOCUMENT_DEPOSITED sont historiques : la
-        # migration 0011 les convertit en READY_FOR_PICKUP ; ils ne sont plus produits.
+        # Cycle V1 (SRS §8.1).
         SUBMITTED = "submitted", _("Soumise")
         UNDER_VERIFICATION = "under_verification", _("En vérification")
         INFO_REQUESTED = "info_requested", _("Complément demandé")
@@ -40,8 +39,6 @@ class DocumentRequest(BaseModel):
         COLLECTED = "collected", _("Retirée")
         REJECTED = "rejected", _("Rejetée")
         CANCELLED = "cancelled", _("Annulée")
-        VALIDATED = "validated", _("Validée (historique)")
-        DOCUMENT_DEPOSITED = "document_deposited", _("Document déposé (historique)")
 
     class PickupMode(models.TextChoices):
         SECRETARIAT = "secretariat", _("Au secrétariat de la paroisse du sacrement")
@@ -90,25 +87,10 @@ class DocumentRequest(BaseModel):
     registered_first_names = models.CharField(max_length=200, blank=True, default="")
     father_last_name = models.CharField(max_length=100)
     mother_last_name = models.CharField(max_length=100)
-    parish_name = models.CharField(max_length=200)
-    diocese = models.CharField(max_length=200)
-    # Rattachement territorial réel (routage + cloisonnement). Le texte ci-dessus
-    # reste en repli pour les saisies libres (stations rurales sans ligne Parish).
-    target_parish = models.ForeignKey(
-        "org.Parish",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="document_requests",
-    )
-    # --- V1 (L5) ---------------------------------------------------------------
-    # Paroisse du sacrement (RG-02) : nœud qui tient les registres. target_parish
-    # (org.Parish) reste lisible jusqu'en L9.
+    # Paroisse du sacrement (RG-02) : nœud qui tient les registres.
     target_node = models.ForeignKey(
         "hierarchy.Node",
         on_delete=models.PROTECT,
-        null=True,
-        blank=True,
         related_name="document_requests",
         verbose_name=_("paroisse du sacrement"),
     )

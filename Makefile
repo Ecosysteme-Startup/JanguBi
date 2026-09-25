@@ -3,11 +3,11 @@
 export
 
 .PHONY: up down restart build logs shell dbshell makemigrations migrate check test \
-       init-data create-admin init-all createsuperuser import-aelf clear-cache \
+       init-data init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
-       seed seed-senegal seed-hierarchy seed-demo seed-reset \
-	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf init-tv-categories \
+       seed seed-hierarchy seed-demo seed-reset \
+	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
 	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
 
@@ -92,9 +92,6 @@ flush-redis:
 flush-db:
 	docker compose exec django python manage.py flush --no-input
 
-init-tv-categories:
-	docker compose exec django python manage.py init_tv_categories
-
 # ==============================================================================
 # BIBLE & RAG UTILS
 # ==============================================================================
@@ -168,16 +165,7 @@ init-data:
 	@echo "   Importation et Indexation terminees !"
 	@echo "==========================================================="
 
-create-admin:
-	@echo "==========================================================="
-	@echo "   Creation du Super Administrateur"
-	@echo "==========================================================="
-	docker compose exec django python manage.py init_admin
-
 # ── Seed (structure territoriale + donnees de demo) ──────────────────────────
-seed-senegal:
-	docker compose exec django python manage.py seed_senegal
-
 # Référentiel V1 (apps/hierarchy) : types, province, 7 diocèses, doyennés de Dakar,
 # paroisse pilote et ses horaires. Idempotent.
 seed-hierarchy:
@@ -189,17 +177,15 @@ seed-demo:
 seed-reset:
 	docker compose exec django python manage.py seed_demo --reset
 
-# Une seule commande : seed_senegal (prerequis) PUIS seed_demo. Idempotent.
-seed: seed-senegal seed-demo
+# Référentiel puis démonstration (paroisse pilote). Idempotent.
+seed: seed-hierarchy seed-demo
 	@echo "==========================================================="
-	@echo "   Seed termine (seed_senegal + seed_demo) — multi-appartenance"
+	@echo "   Seed termine (référentiel + démonstration sur la paroisse pilote)"
 	@echo "==========================================================="
 
-# `seed-senegal` fait partie de l'initialisation, pas des données de démo : sans
-# structure territoriale, AUCUN compte ne peut finir son onboarding. La sélection
-# de paroisse est obligatoire et bloquante — menu vide, bouton grisé, aucun moyen
-# de passer l'étape (audit beta 2026-07-20). `seed_senegal` est idempotent.
-init-all: init-data seed-senegal seed-hierarchy
+# Le référentiel (types, province, diocèses, doyennés, paroisse pilote) fait partie de
+# l'initialisation : sans lui, personne ne peut choisir sa paroisse. Idempotent.
+init-all: init-data seed-hierarchy
 
 
 # ==============================================================================

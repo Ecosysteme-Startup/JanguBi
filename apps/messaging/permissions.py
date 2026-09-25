@@ -44,17 +44,6 @@ class HasAcceptedMessagingCgu(BasePermission):
         return False
 
 
-class IsPriestProfileOwner(BasePermission):
-    """Request user has a PriestProfile."""
-
-    message = "Accès réservé aux prêtres enregistrés."
-
-    def has_permission(self, request, view) -> bool:
-        if not request.user or not request.user.is_authenticated:
-            return False
-        return hasattr(request.user, "priest_profile")
-
-
 class IsMessageSender(BasePermission):
     """Request user is the sender of the message."""
 

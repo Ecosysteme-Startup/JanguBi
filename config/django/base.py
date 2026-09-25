@@ -101,34 +101,23 @@ WS_ALLOWED_ORIGINS = env.list("WS_ALLOWED_ORIGINS", default=[])
 LOCAL_APPS = [
     "apps.core.apps.CoreConfig",
     "apps.common.apps.CommonConfig",
-    "apps.org.apps.OrgConfig",
     "apps.hierarchy.apps.HierarchyConfig",
     "apps.confessions.apps.ConfessionsConfig",
     "apps.tasks.apps.TasksConfig",
     "apps.api.apps.ApiConfig",
     "apps.authentication.apps.AuthenticationConfig",
     "apps.users.apps.UsersConfig",
-    "apps.errors.apps.ErrorsConfig",
-    #"apps.testing_examples.apps.TestingExamplesConfig",
     "apps.integrations.apps.IntegrationsConfig",
     "apps.files.apps.FilesConfig",
     "apps.emails.apps.EmailsConfig",
     "apps.bible.apps.BibleConfig",
     "apps.rosary.apps.RosaryConfig",
-    "apps.rag.apps.RagConfig",
     "apps.liturgy.apps.LiturgyConfig",
-    "apps.tv.apps.TvConfig",
     "apps.messaging.apps.MessagingConfig",
     "apps.documents.apps.DocumentsConfig",
     "apps.news.apps.NewsConfig",
-    "apps.clergy_accounts.apps.ClergyAccountsConfig",
     "apps.agenda.apps.AgendaConfig",
-    "apps.mass_intentions.apps.MassIntentionsConfig",
-    "apps.donations.apps.DonationsConfig",
     "apps.dashboards.apps.DashboardsConfig",
-    "apps.spiritual.apps.SpiritualConfig",
-    "apps.transfers.apps.TransfersConfig",
-    #"apps.blog_examples.apps.BlogExamplesConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -148,7 +137,6 @@ INSTALLED_APPS = [
     "django.contrib.admin",
     # If you want to have required 2FA for the Django admin
     # Uncomment the line below and comment out the default admin
-    # "apps.custom_admin.apps.CustomAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -375,4 +363,3 @@ from config.settings.debug_toolbar.setup import DebugToolbarSetup  # noqa
 INSTALLED_APPS, MIDDLEWARE = DebugToolbarSetup.do_settings(INSTALLED_APPS, MIDDLEWARE)
 
 
-SHELL_PLUS_IMPORTS = ["from apps.blog_examples.print_qs_in_shell.utils import print_qs"]

@@ -10,25 +10,6 @@ from apps.messaging.fields import EncryptedTextField
 from apps.users.models import BaseUser
 
 
-class PriestProfile(BaseModel):
-    user = models.OneToOneField(
-        BaseUser,
-        on_delete=models.CASCADE,
-        related_name="priest_profile",
-    )
-    accepts_pastoral_chat = models.BooleanField(default=False, db_index=True)
-    cgu_accepted_at = models.DateTimeField(null=True, blank=True)
-    ordination_year = models.PositiveSmallIntegerField(null=True, blank=True)
-    bio = models.TextField(blank=True, default="")
-
-    class Meta:
-        verbose_name = _("Profil Prêtre")
-        verbose_name_plural = _("Profils Prêtres")
-
-    def __str__(self) -> str:
-        return f"PriestProfile({self.user_id})"
-
-
 class MessagingAvailability(BaseModel):
     """Disponibilité d'un prêtre joignable (EF-PRE-07). Absente = disponible, sans plage déclarée."""
 
@@ -350,54 +331,3 @@ class PushDevice(BaseModel):
 
     def __str__(self) -> str:
         return f"PushDevice({self.user_id}, {self.platform})"
-
-
-class ClergicalMessage(BaseModel):
-    """Encrypted message between clergy members (distinct from the pastoral Conversation model)."""
-
-    class RecipientScope(models.TextChoices):
-        INDIVIDUAL = "individual", _("Individuel")
-        PARISH_CLERGY = "parish_clergy", _("Clergé de la paroisse")
-        DIOCESE_CLERGY = "diocese_clergy", _("Clergé du diocèse")
-        PROVINCE_BISHOPS = "province_bishops", _("Évêques de la province")
-
-    sender = models.ForeignKey(
-        BaseUser,
-        on_delete=models.CASCADE,
-        related_name="sent_clerical_messages",
-    )
-    recipient_scope = models.CharField(
-        _("portée"),
-        max_length=20,
-        choices=RecipientScope.choices,
-        default=RecipientScope.INDIVIDUAL,
-        db_index=True,
-    )
-    scope_id = models.IntegerField(
-        _("ID de la portée"),
-        null=True,
-        blank=True,
-        help_text="ID de la paroisse, du diocèse ou de la province selon recipient_scope.",
-    )
-    individual_recipient = models.ForeignKey(
-        BaseUser,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="received_clerical_messages",
-    )
-    subject = models.CharField(_("sujet"), max_length=200)
-    body = EncryptedTextField(_("corps"))
-    read_at = models.DateTimeField(_("lu le"), null=True, blank=True)
-
-    class Meta:
-        verbose_name = _("Message inter-clergé")
-        verbose_name_plural = _("Messages inter-clergé")
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["individual_recipient", "-created_at"], name="clerical_msg_rcpt_idx"),
-            models.Index(fields=["sender", "-created_at"], name="clerical_msg_sender_idx"),
-        ]
-
-    def __str__(self) -> str:
-        return f"ClergicalMessage({self.sender_id} → {self.recipient_scope})"

@@ -5,7 +5,11 @@ from rest_framework import serializers
 from apps.news.models import Article, ArticleCategory, ArticleReaction
 
 _REACTION_TYPES: tuple[str, ...] = tuple(ArticleReaction.ReactionType.values)
-V1_TYPES = [(Article.ContentType.ANNOUNCEMENT, "Annonce"), (Article.ContentType.ARTICLE, "Article")]
+V1_TYPES = [
+    (Article.ContentType.ANNOUNCEMENT, "Annonce"),
+    (Article.ContentType.ARTICLE, "Article"),
+    (Article.ContentType.MEDITATION, "Méditation du jour"),  # EF-PAR-05
+]
 
 
 def _author_display(user: Any) -> str:

@@ -37,14 +37,14 @@ class DocumentRequestAdmin(admin.ModelAdmin):
         "status",
         "requester_last_name",
         "requester_first_names",
-        "parish_name",
+        "target_node",
         "assigned_to",
         "created_at",
     )
-    list_filter = ("status", "document_type", "diocese")
-    search_fields = ("reference", "requester_last_name", "requester_first_names", "parish_name")
+    list_filter = ("status", "document_type")
+    search_fields = ("reference", "requester_last_name", "requester_first_names", "target_node__name")
     readonly_fields = ("reference", "created_at", "updated_at")
-    raw_id_fields = ("requester", "assigned_to")
+    raw_id_fields = ("requester", "assigned_to", "target_node", "pickup_place")
     inlines = [StatusLogInline, AttachmentInline, InternalNoteInline]
 
 

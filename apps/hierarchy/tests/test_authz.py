@@ -334,7 +334,7 @@ def test_frozen_catalogue_migration_matches_the_runtime_profile():
 
     from apps.hierarchy.profiles import CAPABILITIES, OFFICES
 
-    frozen = importlib.import_module("apps.hierarchy.migrations.0006_seed_offices_catalogue")
+    frozen = importlib.import_module("apps.hierarchy.migrations.0004_seed_offices_catalogue")
     assert [c[0] for c in frozen.CAPABILITIES] == [c["code"] for c in CAPABILITIES]
     assert {o[0]: sorted(o[8]) for o in frozen.OFFICES} == {o["code"]: sorted(o["capabilities"]) for o in OFFICES}
     assert {o[0]: sorted(o[5]) for o in frozen.OFFICES} == {o["code"]: sorted(o["appointed_by"]) for o in OFFICES}

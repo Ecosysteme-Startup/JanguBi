@@ -9,7 +9,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
-from apps.api.pagination import LimitOffsetPagination, get_paginated_response
 from apps.core.exceptions import ApplicationError
 from apps.hierarchy.authz import HasCapability
 from apps.messaging.models import Conversation, Message, MessageBlock, MessagingAvailability
@@ -33,8 +32,6 @@ from apps.messaging.serializers import (
     AvailabilitySerializer,
     BlockCreateInputSerializer,
     BlockOutputSerializer,
-    ClergicalMessageOutputSerializer,
-    ClergicalMessageSendInputSerializer,
     ConversationCreateInputSerializer,
     ConversationOutputSerializer,
     ExportOutputSerializer,
@@ -461,91 +458,3 @@ class PushDeviceApi(ApiAuthMixin, APIView):
             )
         push_device_unregister(user=request.user, token=token)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-# ---------------------------------------------------------------------------
-# ClergicalMessage endpoints
-# ---------------------------------------------------------------------------
-
-
-class ClergicalMessageSendApi(ApiAuthMixin, APIView):
-    @extend_schema(
-        request=ClergicalMessageSendInputSerializer,
-        responses={201: ClergicalMessageOutputSerializer},
-        tags=["messaging"],
-        summary="Envoyer un message inter-clergé",
-    )
-    def post(self, request):
-        serializer = ClergicalMessageSendInputSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        try:
-            from apps.messaging.services import clerical_message_send
-            msg = clerical_message_send(sender=request.user, **serializer.validated_data)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ClergicalMessageOutputSerializer(msg).data, status=status.HTTP_201_CREATED)
-
-
-class ClergicalMessageInboxApi(ApiAuthMixin, APIView):
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Offset de pagination"),
-        ],
-        responses={200: ClergicalMessageOutputSerializer(many=True)},
-        tags=["messaging"],
-        summary="Messages inter-clergé reçus",
-    )
-    def get(self, request):
-        from apps.messaging.selectors import clerical_message_inbox
-        msgs = clerical_message_inbox(user=request.user)
-        return get_paginated_response(
-            pagination_class=LimitOffsetPagination,
-            serializer_class=ClergicalMessageOutputSerializer,
-            queryset=msgs,
-            request=request,
-            view=self,
-        )
-
-
-class ClergicalMessageSentApi(ApiAuthMixin, APIView):
-    @extend_schema(
-        parameters=[
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats"),
-            OpenApiParameter("offset", OpenApiTypes.INT, description="Offset de pagination"),
-        ],
-        responses={200: ClergicalMessageOutputSerializer(many=True)},
-        tags=["messaging"],
-        summary="Messages inter-clergé envoyés",
-    )
-    def get(self, request):
-        from apps.messaging.selectors import clerical_message_sent
-        msgs = clerical_message_sent(user=request.user)
-        return get_paginated_response(
-            pagination_class=LimitOffsetPagination,
-            serializer_class=ClergicalMessageOutputSerializer,
-            queryset=msgs,
-            request=request,
-            view=self,
-        )
-
-
-class ClergicalMessageReadApi(ApiAuthMixin, APIView):
-    @extend_schema(
-        request=None,
-        responses={200: ClergicalMessageOutputSerializer},
-        tags=["messaging"],
-        summary="Marquer un message inter-clergé comme lu",
-    )
-    def post(self, request, message_id: int):
-        from apps.messaging.models import ClergicalMessage
-        from apps.messaging.services import clerical_message_mark_read
-        try:
-            msg = ClergicalMessage.objects.get(pk=message_id, individual_recipient=request.user)
-        except ClergicalMessage.DoesNotExist:
-            return Response({"detail": "Message introuvable."}, status=status.HTTP_404_NOT_FOUND)
-        try:
-            msg = clerical_message_mark_read(message=msg, reader=request.user)
-        except ApplicationError as exc:
-            return _error(exc)
-        return Response(ClergicalMessageOutputSerializer(msg).data)

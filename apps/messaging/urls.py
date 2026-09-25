@@ -1,14 +1,9 @@
 from django.urls import path
 
-from apps.core.modules import is_module_active
 from apps.messaging.apis import (
     AvailabilityApi,
     BlockDeleteApi,
     BlockListCreateApi,
-    ClergicalMessageInboxApi,
-    ClergicalMessageReadApi,
-    ClergicalMessageSendApi,
-    ClergicalMessageSentApi,
     ConversationArchiveApi,
     ConversationCguApi,
     ConversationCreateApi,
@@ -52,12 +47,3 @@ urlpatterns = [
     path("notifications/", NotificationListApi.as_view(), name="notification-list"),
     path("notifications/<uuid:notification_id>/read/", NotificationReadApi.as_view(), name="notification-read"),
 ]
-
-# Messagerie inter-clergé : gelée en V1 (SRS §1.3, sous-module « messaging.inter_clerge »).
-if is_module_active("messaging.inter_clerge"):
-    urlpatterns += [
-        path("clerical/", ClergicalMessageSendApi.as_view(), name="clerical-send"),
-        path("clerical/inbox/", ClergicalMessageInboxApi.as_view(), name="clerical-inbox"),
-        path("clerical/sent/", ClergicalMessageSentApi.as_view(), name="clerical-sent"),
-        path("clerical/<int:message_id>/read/", ClergicalMessageReadApi.as_view(), name="clerical-read"),
-    ]

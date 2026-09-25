@@ -22,7 +22,7 @@ django-structlog[celery]==9.1.1
 django-redis==6.0.0
 drf-spectacular==0.29.0
 
-drf-jwt==1.19.2
+PyJWT[crypto]==2.12.1
 
 boto3==1.40.52
 attrs==25.4.0
@@ -41,9 +41,6 @@ beautifulsoup4==4.14.3
 #google-auth-httplib2==0.2.0
 #google-auth-oauthlib==1.2.2
 
-pyotp==2.9.0
-qrcode==8.2
-tabulate==0.9.0
 django-phonenumber-field[phonenumbers]>=7.3.0
 
 channels==4.3.2

@@ -38,7 +38,7 @@
 ## ADR-006 — Gel des modules hors V1 par configuration
 - **Statut** : Verrouillée
 - **Décision** : réglage `JANGUBI_MODULES` (liste des modules actifs). `apps/api/urls.py` n'inclut que les modules actifs, et les tâches Beat des modules gelés sont retirées. Le code et les migrations restent.
-- **Modules gelés** : `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `testing_examples`, plus des sous-parties de `bible`, `liturgy` et `rosary` (voir plan L0.4).
+- **Modules gelés** : des sous-parties de `bible`, `liturgy` et `rosary` (voir plan L0.4). Les modules entiers hors V1 ont été supprimés (ADR-016).
 
 ## ADR-007 — Broker Celery : RabbitMQ conservé
 - **Statut** : Verrouillée (révisable après le pilote)
@@ -88,3 +88,9 @@
 - **Contexte** : ADR-004 prévoyait une transition où SimpleJWT restait accepté (`LEGACY_JWT_ENABLED`) le temps de migrer le front. L'application n'a jamais été en production : il n'y a ni comptes ni sessions à préserver.
 - **Décision** : Keycloak est la seule authentification de l'API et du WebSocket. Retirés : SimpleJWT (et `token_blacklist`), `jwt_key`, les routes `auth/` et `users/` (inscription, activation, mot de passe, changement d'e-mail, anciennes vues d'administration, rôles, adhésions, déclaration de clergé historique), l'authentification par session des API, le jeton dans l'URL du WebSocket (tickets seulement), le repli « super-administrateur » par `is_superuser`. `/me/` est au format V1 (GET, PATCH, DELETE).
 - **Conséquences** : le front V1 doit passer par Auth.js (Keycloak) et par les tickets WebSocket. Les modèles de l'ancien modèle de rôles (`RoleAssignment`, `Membership`, `org.*`) restent tant que les modules gelés en dépendent (voir `conception/L9-contraction.md`).
+
+## ADR-016 — Contraction : suppression de l'ancien modèle et des modules hors V1
+- **Statut** : Verrouillée (25/09/2026, décision du porteur du projet)
+- **Contexte** : l'application n'a jamais été en production ; aucune donnée n'est à préserver. Les modules gelés (ADR-006) et l'ancien modèle de rôles bloquaient la contraction prévue en L9.
+- **Décision** : suppression des apps `org`, `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `errors`, `testing_examples`, `custom_admin`, de la messagerie inter-clergé et de `PriestProfile` ; suppression de `RoleAssignment`, `Membership`, `ClergySelfDeclaration`, `SecurityAuditLog`, des champs `role`, `pastoral_role`, `onboarding_state`, `clergy_validation_status`, `diocese`, `province`, `religious_community`, `is_admin`, `Profile.primary_parish`, des anciennes portées de `news` et `agenda`, de `target_parish`, `parish_name`, `diocese` et des statuts historiques des demandes d'actes. **Historique des migrations remis à zéro** (une migration initiale par app, plus les extensions `vector` et `pg_trgm` et les catalogues de types de nœuds, capacités et offices).
+- **Conséquences** : toute base existante (développement, staging) doit être **recréée** (`make down -v` puis `make up`, `make init-all`, `make seed-demo`). Les sous-modules gelés restants lisent l'état de vie V1 (`apps.hierarchy.persons`). ADR-006 ne concerne plus que ces sous-modules.

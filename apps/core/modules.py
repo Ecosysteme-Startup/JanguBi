@@ -13,7 +13,7 @@ from typing import Any
 
 # Modules « socle » : toujours actifs, non gelables (identité, erreurs, fichiers…).
 CORE_MODULES: frozenset[str] = frozenset(
-    {"authentication", "users", "errors", "files", "notifications"}
+    {"authentication", "users", "files", "notifications"}
 )
 
 # Modules et sous-modules qu'on peut activer ou geler.
@@ -25,22 +25,12 @@ FREEZABLE_MODULES: tuple[str, ...] = (
     "liturgy",
     "liturgy.heures",  # Liturgie des Heures (pas d'accord AELF)
     "messaging",
-    "messaging.inter_clerge",
     "confessions",
     "documents",
     "news",
-    "org",
     "hierarchy",
     "agenda",
     "dashboards",
-    "clergy_accounts",
-    "mass_intentions",
-    "donations",
-    "spiritual",
-    "transfers",
-    "tv",
-    "rag",
-    "testing_examples",
 )
 
 # Périmètre V1 (plan L0.4) : tout sauf les modules gelés par l'ADR-006.
@@ -48,16 +38,7 @@ FROZEN_BY_DEFAULT: frozenset[str] = frozenset(
     {
         "bible.avance",
         "rosary.communautaire",
-        "messaging.inter_clerge",
         "liturgy.heures",
-        "clergy_accounts",
-        "mass_intentions",
-        "donations",
-        "spiritual",
-        "transfers",
-        "tv",
-        "rag",
-        "testing_examples",
     }
 )
 

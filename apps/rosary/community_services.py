@@ -3,14 +3,13 @@ from typing import Any
 from django.db import transaction
 
 from apps.core.exceptions import ApplicationError
+from apps.hierarchy.persons import is_clerc_or_consecrated
 from apps.rosary.community_events import (
     broadcast_frame_sync,
     decade_advanced_frame,
     intention_submitted_frame,
     rosary_ended_frame,
 )
-
-CLERGY_ROLES = {"religieux", "diacre", "pretre", "eveque", "archeveque"}
 
 
 def _broadcast_on_commit(*, rosary_id: int, frame: dict[str, Any]) -> None:
@@ -27,8 +26,7 @@ def _broadcast_on_commit(*, rosary_id: int, frame: dict[str, Any]) -> None:
 def community_rosary_start(*, initiator, mystery_group_id: int | None = None, intention: str = ""):
     from apps.rosary.models import CommunityRosary
 
-    role = getattr(initiator, "pastoral_role", None)
-    if role not in CLERGY_ROLES:
+    if not is_clerc_or_consecrated(initiator):
         raise ApplicationError("Seul le clergé peut initier un chapelet communautaire.")
 
     return CommunityRosary.objects.create(

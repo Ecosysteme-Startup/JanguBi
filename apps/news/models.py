@@ -28,24 +28,14 @@ class ArticleCategory(models.Model):
 
 
 class Article(BaseModel):
-    """
-    Article éditorial publié à un niveau de portée (global, diocèse, paroisse).
-
-    scope_parish_id et scope_diocese_id sont des IntegerField placeholder
-    en attendant que le module Organisation (Parish, Diocese) soit implémenté (V2).
-    """
+    """Article publié sur un nœud de l'arbre (et visible sur son sous-arbre), ou global
+    (``scope_node`` vide, réservé à la plateforme)."""
 
     class ContentType(models.TextChoices):
         ANNOUNCEMENT = "announcement", _("Annonce")
         ARTICLE = "article", _("Article")
         PASTORAL_LETTER = "pastoral_letter", _("Lettre Pastorale")
         MEDITATION = "meditation", _("Méditation du jour")
-
-    class ScopeType(models.TextChoices):
-        GLOBAL = "global", _("Global (toute l'Église du Sénégal)")
-        DIOCESE = "diocese", _("Diocèse")
-        PARISH = "parish", _("Paroisse")
-        CHURCH = "church", _("Église")
 
     class Status(models.TextChoices):
         DRAFT = "draft", _("Brouillon")
@@ -114,45 +104,7 @@ class Article(BaseModel):
         verbose_name=_("Auteur"),
     )
 
-    # --- Portée ---
-    scope_type = models.CharField(
-        max_length=20,
-        choices=ScopeType.choices,
-        default=ScopeType.GLOBAL,
-        db_index=True,
-        verbose_name=_("Portée"),
-    )
-    # FK territoriales réelles (Chantier 3a — ex-placeholders IntegerField).
-    scope_diocese = models.ForeignKey(
-        "org.Diocese",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Diocèse de portée"),
-    )
-    scope_parish = models.ForeignKey(
-        "org.Parish",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Paroisse de portée"),
-    )
-    scope_church = models.ForeignKey(
-        "org.Church",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Église de portée"),
-    )
-
-    # --- Portée V1 (L4) : un nœud de l'arbre, ou rien (global Numerisen) ---
-    # Les champs scope_type/diocese/parish/church ci-dessus restent lisibles jusqu'en L9.
+    # --- Portée : un nœud de l'arbre, ou rien (global Numerisen) ---
     scope_node = models.ForeignKey(
         "hierarchy.Node",
         null=True,
@@ -203,27 +155,9 @@ class Article(BaseModel):
         verbose_name = _("Article")
         verbose_name_plural = _("Articles")
         ordering = ["-published_at", "-created_at"]
-        constraints = [
-            # Slug unique par portée paroisse
-            models.UniqueConstraint(
-                fields=["slug", "scope_type", "scope_parish"],
-                name="unique_article_slug_parish",
-            ),
-        ]
+        constraints = [models.UniqueConstraint(fields=["slug"], name="unique_article_slug")]
         indexes = [
             models.Index(fields=["status", "-published_at"], name="article_status_pub_idx"),
-            models.Index(
-                fields=["scope_type", "scope_parish", "status"],
-                name="article_parish_idx",
-            ),
-            models.Index(
-                fields=["scope_type", "scope_diocese", "status"],
-                name="article_diocese_idx",
-            ),
-            models.Index(
-                fields=["scope_type", "scope_church", "status"],
-                name="article_church_idx",
-            ),
             models.Index(fields=["category", "status"], name="article_category_idx"),
             models.Index(fields=["scope_node", "status", "-published_at"], name="article_node_pub_idx"),
             models.Index(
@@ -236,7 +170,7 @@ class Article(BaseModel):
         ]
 
     def __str__(self) -> str:
-        return f"[{self.get_scope_type_display()}] {self.title} ({self.get_status_display()})"
+        return f"{self.title} ({self.get_status_display()})"
 
 
 class ArticleReaction(BaseModel):

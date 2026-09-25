@@ -5,10 +5,10 @@ from apps.agenda.models import Event, EventRegistration
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
-    list_display = ("title", "event_type", "start_at", "scope_type", "organizer")
-    list_filter = ("event_type", "scope_type")
+    list_display = ("title", "event_type", "start_at", "scope_node", "organizer")
+    list_filter = ("event_type",)
     search_fields = ("title", "description")
-    raw_id_fields = ("organizer",)
+    raw_id_fields = ("organizer", "scope_node", "scope_place")
 
 
 @admin.register(EventRegistration)

@@ -21,7 +21,7 @@ from apps.authentication.keycloak_admin import django_hash_to_keycloak_credentia
 from apps.authentication.services_keycloak import keycloak_staff_role_sync, users_to_keycloak_migrate
 from apps.hierarchy import authz
 from apps.hierarchy.tests.factories import Tree, nominate, person
-from apps.users.tests.factories import BaseUserFactory, SuperAdminFactory
+from apps.users.tests.factories import BaseUserFactory
 
 ISSUER = "https://auth.test/realms/jangubi"
 
@@ -229,10 +229,9 @@ def test_platform_admin_comes_from_the_realm_role(keys):
     admin_token = keys.token(email="numerisen@test.sn", realm_access={"roles": ["platform_admin"]}, amr=["otp"])
     assert api(admin_token).get("/api/v1/hierarchy/capability-overrides/").status_code == 200
 
-    legacy_super = SuperAdminFactory.create(email="ancien@test.sn", keycloak_sub="sub-ancien")
+    BaseUserFactory.create(email="ancien@test.sn", keycloak_sub="sub-ancien", is_superuser=True, is_staff=True)
     plain = keys.token(sub="sub-ancien", email="ancien@test.sn", amr=["otp"])
-    assert api(plain).get("/api/v1/hierarchy/capability-overrides/").status_code == 403
-    assert legacy_super.role == "super_admin"
+    assert api(plain).get("/api/v1/hierarchy/capability-overrides/").status_code == 403  # is_superuser ne suffit pas
 
 
 def test_non_keycloak_bearer_token_is_refused(keys):

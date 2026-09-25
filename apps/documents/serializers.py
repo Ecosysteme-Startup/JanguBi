@@ -4,11 +4,7 @@ from rest_framework import serializers
 
 from apps.documents.models import DocumentRequest, DocumentRequestStatusLog, InternalNote
 
-V1_STATUS_CHOICES = [
-    (value, label)
-    for value, label in DocumentRequest.Status.choices
-    if value not in (DocumentRequest.Status.VALIDATED, DocumentRequest.Status.DOCUMENT_DEPOSITED)
-]
+V1_STATUS_CHOICES = DocumentRequest.Status.choices
 
 
 # --- Entrées -------------------------------------------------------------------------------
