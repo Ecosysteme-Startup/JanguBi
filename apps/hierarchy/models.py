@@ -294,6 +294,12 @@ class OfficeAssignment(BaseModel):
         indexes = [
             models.Index(fields=["person", "status"], name="hierarchy_assign_person_status"),
             models.Index(fields=["node", "office_type", "status"], name="hierarchy_assign_node_office"),
+            # Chemin chaud de l'autorisation : nominations actives d'une personne à une date.
+            models.Index(
+                fields=["person", "start_date", "end_date"],
+                condition=Q(status="active"),
+                name="hierarchy_assign_active_person",
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -334,7 +340,7 @@ class AuditEvent(models.Model):
     actor = models.ForeignKey(
         "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
-    action = models.CharField(max_length=80, db_index=True)
+    action = models.CharField(max_length=80)
     target_type = models.CharField(max_length=80)
     target_id = models.CharField(max_length=64)
     node = models.ForeignKey(Node, on_delete=models.SET_NULL, null=True, blank=True, related_name="audit_events")
@@ -345,7 +351,12 @@ class AuditEvent(models.Model):
         verbose_name = _("événement d'audit")
         verbose_name_plural = _("journal d'audit")
         ordering = ["-at"]
-        indexes = [models.Index(fields=["target_type", "target_id"], name="hierarchy_audit_target")]
+        indexes = [
+            models.Index(fields=["target_type", "target_id"], name="hierarchy_audit_target"),
+            models.Index(fields=["node", "-at"], name="hierarchy_audit_node_at"),
+            # Filtre par préfixe d'action (« office. ») sous collation non-C.
+            models.Index(fields=["action"], name="hierarchy_audit_action_pattern", opclasses=["varchar_pattern_ops"]),
+        ]
 
     def __str__(self) -> str:
         return f"{self.at:%Y-%m-%d %H:%M} {self.action}"

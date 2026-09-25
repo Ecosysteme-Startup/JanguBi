@@ -17,6 +17,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from apps.core.exceptions import ApplicationError
 from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.enums import AssignmentStatus, DegreOrdre, EtatDeVie, StatutVerification
@@ -168,10 +169,13 @@ def plan_to_csv(rows: list[PlanRow]) -> str:
 
 
 @transaction.atomic
-def legacy_rights_apply(*, rows: list[PlanRow], actor: Any = None) -> dict[str, int]:
-    """Applique un plan validé. Idempotent : une nomination identique déjà ouverte est sautée."""
+def legacy_rights_apply(*, rows: list[PlanRow], actor: Any = None, dry_run: bool = False) -> dict[str, int]:
+    """Applique un plan validé. Idempotent : une nomination identique déjà ouverte est sautée.
+    Contrôles conservés : type de nœud et cardinalité (seule la condition d'ordre est levée)."""
+    from apps.hierarchy.services_offices import cardinality_check, node_type_check
+
     User = get_user_model()
-    counts = {"nominations": 0, "profils": 0, "sautees": 0}
+    counts = {"nominations": 0, "profils": 0, "sautees": 0, "conflits": 0}
     today = timezone.localdate()
     offices = {o.code: o for o in OfficeType.objects.all()}
     for row in rows:
@@ -196,11 +200,18 @@ def legacy_rights_apply(*, rows: list[PlanRow], actor: Any = None) -> dict[str, 
         if exists:
             counts["sautees"] += 1
             continue
+        start = row.start_date or today
+        try:
+            node_type_check(office_type=office, node=node)
+            cardinality_check(office_type=office, node=node, start=start, end=None)
+        except ApplicationError:
+            counts["conflits"] += 1
+            continue
         assignment = OfficeAssignment.objects.create(
             person=person,
             office_type=office,
             node=node,
-            start_date=row.start_date or today,
+            start_date=start,
             status=AssignmentStatus.ACTIVE,
             note=f"Migré depuis {row.source} — à revoir par la chancellerie."[:255],
         )
@@ -208,4 +219,6 @@ def legacy_rights_apply(*, rows: list[PlanRow], actor: Any = None) -> dict[str, 
         authz.invalidate_user(person.pk)
         transaction.on_commit(partial(authz.invalidate_user, person.pk))
         counts["nominations"] += 1
+    if dry_run:
+        transaction.set_rollback(True)
     return counts

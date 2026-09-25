@@ -318,3 +318,23 @@ def test_audit_is_insert_only(world):
         event.save()
     with pytest.raises(ValueError):
         event.delete()
+
+
+def test_nobody_appoints_themselves(world):
+    """Sinon un évêque se ferait vicaire pour obtenir messagerie.recevoir_fideles."""
+    with pytest.raises(PermissionDeniedError) as exc:
+        assignment_create(actor=world.eveque, person=world.eveque, office_type=office("vicaire_paroissial"), node=world.saint_dominique)
+    assert exc.value.code == "self_appointment"
+
+
+def test_frozen_catalogue_migration_matches_the_runtime_profile():
+    """La migration 0006 est une copie figée : elle doit rester égale au profil tant qu'aucune
+    nouvelle migration de catalogue n'a été écrite (sinon : écrire la migration)."""
+    import importlib
+
+    from apps.hierarchy.profiles import CAPABILITIES, OFFICES
+
+    frozen = importlib.import_module("apps.hierarchy.migrations.0006_seed_offices_catalogue")
+    assert [c[0] for c in frozen.CAPABILITIES] == [c["code"] for c in CAPABILITIES]
+    assert {o[0]: sorted(o[8]) for o in frozen.OFFICES} == {o["code"]: sorted(o["capabilities"]) for o in OFFICES}
+    assert {o[0]: sorted(o[5]) for o in frozen.OFFICES} == {o["code"]: sorted(o["appointed_by"]) for o in OFFICES}

@@ -202,11 +202,12 @@ class VerificationDecisionApi(AuthedV1Api):
     def post(self, request: Request, person_id: str) -> Response:
         serializer = VerificationDecisionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        target = selectors_offices.person_get(person_id=person_id)
+        # Hors de mon périmètre, la personne « n'existe pas » : on ne révèle pas son statut.
+        if not selectors_offices.verification_queue(actor=request.user).filter(pk=target.pk).exists():
+            raise NotFoundError("Déclaration introuvable.", {"person_id": str(person_id)})
         person = services_offices.person_verification_decide(
-            actor=request.user,
-            person=selectors_offices.person_get(person_id=person_id),
-            ip=_ip(request),
-            **serializer.validated_data,
+            actor=request.user, person=target, ip=_ip(request), **serializer.validated_data
         )
         return Response(_person_status(person))
 
@@ -303,6 +304,7 @@ class AuditListApi(AuthedV1Api):
 
     @extend_schema(
         tags=AUDIT_TAG,
+        operation_id="audit_events_list",
         summary="Journal d'audit (audit.voir sur un nœud, ou plateforme)",
         parameters=[AuditFilterSerializer, *_PAGINATION],
         responses=paginated_response_serializer(AuditEventOutputSerializer),

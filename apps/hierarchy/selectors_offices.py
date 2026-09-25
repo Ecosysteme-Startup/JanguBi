@@ -30,7 +30,9 @@ def assignment_list(*, actor: Any, filters: dict[str, Any] | None = None) -> Que
     )
     if node_id := filters.get("node"):
         node = Node.objects.filter(pk=node_id).first()
-        qs = qs.filter(node__path__startswith=node.path) if node else qs.none()
+        if node is None:
+            raise NotFoundError("Nœud introuvable.", {"node_id": str(node_id)})
+        qs = qs.filter(node__path__startswith=node.path)
     if person_id := filters.get("person"):
         qs = qs.filter(person_id=person_id)
     if status := filters.get("status"):
@@ -68,13 +70,16 @@ def person_get_by_email(*, email: str) -> Any:
 def verification_queue(*, actor: Any) -> QuerySet[Any]:
     """Déclarations en attente que ``actor`` peut vérifier (EF-PER-02)."""
     User = get_user_model()
-    qs = User.objects.filter(statut_verification=StatutVerification.DECLARE).exclude(etat_de_vie=EtatDeVie.LAIC)
+    qs = (
+        User.objects.filter(statut_verification=StatutVerification.DECLARE)
+        .exclude(etat_de_vie=EtatDeVie.LAIC)
+        .exclude(pk=actor.pk)
+    )
     if authz.peut(actor, "personnes.verifier", None):
         return qs.select_related("incardination_node", "institut_node").order_by("email")
     allowed = authz.noeuds_autorises(actor, "personnes.verifier")
     return (
         qs.filter(Q(incardination_node__in=allowed) | Q(institut_node__in=allowed))
-        .exclude(pk=actor.pk)
         .select_related("incardination_node", "institut_node")
         .order_by("email")
     )

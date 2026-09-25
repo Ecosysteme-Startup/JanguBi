@@ -187,6 +187,9 @@ def test_legacy_rights_plan_writes_nothing_then_applies(legacy):
     assert "paroisse_suivie" in by_email[("laic@legacy.sn", "profil")].remarque
     assert "source,email,ancien,office,node_code,action,remarque" in plan_to_csv(plan)
 
+    simulated = legacy_rights_apply(rows=plan, dry_run=True)
+    assert simulated["nominations"] == 5 and OfficeAssignment.objects.count() == 0
+
     counts = legacy_rights_apply(rows=plan)
     assert counts["nominations"] == 5
     parish = Node.objects.get(legacy_model="org.Parish")
@@ -269,6 +272,17 @@ def test_verification_api(world):
     assert [p["email"] for p in queue.data["results"]] == [candidate.email]
     assert decided.data["statut_verification"] == "verifie"
     assert client_for(world.cure).get("/api/v1/hierarchy/verifications/").status_code == 403
+
+
+def test_out_of_scope_verification_is_a_404(world):
+    candidate = person(verified=False)
+    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.thies)
+
+    response = client_for(world.chancelier).post(
+        f"/api/v1/hierarchy/verifications/{candidate.pk}/decision/", {"decision": "verifie"}, format="json"
+    )
+
+    assert response.status_code == 404
 
 
 def test_me_declaration_api(world):

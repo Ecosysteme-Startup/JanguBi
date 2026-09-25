@@ -146,7 +146,7 @@ paths:
           description: ''
   /api/v1/audit/:
     get:
-      operationId: v1_audit_retrieve
+      operationId: audit_events_list
       description: À placer en premier dans les bases des vues V1.
       summary: Journal d'audit (audit.voir sur un nœud, ou plateforme)
       parameters:

@@ -74,7 +74,7 @@ def _order_check(*, person: Any, office_type: OfficeType) -> None:
         )
 
 
-def _node_type_check(*, office_type: OfficeType, node: Node) -> None:
+def node_type_check(*, office_type: OfficeType, node: Node) -> None:
     if not office_type.node_types.filter(pk=node.type_id).exists():
         raise ApplicationError(
             f"L'office « {office_type.label} » ne s'exerce pas sur un nœud « {node.type.label} ».",
@@ -92,7 +92,7 @@ def _overlapping(*, office_type: OfficeType, node: Node, start: date, end: date 
     return qs
 
 
-def _cardinality_check(*, office_type: OfficeType, node: Node, start: date, end: date | None) -> None:
+def cardinality_check(*, office_type: OfficeType, node: Node, start: date, end: date | None) -> None:
     if office_type.cardinality != Cardinality.ONE:
         return
     if _overlapping(office_type=office_type, node=node, start=start, end=end).exists():
@@ -122,12 +122,16 @@ def assignment_create(
     start_date = start_date or timezone.localdate()
     if end_date is not None and end_date < start_date:
         raise ApplicationError("La fin précède le début.", code="invalid_dates")
+    # Personne ne se nomme soi-même : sinon un évêque se ferait vicaire pour obtenir
+    # messagerie.recevoir_fideles, que son office exclut volontairement.
+    if getattr(actor, "pk", None) == person.pk and not authz.is_platform_admin(actor):
+        raise PermissionDeniedError("On ne se nomme pas soi-même à un office.", code="self_appointment")
     appointing_authority_check(actor=actor, office_type=office_type, node=node)
-    _node_type_check(office_type=office_type, node=node)
+    node_type_check(office_type=office_type, node=node)
     _order_check(person=person, office_type=office_type)
     # Verrou sur le nœud : deux nominations concurrentes au même office ne passent pas toutes les deux.
     Node.objects.select_for_update().filter(pk=node.pk).first()
-    _cardinality_check(office_type=office_type, node=node, start=start_date, end=end_date)
+    cardinality_check(office_type=office_type, node=node, start=start_date, end=end_date)
 
     status = AssignmentStatus.ACTIVE if start_date <= timezone.localdate() else AssignmentStatus.PROPOSEE
     assignment = OfficeAssignment.objects.create(

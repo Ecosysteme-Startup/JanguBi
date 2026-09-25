@@ -196,10 +196,18 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         _("identifiant Keycloak"), max_length=64, unique=True, null=True, blank=True
     )
     etat_de_vie = models.CharField(
-        _("état de vie"), max_length=10, choices=EtatDeVie.choices, default=EtatDeVie.LAIC
+        _("état de vie"),
+        max_length=10,
+        choices=EtatDeVie.choices,
+        default=EtatDeVie.LAIC,
+        db_default=EtatDeVie.LAIC,
     )
     degre_ordre = models.CharField(
-        _("degré d'ordre"), max_length=20, choices=DegreOrdre.choices, default=DegreOrdre.AUCUN
+        _("degré d'ordre"),
+        max_length=20,
+        choices=DegreOrdre.choices,
+        default=DegreOrdre.AUCUN,
+        db_default=DegreOrdre.AUCUN,
     )
     incardination_node = models.ForeignKey(
         "hierarchy.Node",
@@ -222,9 +230,11 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         max_length=10,
         choices=StatutVerification.choices,
         default=StatutVerification.DECLARE,
-        db_index=True,
+        db_default=StatutVerification.DECLARE,
     )
-    verification_note = models.CharField(_("note de vérification"), max_length=255, blank=True, default="")
+    verification_note = models.CharField(
+        _("note de vérification"), max_length=255, blank=True, default="", db_default=""
+    )
     verified_by = models.ForeignKey(
         "users.BaseUser",
         verbose_name=_("vérifié par"),
@@ -242,7 +252,9 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         blank=True,
         related_name="followers",
     )
-    consent_version = models.CharField(_("version du consentement"), max_length=20, blank=True, default="")
+    consent_version = models.CharField(
+        _("version du consentement"), max_length=20, blank=True, default="", db_default=""
+    )
     consent_at = models.DateTimeField(_("consentement le"), null=True, blank=True)
 
     groups = models.ManyToManyField(  # type: ignore[assignment]  # django-stubs : redéclaration M2M de PermissionsMixin (related_name custom)
@@ -266,6 +278,14 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = _("utilisateur")
         verbose_name_plural = _("utilisateurs")
+        indexes = [
+            # File de vérification (EF-PER-02) : les laïcs, majoritaires, en sont exclus.
+            models.Index(
+                fields=["statut_verification"],
+                condition=~models.Q(etat_de_vie="laic"),
+                name="users_verification_queue",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.email
