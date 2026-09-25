@@ -15,7 +15,7 @@ import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 
@@ -212,10 +212,16 @@ def activity_stamp(user: Any, *, mfa: bool) -> None:
         fields["last_seen_on"] = today
     if mfa and user.last_mfa_on != today:
         fields["last_mfa_on"] = today
-    if fields:
-        get_user_model().objects.filter(pk=user.pk).update(**fields)
-        for name, value in fields.items():
-            setattr(user, name, value)
+    if not fields:
+        return
+    try:
+        with transaction.atomic():  # point de sauvegarde : un échec n'empoisonne pas la requête
+            get_user_model().objects.filter(pk=user.pk).update(**fields)
+    except DatabaseError:
+        logger.warning("keycloak.activity_stamp_failed", exc_info=True)  # tampon au mieux, jamais bloquant
+        return
+    for name, value in fields.items():
+        setattr(user, name, value)
 
 
 def authenticate_token(token: str) -> tuple[Any, KeycloakIdentity]:

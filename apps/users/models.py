@@ -291,6 +291,9 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
                 condition=~models.Q(etat_de_vie="laic"),
                 name="users_verification_queue",
             ),
+            # Tableaux de bord (EF-DASH-01/03) : fenêtres d'activité.
+            models.Index(fields=["last_seen_on"], name="users_last_seen_idx"),
+            models.Index(fields=["last_mfa_on"], name="users_last_mfa_idx"),
         ]
 
     def __str__(self) -> str:

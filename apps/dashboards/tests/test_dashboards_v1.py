@@ -150,3 +150,27 @@ def test_keycloak_activity_stamp_writes_once_a_day(db):
     assert len([q for q in ctx.captured_queries if q["sql"].startswith("UPDATE")]) == 1
     user.refresh_from_db()
     assert user.last_seen_on == user.last_mfa_on == timezone.localdate()
+
+
+@freeze_time(NOW)
+def test_messaging_unanswered_after_48h(world):
+    conversation = ConversationFactory(participant_a=world.awa, participant_b=world.cure)
+    message = MessageFactory(conversation=conversation, sender=world.awa)
+    type(message).objects.filter(pk=message.pk).update(created_at=timezone.now() - datetime.timedelta(hours=50))
+    data = node_dashboard(node=world.saint_dominique)["messagerie"]
+    assert (data["conversations"], data["unanswered_48h"], data["median_first_reply_hours"]) == (1, 1, None)
+
+
+def test_activity_stamp_never_breaks_authentication(db, monkeypatch):
+    from django.db import DatabaseError
+
+    from apps.authentication import keycloak
+
+    user = person("fragile@test.sn")
+
+    def boom(*args, **kwargs):
+        raise DatabaseError("indisponible")
+
+    monkeypatch.setattr(type(user).objects, "filter", boom)
+    keycloak.activity_stamp(user, mfa=False)  # ne lève pas
+    assert user.last_seen_on is None

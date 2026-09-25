@@ -16,6 +16,7 @@ from apps.hierarchy.models import Node
 
 PERIODS = (7, 30, 90, 365)
 CACHE_SECONDS = 300
+PLATFORM_CACHE_SECONDS = 60
 NO_REPLY_HOURS = 48
 BEAT_STALE_DAYS = 2
 
@@ -78,38 +79,48 @@ def _median_days(rows: Any) -> float | None:
 
 
 def _messagerie(node: Node, since: datetime.datetime, now: datetime.datetime) -> dict[str, Any]:
-    """Conversations rattachées au sous-arbre par la paroisse suivie du fidèle (celui qui a
-    écrit le premier). Métadonnées uniquement : identifiants et horodatages."""
+    """Conversations rattachées au sous-arbre par la paroisse suivie d'un participant.
+    Calcul en SQL, une ligne par conversation : horodatage et auteur du premier message,
+    horodatage de la première réponse d'un autre participant. Jamais le contenu."""
+    from django.db.models import DurationField, ExpressionWrapper, F, OuterRef, Subquery
+
     from apps.messaging.models import Conversation, Message
     from apps.users.models import BaseUser
 
     followers = BaseUser.objects.filter(paroisse_suivie__path__startswith=node.path).values("pk")
-    conversation_ids = list(
+    messages = Message.objects.filter(conversation=OuterRef("pk")).order_by("created_at")
+    conversations = (
         Conversation.objects.filter(created_at__gte=since)
         .filter(Q(participant_a__in=followers) | Q(participant_b__in=followers))
-        .values_list("pk", flat=True)
+        .annotate(
+            first_at=Subquery(messages.values("created_at")[:1]),
+            first_sender=Subquery(messages.values("sender_id")[:1]),
+        )
+        .annotate(
+            reply_at=Subquery(
+                Message.objects.filter(conversation=OuterRef("pk"))
+                .exclude(sender_id=OuterRef("first_sender"))
+                .order_by("created_at")
+                .values("created_at")[:1]
+            )
+        )
     )
-    first: dict[Any, tuple[Any, datetime.datetime]] = {}
-    replies: dict[Any, datetime.timedelta] = {}
-    rows = (
-        Message.objects.filter(conversation_id__in=conversation_ids)
-        .order_by("conversation_id", "created_at")
-        .values_list("conversation_id", "sender_id", "created_at")
+    totals = conversations.aggregate(
+        total=Count("pk"),
+        unanswered=Count(
+            "pk",
+            filter=Q(reply_at__isnull=True, first_at__lte=now - datetime.timedelta(hours=NO_REPLY_HOURS)),
+        ),
     )
-    for conversation_id, sender_id, created_at in rows.iterator():
-        if conversation_id not in first:
-            first[conversation_id] = (sender_id, created_at)
-        elif conversation_id not in replies and sender_id != first[conversation_id][0]:
-            replies[conversation_id] = created_at - first[conversation_id][1]
-    waiting = [
-        cid
-        for cid, (_, at) in first.items()
-        if cid not in replies and now - at >= datetime.timedelta(hours=NO_REPLY_HOURS)
-    ]
+    delays = list(
+        conversations.filter(reply_at__isnull=False)
+        .annotate(delay=ExpressionWrapper(F("reply_at") - F("first_at"), output_field=DurationField()))
+        .values_list("delay", flat=True)
+    )
     return {
-        "conversations": len(conversation_ids),
-        "median_first_reply_hours": _median_hours(list(replies.values())),
-        "unanswered_48h": len(waiting),
+        "conversations": totals["total"],
+        "median_first_reply_hours": _median_hours(delays),
+        "unanswered_48h": totals["unanswered"],
     }
 
 
@@ -157,7 +168,19 @@ def node_dashboard(*, node: Node, period: int = 30, now: datetime.datetime | Non
 
 
 def platform_dashboard(*, now: datetime.datetime | None = None) -> dict[str, Any]:
-    """Plateforme (EF-DASH-03) : comptes, part du staff avec MFA, santé des files et de Beat."""
+    """Plateforme (EF-DASH-03) : comptes, part du staff avec MFA, santé des files et de Beat.
+    Mis en cache une minute (les retards d'actes parcourent toutes les demandes en cours)."""
+    if now is None:
+        cached = cache.get("dashboards:platform")
+        if cached is not None:
+            return cached
+        data = _platform_dashboard(now=timezone.now())
+        cache.set("dashboards:platform", data, PLATFORM_CACHE_SECONDS)
+        return data
+    return _platform_dashboard(now=now)
+
+
+def _platform_dashboard(*, now: datetime.datetime) -> dict[str, Any]:
     from django_celery_beat.models import PeriodicTask
 
     from apps.documents.models import DocumentRequest
@@ -167,7 +190,6 @@ def platform_dashboard(*, now: datetime.datetime | None = None) -> dict[str, Any
     from apps.hierarchy.models import OfficeAssignment
     from apps.users.models import BaseUser
 
-    now = now or timezone.now()
     month = now - datetime.timedelta(days=30)
     today = timezone.localdate(now)
     accounts = BaseUser.objects.filter(is_active=True).aggregate(
