@@ -56,3 +56,9 @@ Le doyen d'`org.Deanery.dean` sera converti en nomination `doyen` en L2.
 ## 6. Tests
 
 Invariants de parents, lieu principal unique, semaine avec exceptions (pur), import CSV (simulation, erreurs, parents créés dans le même fichier, atomicité), seed idempotent (deux passes, pas de doublon avec des nœuds `org` migrés), migration de données aller-retour sur une fixture `org` réaliste, APIs (public/anonyme, 403 non super-admin, 400 parent interdit, 404), EF-HIE-03 (`children`/`ancestors` en une requête).
+
+## 7. Revue et retour arrière
+
+- Index `hierarchy_node_path_pattern` (`varchar_pattern_ops`) : sans lui, `path__startswith` ne peut pas utiliser l'index unique sous une collation non `C` (migration 0004).
+- **Retour arrière d'une release** : dé-appliquer d'abord les migrations `hierarchy` (`migrate hierarchy zero`, ou jusqu'à la migration de la release visée) **avant** de déployer l'ancienne image. Sinon les tables restent orphelines, sans dommage aujourd'hui, mais bloquantes dès qu'une autre app aura une clé étrangère vers `hierarchy.Node` (lot L2 : `users.BaseUser`).
+- `migrate` doit être lancé par un seul processus (le calcul manuel des chemins de 0003 n'est pas protégé contre deux exécutions concurrentes).

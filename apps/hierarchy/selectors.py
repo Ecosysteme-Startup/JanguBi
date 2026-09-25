@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -131,7 +131,9 @@ def node_week(*, node: Node, start: date, days: int = 7) -> tuple[list[PlaceOfWo
     places = list(place_list(node=node))
     place_ids = [p.pk for p in places]
     schedules = MassSchedule.objects.filter(place_id__in=place_ids)
-    exceptions = ScheduleException.objects.filter(place_id__in=place_ids)
+    exceptions = ScheduleException.objects.filter(
+        place_id__in=place_ids, date__gte=start, date__lt=start + timedelta(days=days)
+    )
     return places, compute_week(start=start, schedules=schedules, exceptions=exceptions, days=days)
 
 

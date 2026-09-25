@@ -129,6 +129,13 @@ def test_invalid_payload_returns_validation_error(admin, tree):
     assert "name" in response.data["error"]["details"]
 
 
+def test_deleted_nodes_are_not_listed_to_anonymous(anon, admin, tree):
+    admin.patch(f"{BASE}/nodes/{tree.sainte_therese.pk}/", {"status": "supprime"}, format="json")
+
+    assert anon.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 403
+    assert admin.get(f"{BASE}/nodes/", {"status": "supprime"}).data["count"] == 1
+
+
 def test_admin_patches_status(admin, tree):
     response = admin.patch(f"{BASE}/nodes/{tree.sainte_therese.pk}/", {"status": "supprime"}, format="json")
 

@@ -132,7 +132,8 @@ def forwards(apps, schema_editor):
             type_code="communaute",
             name=c.name,
             parent=parent,
-            located_in=dioceses[c.diocese_id],
+            # Lieu le plus précis connu : la paroisse si elle est renseignée, sinon le diocèse.
+            located_in=parishes.get(c.parish_id) or dioceses[c.diocese_id],
         )
 
 

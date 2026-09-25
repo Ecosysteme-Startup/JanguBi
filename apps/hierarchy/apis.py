@@ -1,9 +1,11 @@
+from dataclasses import asdict
 from datetime import timedelta
 from typing import Any
 
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import SAFE_METHODS, AllowAny, IsAuthenticated
 from rest_framework.request import Request
@@ -15,11 +17,13 @@ from apps.api.pagination import LimitOffsetPagination, paginated_response_serial
 from apps.api.v1 import V1ApiMixin
 from apps.core.exceptions import ApplicationError
 from apps.hierarchy import selectors, services
+from apps.hierarchy.enums import NodeStatus
 from apps.hierarchy.imports import nodes_import_csv, places_import_csv
 from apps.hierarchy.models import Node
 from apps.hierarchy.serializers import (
     DirectoryFilterSerializer,
     ImportInputSerializer,
+    ImportQuerySerializer,
     ImportReportSerializer,
     NodeCreateInputSerializer,
     NodeFilterSerializer,
@@ -97,7 +101,11 @@ class NodeListCreateApi(HierarchyBaseApi):
     def get(self, request: Request) -> Response:
         filters = NodeFilterSerializer(data=request.query_params)
         filters.is_valid(raise_exception=True)
-        return _node_list_response(request=request, view=self, queryset=selectors.node_list(filters=filters.validated_data))
+        data = dict(filters.validated_data)
+        # Les nœuds supprimés ne sont listés qu'aux administrateurs du référentiel.
+        if data.get("status") == NodeStatus.SUPPRIME and not IsSuperAdmin().has_permission(request, self):
+            raise PermissionDenied("Seuls les administrateurs voient les nœuds supprimés.")
+        return _node_list_response(request=request, view=self, queryset=selectors.node_list(filters=data))
 
     @extend_schema(
         tags=TAG,
@@ -260,7 +268,9 @@ class _ImportApi(HierarchyBaseApi):
     def post(self, request: Request) -> Response:
         serializer = ImportInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        dry_run = request.query_params.get("dry_run", "true").lower() not in {"0", "false", "non", "no"}
+        query = ImportQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        dry_run = query.validated_data["dry_run"]
         try:
             content = serializer.validated_data["file"].read().decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -269,9 +279,7 @@ class _ImportApi(HierarchyBaseApi):
         return Response(ImportReportSerializer(report.as_dict()).data)
 
 
-_IMPORT_PARAMS = [
-    OpenApiParameter("dry_run", bool, description="Simulation sans écriture (défaut : true)"),
-]
+_IMPORT_PARAMS = [ImportQuerySerializer]
 
 
 class NodeImportApi(_ImportApi):
@@ -344,6 +352,6 @@ class PublicNodeWeekApi(HierarchyBaseApi):
             "start": start,
             "end": start + timedelta(days=6),
             "places": places,
-            "occurrences": [{**o.__dict__, "place_name": names[o.place_id]} for o in occurrences],
+            "occurrences": [{**asdict(o), "place_name": names[o.place_id]} for o in occurrences],
         }
         return Response(NodeWeekOutputSerializer(payload).data)

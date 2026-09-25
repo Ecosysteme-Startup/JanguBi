@@ -224,5 +224,9 @@ class ImportInputSerializer(serializers.Serializer):
     file = serializers.FileField(help_text="Fichier CSV encodé en UTF-8")
 
 
+class ImportQuerySerializer(serializers.Serializer):
+    dry_run = serializers.BooleanField(default=True, help_text="Simulation sans écriture (défaut : true)")
+
+
 class WeekQuerySerializer(serializers.Serializer):
     start = serializers.DateField(required=False, help_text="Premier jour (par défaut : aujourd'hui)")

@@ -1487,6 +1487,7 @@ paths:
         name: dry_run
         schema:
           type: boolean
+          default: true
         description: 'Simulation sans écriture (défaut : true)'
       tags:
       - hierarchy
@@ -1516,6 +1517,7 @@ paths:
         name: dry_run
         schema:
           type: boolean
+          default: true
         description: 'Simulation sans écriture (défaut : true)'
       tags:
       - hierarchy

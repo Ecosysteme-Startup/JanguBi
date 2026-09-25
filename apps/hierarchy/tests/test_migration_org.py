@@ -84,7 +84,8 @@ def test_org_data_is_migrated_both_ways():
         institut = by_name["Ordre des Prêcheurs (OP)"]
         community = by_name["Couvent de Dakar"]
         assert institut.type.code == "institut" and institut.depth == 1
-        assert community.path.startswith(institut.path) and community.located_in_id == dakar.pk
+        # La communauté est située dans sa paroisse (lieu le plus précis), sans en dépendre.
+        assert community.path.startswith(institut.path) and community.located_in_id == saint_dominique.pk
 
         # Retour : les nœuds hérités disparaissent, org est intact.
         old_apps = _migrate(BEFORE)

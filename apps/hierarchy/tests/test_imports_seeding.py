@@ -63,6 +63,14 @@ def test_one_bad_line_rolls_back_the_whole_file(tree):
     assert not Node.objects.filter(code__in=["T-DIO", "T-PAR"]).exists()
 
 
+def test_duplicate_code_in_file_is_a_line_error_not_a_crash(tree):
+    content = "code,type,name,parent_code\nT-DUP,ceb,CEB 1,T-SD\nT-DUP,ceb,CEB 2,T-SD\n"
+
+    report = nodes_import_csv(content=content, dry_run=True)
+
+    assert [line.status for line in report.lines] == ["ok", "error"]
+
+
 def test_missing_columns_are_reported(db):
     with pytest.raises(ApplicationError) as exc:
         nodes_import_csv(content="code,name\nX,Y\n")

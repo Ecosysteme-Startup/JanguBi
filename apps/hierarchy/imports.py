@@ -14,7 +14,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.core.exceptions import ApplicationError
 from apps.hierarchy.enums import NodeStatus, PlaceKind
@@ -105,7 +105,7 @@ def _node_row(row: dict[str, str]) -> str:
     if not row["name"]:
         raise _RowError("Le nom est obligatoire.")
     try:
-        node_type = NodeType.objects.get(code=row["type"])
+        node_type = NodeType.objects.prefetch_related("allowed_parent_types").get(code=row["type"])
     except NodeType.DoesNotExist as exc:
         raise _RowError(f"Type de nœud inconnu : « {row['type']} ».") from exc
     parent = None
@@ -161,8 +161,13 @@ def _run(*, rows: list[dict[str, str]], handler: Callable[[dict[str, str]], str]
             try:
                 with transaction.atomic():
                     code = handler(row)
-            except (_RowError, ApplicationError) as exc:
-                message = exc.message if isinstance(exc, ApplicationError) else str(exc)
+            except (_RowError, ApplicationError, IntegrityError) as exc:
+                if isinstance(exc, ApplicationError):
+                    message = exc.message
+                elif isinstance(exc, IntegrityError):
+                    message = "Doublon ou contrainte violée (code déjà utilisé ?)."
+                else:
+                    message = str(exc)
                 report.lines.append(ImportLine(line=index, status="error", message=message))
             else:
                 report.lines.append(ImportLine(line=index, status="ok", message="Valide", code=code))

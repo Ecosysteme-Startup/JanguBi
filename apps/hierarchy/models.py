@@ -102,7 +102,12 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
                 name="hierarchy_node_unique_legacy",
             ),
         ]
-        indexes = [models.Index(fields=["type", "status"], name="hierarchy_node_type_status")]
+        indexes = [
+            models.Index(fields=["type", "status"], name="hierarchy_node_type_status"),
+            # path__startswith (sous-arbre, enfants) : l'index unique ne sert pas au LIKE 'x%'
+            # sous une collation non-C ; varchar_pattern_ops le permet.
+            models.Index(fields=["path"], name="hierarchy_node_path_pattern", opclasses=["varchar_pattern_ops"]),
+        ]
 
     def __str__(self) -> str:
         return self.name

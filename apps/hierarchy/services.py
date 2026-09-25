@@ -118,6 +118,8 @@ def node_update(*, node: Node, data: dict[str, Any]) -> Node:
 
 
 def _main_place_check(*, node: Node, exclude: PlaceOfWorship | None = None) -> None:
+    # Verrou sur le nœud : deux créations concurrentes d'un lieu principal sont sérialisées.
+    Node.objects.select_for_update().filter(pk=node.pk).first()
     others = PlaceOfWorship.objects.filter(node=node, is_main=True)
     if exclude is not None:
         others = others.exclude(pk=exclude.pk)
@@ -125,6 +127,16 @@ def _main_place_check(*, node: Node, exclude: PlaceOfWorship | None = None) -> N
         raise ApplicationError(
             f"« {node.name} » a déjà un lieu de culte principal.", {"node": str(node.pk)}, code="main_place_exists"
         )
+
+
+def _place_save(place: PlaceOfWorship) -> None:
+    try:
+        with transaction.atomic():
+            place.save()
+    except IntegrityError as exc:  # filet : contrainte « un seul lieu principal »
+        raise ApplicationError(
+            f"« {place.node.name} » a déjà un lieu de culte principal.", code="main_place_exists"
+        ) from exc
 
 
 @transaction.atomic
@@ -144,8 +156,8 @@ def place_create(
     place = PlaceOfWorship(
         node=node, name=name, kind=kind, is_main=is_main, address=address, city=city, lat=lat, lng=lng
     )
-    place.full_clean()
-    place.save()
+    place.full_clean(validate_constraints=False)
+    _place_save(place)
     return place
 
 
@@ -158,8 +170,8 @@ def place_update(*, place: PlaceOfWorship, data: dict[str, Any]) -> PlaceOfWorsh
         _main_place_check(node=place.node, exclude=place)
     for field, value in data.items():
         setattr(place, field, value)
-    place.full_clean()
-    place.save()
+    place.full_clean(validate_constraints=False)
+    _place_save(place)
     return place
 
 
