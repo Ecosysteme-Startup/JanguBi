@@ -4,6 +4,10 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 
 
+def _payload(event: dict) -> dict:
+    return {k: v for k, v in event.items() if k != "type"}
+
+
 class ConversationConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         user = self.scope.get("user")
@@ -104,11 +108,13 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             "message": event.get("message"),
         })
 
+    # `event["type"]` est la clé de dispatch Channels (« conv_typing ») : elle ne doit pas
+    # écraser le type de la trame envoyée au client.
     async def conv_typing(self, event: dict):
-        await self.send_json({"type": "typing", **event})
+        await self.send_json({**_payload(event), "type": "typing"})
 
     async def conv_read(self, event: dict):
-        await self.send_json({"type": "message.read", **event})
+        await self.send_json({**_payload(event), "type": "message.read"})
 
     # Helpers
 

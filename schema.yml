@@ -3922,6 +3922,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/NodeWeekOutput'
           description: ''
+  /api/v1/public/nodes/by-code/{code}/:
+    get:
+      operationId: v1_public_nodes_by_code_retrieve
+      description: |-
+        Lecture publique ; écriture soumise à une capacité sur le nœud concerné (ADR-003).
+
+        ``write_capability`` : capacité exigée ; ``get_write_node()`` : nœud sur lequel elle est
+        vérifiée (``None`` = hors arbre, réservé à la plateforme) ; ``write_on_any_node`` : la
+        capacité sur au moins un nœud suffit, le service vérifiant ligne par ligne (imports).
+      summary: Fiche publique d'un nœud par son code (URL /paroisses/<code> du site
+        public)
+      parameters:
+      - in: path
+        name: code
+        schema:
+          type: string
+        required: true
+      tags:
+      - public
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeOutput'
+          description: ''
   /api/v1/rosary/community/:
     get:
       operationId: v1_rosary_community_list
@@ -6084,7 +6113,9 @@ components:
           - $ref: '#/components/schemas/ConversationParticipant'
           readOnly: true
         last_message:
-          type: string
+          allOf:
+          - $ref: '#/components/schemas/LastMessage'
+          nullable: true
           readOnly: true
         last_message_at:
           type: string
@@ -6571,6 +6602,27 @@ components:
       - id
       - submitted_by
       - text
+    LastMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sender_id:
+          type: string
+          format: uuid
+          description: 'Expéditeur (pour l''aperçu « Vous : »)'
+        content:
+          type: string
+          nullable: true
+        sent_at:
+          type: string
+          format: date-time
+      required:
+      - content
+      - id
+      - sender_id
+      - sent_at
     LectioDivinaInput:
       type: object
       properties:
@@ -6620,6 +6672,17 @@ components:
       - passage_id
       - session_date
       - updated_at
+    MeNodeRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
     MeOutput:
       type: object
       description: EF-PER-01. Les capacités s'obtiennent par /me/capacites/.
@@ -6642,15 +6705,15 @@ components:
           type: string
         incardination:
           allOf:
-          - $ref: '#/components/schemas/NodeRef'
+          - $ref: '#/components/schemas/MeNodeRef'
           nullable: true
         institut:
           allOf:
-          - $ref: '#/components/schemas/NodeRef'
+          - $ref: '#/components/schemas/MeNodeRef'
           nullable: true
         paroisse_suivie:
           allOf:
-          - $ref: '#/components/schemas/NodeRef'
+          - $ref: '#/components/schemas/MeNodeRef'
           nullable: true
         consent:
           type: object

@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.messaging.models import (
@@ -31,6 +32,7 @@ class ConversationParticipantSerializer(serializers.Serializer):
 
 class LastMessageSerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    sender_id = serializers.UUIDField(help_text="Expéditeur (pour l'aperçu « Vous : »)")
     content = serializers.CharField(allow_null=True)
     sent_at = serializers.DateTimeField(source="created_at")
 
@@ -66,6 +68,7 @@ class ConversationOutputSerializer(serializers.ModelSerializer):
 
         return CONFESSION_NOTICE
 
+    @extend_schema_field(LastMessageSerializer(allow_null=True))
     def get_last_message(self, obj):
         msg = obj.messages.filter(deleted_at__isnull=True).order_by("-created_at").first()
         if msg is None:

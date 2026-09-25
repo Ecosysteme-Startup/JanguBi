@@ -86,7 +86,7 @@ class MeProfileSerializer(serializers.Serializer):
     phone = PhoneNumberField(required=False, allow_null=True)
 
 
-class NodeRefSerializer(serializers.Serializer):
+class MeNodeRefSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
 
@@ -100,9 +100,9 @@ class MeOutputSerializer(serializers.Serializer):
     etat_de_vie = serializers.CharField()
     degre_ordre = serializers.CharField()
     statut_verification = serializers.CharField()
-    incardination = NodeRefSerializer(source="incardination_node", allow_null=True)
-    institut = NodeRefSerializer(source="institut_node", allow_null=True)
-    paroisse_suivie = NodeRefSerializer(allow_null=True)
+    incardination = MeNodeRefSerializer(source="incardination_node", allow_null=True)
+    institut = MeNodeRefSerializer(source="institut_node", allow_null=True)
+    paroisse_suivie = MeNodeRefSerializer(allow_null=True)
     consent = serializers.SerializerMethodField()
 
     def get_profile(self, user) -> dict:

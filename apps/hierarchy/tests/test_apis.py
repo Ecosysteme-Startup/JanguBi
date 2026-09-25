@@ -249,3 +249,17 @@ def test_import_places(admin, tree):
 def test_import_is_forbidden_to_fidele(fidele, tree):
     response = fidele.post(f"{BASE}/import/nodes/", {"file": _csv("code,type,name,parent_code\n")}, format="multipart")
     assert response.status_code == 403
+
+
+def test_public_node_by_code(anon, tree):
+    # Act
+    response = anon.get(f"/api/v1/public/nodes/by-code/{tree.saint_dominique.code}/")
+
+    # Assert
+    assert response.status_code == 200
+    assert response.data["id"] == str(tree.saint_dominique.pk)
+    assert response.data["name"] == tree.saint_dominique.name
+
+
+def test_public_node_by_code_unknown_is_404(anon, db):
+    assert anon.get("/api/v1/public/nodes/by-code/INCONNU/").status_code == 404

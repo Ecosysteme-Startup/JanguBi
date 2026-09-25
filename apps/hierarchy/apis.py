@@ -386,6 +386,16 @@ class PublicDirectoryApi(HierarchyBaseApi):
         return _node_list_response(request=request, view=self, queryset=selectors.node_list(filters=data))
 
 
+class PublicNodeByCodeApi(HierarchyBaseApi):
+    @extend_schema(
+        tags=PUBLIC_TAG,
+        summary="Fiche publique d'un nœud par son code (URL /paroisses/<code> du site public)",
+        responses=NodeOutputSerializer,
+    )
+    def get(self, request: Request, code: str) -> Response:
+        return Response(_node_data(selectors.node_get_by_code(code=code)))
+
+
 class PublicNodeWeekApi(HierarchyBaseApi):
     @extend_schema(
         tags=PUBLIC_TAG,
