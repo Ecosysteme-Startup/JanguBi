@@ -12,8 +12,9 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 # Modules « socle » : toujours actifs, non gelables (identité, erreurs, fichiers…).
+# ``contact`` : formulaire public « Pour les paroisses », jamais gelé.
 CORE_MODULES: frozenset[str] = frozenset(
-    {"authentication", "users", "files", "notifications"}
+    {"authentication", "users", "files", "notifications", "contact"}
 )
 
 # Modules et sous-modules qu'on peut activer ou geler.

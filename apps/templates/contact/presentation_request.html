@@ -1,0 +1,13 @@
+<p>Nouvelle demande de présentation reçue par le formulaire « Pour les paroisses ».</p>
+<table cellpadding="4" style="border-collapse:collapse">
+  <tr><td><strong>Nom</strong></td><td>{{ request.full_name }}</td></tr>
+  <tr><td><strong>Fonction</strong></td><td>{{ request.get_fonction_display }}</td></tr>
+  <tr><td><strong>Paroisse</strong></td><td>{{ request.paroisse }}</td></tr>
+  <tr><td><strong>Diocèse</strong></td><td>{% if request.diocese_node %}{{ request.diocese_node.name }}{% else %}Non précisé{% endif %}</td></tr>
+  <tr><td><strong>Téléphone</strong></td><td>{{ request.telephone }}</td></tr>
+  <tr><td><strong>E-mail</strong></td><td>{{ request.email }}</td></tr>
+  <tr><td><strong>Curé informé</strong></td><td>{{ request.cure_informe|yesno:"Oui,Non" }}</td></tr>
+</table>
+{% if request.message %}<p><strong>Message :</strong></p>
+<p style="white-space:pre-wrap">{{ request.message }}</p>{% endif %}
+<p style="color:#6b6b6b;font-size:13px">Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}. Demande enregistrée dans l'administration (Demandes de présentation).</p>

@@ -90,6 +90,41 @@ class KeycloakAdmin:
         if action not in actions:
             self._request("PUT", f"/users/{user_id}", json={"requiredActions": sorted(actions | {action})})
 
+    # --- comptes plateforme (plateforme.admin) -------------------------------------------
+
+    def users_list(self, *, page_size: int = 500, limit: int = 20000) -> list[dict[str, Any]]:
+        """Représentations complètes (``enabled``, ``emailVerified``, ``totp``) de tous les comptes."""
+        users: list[dict[str, Any]] = []
+        first = 0
+        while first < limit:
+            page = self._request(
+                "GET", "/users", params={"first": first, "max": page_size, "briefRepresentation": "false"}
+            ).json()
+            users += page
+            if len(page) < page_size:
+                break
+            first += page_size
+        return users
+
+    def user_get(self, user_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/users/{user_id}").json()
+
+    def user_credentials(self, user_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/users/{user_id}/credentials").json()
+
+    def user_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        return self._request("GET", f"/users/{user_id}/sessions").json()
+
+    def user_set_enabled(self, user_id: str, enabled: bool) -> None:
+        self._request("PUT", f"/users/{user_id}", json={"enabled": enabled})
+
+    def user_logout(self, user_id: str) -> None:
+        """Ferme toutes les sessions (et révoque les jetons de rafraîchissement) du compte."""
+        self._request("POST", f"/users/{user_id}/logout")
+
+    def user_brute_force_reset(self, user_id: str) -> None:
+        self._request("DELETE", f"/attack-detection/brute-force/users/{user_id}")
+
     def user_delete(self, user_id: str) -> None:
         """Suppression du compte Keycloak (EF-CONF-03). Absent (404) : déjà supprimé."""
         url = f"{self.base}/admin/realms/{self.realm}/users/{user_id}"

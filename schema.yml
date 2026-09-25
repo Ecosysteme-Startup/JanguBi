@@ -3592,6 +3592,239 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationUnreadCount'
           description: ''
+  /api/v1/platform/accounts/:
+    get:
+      operationId: platform_accounts_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Comptes de la plateforme, du plus récemment actif au plus ancien
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: mfa
+        schema:
+          enum:
+          - active
+          - facultative
+          type: string
+          minLength: 1
+        description: |-
+          MFA configurée ou non
+
+          * `active` - active
+          * `facultative` - facultative
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: E-mail, prénom ou nom
+      - in: query
+        name: role
+        schema:
+          enum:
+          - fidele
+          - staff
+          - platform_admin
+          type: string
+          minLength: 1
+        description: |-
+          Rôle de realm
+
+          * `fidele` - fidele
+          * `staff` - staff
+          * `platform_admin` - platform_admin
+      - in: query
+        name: status
+        schema:
+          enum:
+          - actif
+          - verrouille
+          - a_confirmer
+          type: string
+          minLength: 1
+        description: |-
+          Statut du compte
+
+          * `actif` - actif
+          * `verrouille` - verrouille
+          * `a_confirmer` - a_confirmer
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccountOutputList'
+          description: ''
+  /api/v1/platform/accounts/{account_id}/:
+    get:
+      operationId: platform_accounts_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Fiche d''un compte : MFA, sessions, offices'
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailOutput'
+          description: ''
+  /api/v1/platform/accounts/{account_id}/lock/:
+    post:
+      operationId: platform_accounts_lock
+      description: À placer en premier dans les bases des vues V1.
+      summary: Verrouiller un compte (désactivé dans Keycloak, sessions fermées)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailOutput'
+          description: ''
+        '503':
+          description: 'Keycloak injoignable : action non effectuée'
+  /api/v1/platform/accounts/{account_id}/logout-sessions/:
+    post:
+      operationId: platform_accounts_logout_sessions
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fermer toutes les sessions d'un compte
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailOutput'
+          description: ''
+        '503':
+          description: 'Keycloak injoignable : action non effectuée'
+  /api/v1/platform/accounts/{account_id}/require-mfa/:
+    post:
+      operationId: platform_accounts_require_mfa
+      description: À placer en premier dans les bases des vues V1.
+      summary: Exiger la configuration d'un second facteur à la prochaine connexion
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailOutput'
+          description: ''
+        '503':
+          description: 'Keycloak injoignable : action non effectuée'
+  /api/v1/platform/accounts/{account_id}/unlock/:
+    post:
+      operationId: platform_accounts_unlock
+      description: À placer en premier dans les bases des vues V1.
+      summary: Déverrouiller un compte
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - platform
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetailOutput'
+          description: ''
+        '503':
+          description: 'Keycloak injoignable : action non effectuée'
+  /api/v1/public/contact/:
+    post:
+      operationId: public_contact_create
+      description: 'Formulaire « Pour les paroisses ». Public : aucune authentification
+        n''est lue.'
+      summary: Demander une présentation de Jàngu Bi (formulaire « Pour les paroisses
+        »)
+      tags:
+      - public
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationRequestInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PresentationRequestInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PresentationRequestInput'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentationRequestOutput'
+          description: ''
+        '400':
+          description: 'Erreurs par champ : { champ: [messages] }'
+        '429':
+          description: Trop de demandes depuis cette adresse
   /api/v1/public/nodes/:
     get:
       operationId: v1_public_nodes_retrieve
@@ -4912,6 +5145,161 @@ paths:
           description: ''
 components:
   schemas:
+    AccountDetailOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        realm_role:
+          $ref: '#/components/schemas/AccountRealmRoleEnum'
+        mfa:
+          $ref: '#/components/schemas/AccountMfaEnum'
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          description: Dernière activité connue
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        node_label:
+          type: string
+          nullable: true
+          description: Nœud de la nomination principale, ou paroisse suivie
+        keycloak_id:
+          type: string
+          nullable: true
+        email_verified:
+          type: boolean
+        offices:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountOffice'
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountSession'
+      required:
+      - email
+      - email_verified
+      - full_name
+      - id
+      - keycloak_id
+      - last_login
+      - mfa
+      - node_label
+      - offices
+      - realm_role
+      - sessions
+      - status
+    AccountMfaEnum:
+      enum:
+      - totp
+      - webauthn
+      - facultative
+      type: string
+      description: |-
+        * `totp` - totp
+        * `webauthn` - webauthn
+        * `facultative` - facultative
+    AccountOffice:
+      type: object
+      properties:
+        office_label:
+          type: string
+        node_name:
+          type: string
+        start_date:
+          type: string
+          format: date
+        capabilities:
+          type: array
+          items:
+            type: string
+      required:
+      - capabilities
+      - node_name
+      - office_label
+      - start_date
+    AccountOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+        realm_role:
+          $ref: '#/components/schemas/AccountRealmRoleEnum'
+        mfa:
+          $ref: '#/components/schemas/AccountMfaEnum'
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+          description: Dernière activité connue
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        node_label:
+          type: string
+          nullable: true
+          description: Nœud de la nomination principale, ou paroisse suivie
+      required:
+      - email
+      - full_name
+      - id
+      - last_login
+      - mfa
+      - node_label
+      - realm_role
+      - status
+    AccountRealmRoleEnum:
+      enum:
+      - fidele
+      - staff
+      - platform_admin
+      type: string
+      description: |-
+        * `fidele` - fidele
+        * `staff` - staff
+        * `platform_admin` - platform_admin
+    AccountSession:
+      type: object
+      properties:
+        id:
+          type: string
+        client:
+          type: string
+        ip:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - client
+      - id
+      - ip
+      - started_at
+    AccountStatusEnum:
+      enum:
+      - actif
+      - verrouille
+      - a_confirmer
+      type: string
+      description: |-
+        * `actif` - actif
+        * `verrouille` - verrouille
+        * `a_confirmer` - a_confirmer
     ActionEnum:
       enum:
       - terminer
@@ -5636,6 +6024,24 @@ components:
       - given_at
       - given_version
       - required
+    ContactFonctionEnum:
+      enum:
+      - cure
+      - vicaire
+      - secretaire
+      - referent_numerique
+      - chancelier
+      - eveque
+      - autre
+      type: string
+      description: |-
+        * `cure` - Curé
+        * `vicaire` - Vicaire
+        * `secretaire` - Secrétaire paroissial
+        * `referent_numerique` - Référent numérique
+        * `chancelier` - Chancelier
+        * `eveque` - Évêque
+        * `autre` - Autre
     ContentFormatEnum:
       enum:
       - text
@@ -6845,6 +7251,32 @@ components:
       - code
       - label
       - node_types
+    PaginatedAccountOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedArticleListOutputList:
       type: object
       properties:
@@ -7595,6 +8027,69 @@ components:
       - text
       - type
       - type_display
+    PresentationRequestInput:
+      type: object
+      properties:
+        full_name:
+          type: string
+          description: Nom et prénom
+          maxLength: 150
+        fonction:
+          allOf:
+          - $ref: '#/components/schemas/ContactFonctionEnum'
+          description: |-
+            Fonction dans la paroisse ou le diocèse
+
+            * `cure` - Curé
+            * `vicaire` - Vicaire
+            * `secretaire` - Secrétaire paroissial
+            * `referent_numerique` - Référent numérique
+            * `chancelier` - Chancelier
+            * `eveque` - Évêque
+            * `autre` - Autre
+        paroisse:
+          type: string
+          description: Nom de la paroisse
+          maxLength: 200
+        diocese_node_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Nœud de type diocèse, ou null
+        telephone:
+          type: string
+          description: Téléphone
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          description: Adresse e-mail de contact
+        message:
+          type: string
+          default: ''
+          description: Message libre (1 000 caractères max.)
+          maxLength: 1000
+        consentement:
+          type: boolean
+          description: Consentement au traitement des données (doit être vrai)
+        cure_informe:
+          type: boolean
+          description: Le curé est informé de la démarche
+      required:
+      - consentement
+      - cure_informe
+      - email
+      - fonction
+      - full_name
+      - paroisse
+      - telephone
+    PresentationRequestOutput:
+      type: object
+      properties:
+        received:
+          type: boolean
+      required:
+      - received
     ProcessorOutput:
       type: object
       description: 'Vue de la paroisse : identité complète, registre, lieu de retrait.'
