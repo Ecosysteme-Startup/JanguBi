@@ -10254,7 +10254,6 @@ components:
         phone:
           type: string
           nullable: true
-          maxLength: 30
     PatchedNodeUpdateInput:
       type: object
       properties:

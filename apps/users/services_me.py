@@ -21,4 +21,5 @@ def me_profile_update(*, user: Any, data: dict[str, Any]) -> Any:
     for field, value in data.items():
         setattr(profile, field, value)
     profile.save(update_fields=[*data, "updated_at"])
+    user.profile = profile  # cache de la relation inverse : la réponse relit le profil à jour
     return user

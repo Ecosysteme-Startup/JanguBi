@@ -1,6 +1,7 @@
 from django.conf import settings
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from phonenumber_field.serializerfields import PhoneNumberField
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
@@ -82,7 +83,7 @@ class MeProfileSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=50, required=False, allow_blank=True)
     title = serializers.ChoiceField(choices=Title.choices, required=False, allow_blank=True)
     date_of_birth = serializers.DateField(required=False, allow_null=True)
-    phone = serializers.CharField(max_length=30, required=False, allow_blank=True, allow_null=True)
+    phone = PhoneNumberField(required=False, allow_null=True)
 
 
 class NodeRefSerializer(serializers.Serializer):

@@ -165,3 +165,13 @@ def test_account_delete_erases_religious_status_and_relations(world):
     religieuse.refresh_from_db()
     assert (religieuse.etat_de_vie, religieuse.degre_ordre) == ("laic", "aucun")
     assert not MessageBlock.objects.filter(blocker=religieuse).exists()
+
+
+def test_api_me_get_and_patch(world):
+    client = client_for(world.awa)
+    data = client.get("/api/v1/me/").data
+    assert data["profile"]["last_name"] == "Diop" and data["paroisse_suivie"]["name"] == "Saint-Dominique"
+    response = client.patch("/api/v1/me/", {"first_name": "Awa Marie", "phone": "+221771234567"}, format="json")
+    assert response.status_code == 200 and response.data["profile"]["first_name"] == "Awa Marie"
+    assert client.patch("/api/v1/me/", {"phone": "pas un numéro"}, format="json").status_code == 400
+    assert client.patch("/api/v1/me/", {"email": "x@y.sn"}, format="json").data["email"] == "awa@test.sn"
