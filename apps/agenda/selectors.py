@@ -1,7 +1,8 @@
 import datetime
 from typing import Any
 
-from django.db.models import Count, Exists, OuterRef, Q, QuerySet
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.agenda.models import Event, EventRegistration
@@ -13,9 +14,17 @@ _RELATED = ("scope_node", "scope_place", "organizer", "organizer__profile")
 
 
 def _annotate(qs: QuerySet[Event], *, viewer: Any = None) -> QuerySet[Event]:
-    qs = qs.annotate(registrations_count=Count("registrations", distinct=True))
+    qs = qs.annotate(
+        registrations_count=Count("registrations", distinct=True),
+        seats_taken=Coalesce(Sum("registrations__seats"), 0),
+    )
     if viewer is not None and getattr(viewer, "is_authenticated", False):
-        qs = qs.annotate(is_registered=Exists(EventRegistration.objects.filter(event=OuterRef("pk"), user=viewer)))
+        mine = EventRegistration.objects.filter(event=OuterRef("pk"), user=viewer)
+        qs = qs.annotate(
+            is_registered=Exists(mine),
+            my_seats=Subquery(mine.values("seats")[:1]),
+            my_note=Subquery(mine.values("note")[:1]),
+        )
     return qs
 
 
@@ -56,9 +65,20 @@ def event_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) ->
         if node is None:
             raise NotFoundError("Nœud introuvable.", {"node_id": str(node_id)})
         qs = qs.filter(scope_node__path__startswith=node.path)
-    if not filters.get("include_past"):
+    date_from, date_to = filters.get("from"), filters.get("to")
+    if date_from is not None:
+        # Une période explicite remplace le filtre « à venir » : on peut consulter le passé.
+        qs = qs.filter(end_at__gte=_day_start(date_from))
+    elif not filters.get("include_past"):
         qs = qs.filter(end_at__gte=timezone.now())
-    return _annotate(qs, viewer=user).order_by("start_at")
+    if date_to is not None:
+        qs = qs.filter(start_at__lt=_day_start(date_to + datetime.timedelta(days=1)))
+    return _annotate(qs, viewer=user).order_by("start_at", "pk")
+
+
+def _day_start(day: datetime.date) -> datetime.datetime:
+    """Minuit (heure locale) du jour donné : les bornes de période sont des jours civils."""
+    return timezone.make_aware(datetime.datetime.combine(day, datetime.time.min))
 
 
 def event_get_for_staff(*, user: Any, event_id: int) -> Event:

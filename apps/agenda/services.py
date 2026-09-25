@@ -10,6 +10,7 @@ from functools import partial
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Sum
 from django.utils import timezone
 
 from apps.agenda.models import Event, EventRegistration
@@ -19,21 +20,48 @@ from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node, PlaceOfWorship
 
 logger = logging.getLogger(__name__)
-UPDATABLE_FIELDS = ("title", "description", "event_type", "start_at", "end_at", "location", "max_participants")
+UPDATABLE_FIELDS = (
+    "title",
+    "description",
+    "event_type",
+    "start_at",
+    "end_at",
+    "location",
+    "max_participants",
+    "registration_closes_at",
+)
+# Une inscription couvre la personne et ceux qui l'accompagnent, dans une limite raisonnable.
+MAX_SEATS_PER_REGISTRATION = 10
 
 
 def event_manage_check(*, user: Any, node: Node | None) -> None:
     if node is None:
         if not authz.peut(user, "plateforme.admin", None):
-            raise PermissionDeniedError("Seule la plateforme crée des événements globaux.", code="global_scope_forbidden")
+            raise PermissionDeniedError(
+                "Seule la plateforme crée des événements globaux.", code="global_scope_forbidden"
+            )
         return
     if not authz.peut(user, "evenements.gerer", node):
         raise PermissionDeniedError("Vous ne pouvez pas gérer les événements de ce nœud.", code="events_forbidden")
 
 
-def _dates_check(*, start_at: datetime.datetime, end_at: datetime.datetime) -> None:
+def _dates_check(
+    *, start_at: datetime.datetime, end_at: datetime.datetime, closes_at: datetime.datetime | None = None
+) -> None:
     if end_at <= start_at:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_dates")
+    if closes_at is not None and closes_at > end_at:
+        raise ApplicationError(
+            "La clôture des inscriptions doit précéder la fin de l'événement.", code="invalid_registration_closing"
+        )
+
+
+def seats_taken(*, event: Event, exclude_user: Any = None) -> int:
+    """Places réservées : la jauge compte les personnes, pas les inscriptions."""
+    qs = EventRegistration.objects.filter(event=event)
+    if exclude_user is not None:
+        qs = qs.exclude(user=exclude_user)
+    return qs.aggregate(total=Sum("seats"))["total"] or 0
 
 
 @transaction.atomic
@@ -49,9 +77,10 @@ def event_create(
     event_type: str = Event.EventType.OTHER,
     location: str = "",
     max_participants: int | None = None,
+    registration_closes_at: datetime.datetime | None = None,
 ) -> Event:
     event_manage_check(user=organizer, node=node)
-    _dates_check(start_at=start_at, end_at=end_at)
+    _dates_check(start_at=start_at, end_at=end_at, closes_at=registration_closes_at)
     if place is not None and (node is None or place.node_id != node.pk):
         raise ApplicationError("Le lieu de culte doit appartenir au nœud de l'événement.", code="place_not_in_node")
     event = Event.objects.create(
@@ -63,6 +92,7 @@ def event_create(
         end_at=end_at,
         location=location or (place.name if place else ""),
         max_participants=max_participants,
+        registration_closes_at=registration_closes_at,
         scope_node=node,
         scope_place=place,
     )
@@ -78,12 +108,17 @@ def event_update(*, event: Event, actor: Any, data: dict[str, Any]) -> Event:
         raise ApplicationError("Champs non modifiables.", {"fields": sorted(unknown)}, code="field_not_updatable")
     if event.cancelled_at is not None:
         raise ApplicationError("Un événement annulé ne se modifie plus.", code="event_cancelled")
-    _dates_check(start_at=data.get("start_at", event.start_at), end_at=data.get("end_at", event.end_at))
+    _dates_check(
+        start_at=data.get("start_at", event.start_at),
+        end_at=data.get("end_at", event.end_at),
+        closes_at=data.get("registration_closes_at", event.registration_closes_at),
+    )
     if "max_participants" in data and data["max_participants"] is not None:
-        registered = EventRegistration.objects.filter(event=event).count()
+        registered = seats_taken(event=event)
         if data["max_participants"] < registered:
             raise ApplicationError(
-                f"Déjà {registered} inscrits : la jauge ne peut pas descendre en dessous.", code="capacity_below_registrations"
+                f"Déjà {registered} places réservées : la jauge ne peut pas descendre en dessous.",
+                code="capacity_below_registrations",
             )
     for field, value in data.items():
         setattr(event, field, value)
@@ -130,23 +165,36 @@ def event_cancel(*, event: Event, actor: Any) -> Event:
 
 
 @transaction.atomic
-def event_register(*, event: Event, user: Any) -> EventRegistration:
-    """Inscription sous verrou de la ligne événement (sinon deux inscriptions concurrentes sur
-    la dernière place passent toutes deux). Complet → 409. Idempotente pour la même personne."""
+def event_register(*, event: Event, user: Any, seats: int = 1, note: str = "") -> EventRegistration:
+    """Inscription (ou mise à jour de la sienne) sous verrou de la ligne événement : sinon deux
+    inscriptions concurrentes sur les dernières places passent toutes deux.
+
+    Refusée après la clôture des inscriptions ou si les places demandées dépassent les places
+    restantes (409). Une seconde demande de la même personne met à jour ses places et sa remarque."""
+    if not 1 <= seats <= MAX_SEATS_PER_REGISTRATION:
+        raise ApplicationError(f"Indiquez entre 1 et {MAX_SEATS_PER_REGISTRATION} personnes.", code="invalid_seats")
     locked = Event.objects.select_for_update().filter(pk=event.pk).first()
     if locked is None:
         raise ApplicationError("Événement introuvable.", code="not_found")
     if locked.cancelled_at is not None:
         raise ApplicationError("Cet événement a été annulé.", code="event_cancelled")
-    if locked.end_at <= timezone.now():
+    now = timezone.now()
+    if locked.end_at <= now:
         raise ApplicationError("Cet événement est terminé.", code="event_past")
-    existing = EventRegistration.objects.filter(event=locked, user=user).first()
-    if existing is not None:
-        return existing
+    if locked.registration_closes_at is not None and locked.registration_closes_at <= now:
+        raise ApplicationError("Les inscriptions sont closes.", code="registrations_closed")
     if locked.max_participants is not None:
-        if EventRegistration.objects.filter(event=locked).count() >= locked.max_participants:
+        remaining = locked.max_participants - seats_taken(event=locked, exclude_user=user)
+        if remaining <= 0:
             raise ConflictError("Cet événement est complet.", code="event_full")
-    return EventRegistration.objects.create(event=locked, user=user)
+        if seats > remaining:
+            raise ConflictError(
+                f"Il ne reste que {remaining} place(s).", {"remaining": remaining}, code="not_enough_seats"
+            )
+    registration, _ = EventRegistration.objects.update_or_create(
+        event=locked, user=user, defaults={"seats": seats, "note": note.strip()}
+    )
+    return registration
 
 
 @transaction.atomic

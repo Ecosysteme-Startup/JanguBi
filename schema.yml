@@ -93,7 +93,7 @@ paths:
     post:
       operationId: v1_agenda_register_create
       description: À placer en premier dans les bases des vues V1.
-      summary: S'inscrire (409 si complet ; idempotent)
+      summary: S'inscrire ou mettre à jour son inscription (400 si clos ; 409 si complet)
       parameters:
       - in: path
         name: event_id
@@ -102,6 +102,17 @@ paths:
         required: true
       tags:
       - agenda
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
       security:
       - keycloakBearer: []
       responses:
@@ -112,7 +123,7 @@ paths:
                 $ref: '#/components/schemas/EventOutput'
           description: ''
         '409':
-          description: Événement complet
+          description: Événement complet ou places insuffisantes
     delete:
       operationId: v1_agenda_register_destroy
       description: À placer en premier dans les bases des vues V1.
@@ -4282,6 +4293,12 @@ paths:
       summary: Événements à gérer (evenements.gerer)
       parameters:
       - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Début de période (jour inclus)
+      - in: query
         name: include_past
         schema:
           type: boolean
@@ -4301,6 +4318,12 @@ paths:
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Fin de période (jour inclus)
       tags:
       - agenda
       security:
@@ -4953,6 +4976,18 @@ paths:
           type: integer
         description: Décalage
       - in: query
+        name: place
+        schema:
+          type: integer
+        description: Lieu de culte de l'annonce
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        description: Recherche dans le titre, le chapô et le texte
+      - in: query
         name: status
         schema:
           enum:
@@ -5172,6 +5207,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/StaffArticleOutput'
           description: ''
+  /api/v1/staff/news/sunday-sheet/:
+    get:
+      operationId: staff_news_sunday_sheet
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: 'Feuille d''annonces d''un dimanche (à imprimer) : annonces du nœud
+        et des nœuds parents'
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: 'Dimanche concerné (défaut : le dimanche à venir)'
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud (paroisse) de la feuille
+        required: true
+      tags:
+      - news
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SundaySheetOutput'
+          description: ''
 components:
   schemas:
     AccountDetailOutput:
@@ -5386,6 +5454,14 @@ components:
           type: string
           format: date
           nullable: true
+        cover_image_id:
+          type: integer
+          nullable: true
+          description: 'Bannière : fichier image téléversé via /files/upload/'
+        notify_followers:
+          type: boolean
+          default: true
+          description: Notifier les fidèles à la publication
       required:
       - category_id
       - content
@@ -5542,6 +5618,10 @@ components:
           format: date-time
           nullable: true
           description: 'Futur : publication programmée'
+        notify:
+          type: boolean
+          description: 'Notifier les fidèles (préférences et plage de silence respectées)
+            ; absent : choix enregistré'
     ArticleStatusEnum:
       enum:
       - draft
@@ -6322,6 +6402,10 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
+          nullable: true
       required:
       - end_at
       - start_at
@@ -6372,17 +6456,46 @@ components:
           maximum: 2147483647
           minimum: 0
           nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Clôture des inscriptions
         registrations_count:
           type: integer
           readOnly: true
           default: 0
+        seats_taken:
+          type: integer
+          readOnly: true
+          default: 0
+          description: Places réservées (somme des personnes)
+        seats_remaining:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: 'Vide : pas de jauge'
         is_full:
           type: boolean
           readOnly: true
+        registrations_open:
+          type: boolean
+          readOnly: true
+          description: Ni annulé, ni terminé, ni clos
         is_registered:
           type: boolean
           readOnly: true
           default: false
+        my_seats:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Mon inscription
+        my_note:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Ma remarque
         is_cancelled:
           type: boolean
           readOnly: true
@@ -6392,10 +6505,15 @@ components:
       - is_cancelled
       - is_full
       - is_registered
+      - my_note
+      - my_seats
       - node_id
       - node_name
       - place_id
       - registrations_count
+      - registrations_open
+      - seats_remaining
+      - seats_taken
       - start_at
       - title
     EventTypeEnum:
@@ -7720,6 +7838,16 @@ components:
           type: string
           format: date
           nullable: true
+        place_id:
+          type: integer
+          nullable: true
+          description: 'Lieu de culte (vide : tout le nœud)'
+        cover_image_id:
+          type: integer
+          nullable: true
+          description: 'Bannière (vide : la retirer)'
+        notify_followers:
+          type: boolean
     PatchedAssignmentUpdateInput:
       type: object
       properties:
@@ -7752,6 +7880,10 @@ components:
         max_participants:
           type: integer
           minimum: 1
+          nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
           nullable: true
     PatchedHomilieNoteInput:
       type: object
@@ -8488,6 +8620,20 @@ components:
         * `parish_file` - Dossier paroissial
         * `personal` - Usage personnel
         * `other` - Autre
+    RegisterInput:
+      type: object
+      properties:
+        seats:
+          type: integer
+          maximum: 10
+          minimum: 1
+          default: 1
+          description: Nombre de personnes (1 à 10)
+        note:
+          type: string
+          default: ''
+          description: Remarque, lue par les organisateurs
+          maxLength: 300
     RegisterRefInput:
       type: object
       properties:
@@ -8519,6 +8665,15 @@ components:
           type: string
           format: email
           readOnly: true
+        seats:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          title: Nombre de personnes
+        note:
+          type: string
+          title: Remarque
+          maxLength: 300
         registered_at:
           type: string
           format: date-time
@@ -9183,6 +9338,17 @@ components:
         unpublish_reason:
           type: string
           title: Motif de dépublication
+        cover_image_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        cover_image_url:
+          type: string
+          nullable: true
+          readOnly: true
+        notify_followers:
+          type: boolean
+          title: Notifier les fidèles
         reads_count:
           type: integer
           readOnly: true
@@ -9198,6 +9364,8 @@ components:
       - author_name
       - category
       - content
+      - cover_image_id
+      - cover_image_url
       - id
       - reads_count
       - scope
@@ -9250,6 +9418,63 @@ components:
           format: date-time
       required:
       - to_status
+    SundaySheetItemOutput:
+      type: object
+      description: 'Une annonce de la feuille : le texte à lire, sa portée et son
+        état.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        excerpt:
+          type: string
+          title: Résumé court
+          maxLength: 400
+        content:
+          type: string
+          title: Contenu
+        content_format:
+          allOf:
+          - $ref: '#/components/schemas/ContentFormatEnum'
+          title: Format du contenu
+        scope:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ArticleStatusEnum'
+          title: Statut
+      required:
+      - content
+      - id
+      - scope
+      - title
+    SundaySheetOutput:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        node_name:
+          type: string
+        sunday:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SundaySheetItemOutput'
+      required:
+      - items
+      - node_id
+      - node_name
+      - sunday
     SupplementInput:
       type: object
       properties:
