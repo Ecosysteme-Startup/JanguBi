@@ -99,7 +99,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@22b48a429f10e1de233237b5c534c9c3d2e41597 #v4.1.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 #v4.1.0
 
       - name: Login to DockerHub
         uses: docker/login-action@946f94de75ea52995b6aa1e54fd3e0aeed6cc573 #v4.2.0
