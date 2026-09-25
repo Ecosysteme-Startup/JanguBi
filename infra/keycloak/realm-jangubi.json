@@ -18,7 +18,7 @@
   "accessTokenLifespan": 600,
   "ssoSessionIdleTimeout": 43200,
   "ssoSessionMaxLifespan": 43200,
-  "passwordPolicy": "length(10) and notUsername(undefined) and notEmail(undefined)",
+  "passwordPolicy": "length(10) and upperCase(1) and lowerCase(1) and digits(1) and notUsername(undefined) and notEmail(undefined)",
   "otpPolicyType": "totp",
   "otpPolicyAlgorithm": "HmacSHA1",
   "otpPolicyDigits": 6,
@@ -117,7 +117,8 @@
             "introspection.token.claim": "true"
           }
         }
-      ]
+      ],
+      "baseUrl": "${KC_WEB_ORIGIN:http://localhost:3000}"
     },
     {
       "clientId": "jangubi-api",
@@ -250,5 +251,6 @@
   "adminEventsDetailsEnabled": true,
   "eventsListeners": [
     "jboss-logging"
-  ]
+  ],
+  "loginTheme": "jangubi"
 }
