@@ -70,8 +70,20 @@
     });
   }
 
+  // Téléphone mobile : le champ annonce son indicatif (+221), son aide et son erreur.
+  function phone() {
+    var input = document.getElementById('phone');
+    if (!input) return;
+    if (!input.getAttribute('autocomplete')) input.setAttribute('autocomplete', 'tel-national');
+    var ids = ['form-help-text-before-phone', 'input-error-phone', 'form-help-text-after-phone'].filter(function (id) {
+      return document.getElementById(id);
+    });
+    if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     banner();
     strength();
+    phone();
   });
 })();

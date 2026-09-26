@@ -30,7 +30,7 @@ L'appartenance religieuse, l'état de vie (laïc, clerc, religieux), les demande
 | T7 | Rendez-vous de confession | Réserver un créneau en présentiel | Fidèles, prêtres | créneau, lieu, statut ; **aucun contenu** | Le prêtre du créneau (nom) ; le secrétariat (initiales seulement) | `[À COMPLÉTER]` ; réservations à venir annulées à la suppression du compte |
 | T8 | Notifications | Prévenir (annonces, rappels, suivi des demandes) | Inscrits | préférences, notifications, e-mails envoyés | Personne concernée ; prestataire e-mail | Notifications : `[À COMPLÉTER]` ; supprimées avec le compte |
 | T9 | Tableaux de bord | Pilotage pastoral | — | agrégats uniquement, aucun nom, aucun contenu de message | Titulaires de `tableau_bord.voir`, plateforme | Calculés à la demande (cache 5 min) |
-| T10 | Journal d'audit | Traçabilité des actions sensibles | Responsables, personnes concernées | acteur, action, cible, nœud, date | Plateforme, `audit.voir` | `[À COMPLÉTER]` (journal immuable) |
+| T10 | Journal d'audit | Traçabilité des actions sensibles | Responsables, personnes concernées | acteur, action, cible, nœud, date, adresse IP tronquée (IPv4 /24, IPv6 /48 : réseau, jamais la machine) | Plateforme, `audit.voir` | `[À COMPLÉTER]` (journal immuable) |
 | T11 | Formulaire « Pour les paroisses » | Contact commercial et pastoral | Représentants de paroisses | nom, fonction, paroisse, diocèse, téléphone, e-mail, message | Numerisen | `[À COMPLÉTER]` |
 
 ## 3. Droits des personnes

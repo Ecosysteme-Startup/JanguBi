@@ -157,6 +157,13 @@ def _forget_traces(user: Any) -> None:
     ArticleRead.objects.filter(user=user).delete()
 
 
+def _declaration_forget(user: Any) -> None:
+    """Justificatifs de la déclaration d'état de vie (celebret…) : effacés avec le compte."""
+    from apps.hierarchy.services_offices import person_declaration_forget
+
+    _files_delete(person_declaration_forget(person=user))
+
+
 def _anonymize_identity(user: Any) -> str | None:
     from apps.hierarchy.enums import DegreOrdre, EtatDeVie
 
@@ -210,6 +217,7 @@ def account_delete(*, user: Any) -> None:
     documents = _anonymize_document_requests(user, now)
     _release_bookings_and_registrations(user, now)
     _forget_traces(user)
+    _declaration_forget(user)
     keycloak_sub = _anonymize_identity(user)
     audit_log(
         actor=user,

@@ -64,13 +64,23 @@ def meditation_for(*, day: datetime.date, user: Any = None) -> dict[str, Any] | 
             status=Article.Status.PUBLISHED,
             published_at__date=day,
         )
+        .select_related("author__profile", "scope_node")
         .order_by("-scope_node__depth", "-published_at")
-        .values("id", "title", "scope_node__name")
         .first()
     )
     if article is None:
         return None
-    return {"id": str(article["id"]), "title": article["title"], "scope": article["scope_node__name"]}
+    profile = getattr(article.author, "profile", None)
+    author = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
+    return {
+        "id": str(article.id),
+        "title": article.title,
+        "scope": article.scope_node.name if article.scope_node else None,
+        # Plus besoin d'un second appel à /news/{id}/ pour la carte (écart F9).
+        "excerpt": article.excerpt or None,
+        "author_name": author or "Jàngu Bi",
+        "published_at": article.published_at.isoformat() if article.published_at else None,
+    }
 
 
 def liturgy_day(*, day: datetime.date, user: Any = None) -> dict[str, Any]:

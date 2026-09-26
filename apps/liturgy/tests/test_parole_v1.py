@@ -99,15 +99,43 @@ def test_meditation_of_the_day_for_followed_parish(tree):
     fidele = person("awa@test.sn")
     fidele.paroisse_suivie = tree.saint_dominique
     fidele.save(update_fields=["paroisse_suivie"])
+    from apps.users.tests.factories import ProfileFactory
+
+    author = person("pere@sd.sn")
+    ProfileFactory(user=author, first_name="Jean", last_name="Sarr")
     Article.objects.create(
         title="Méditation : la foi comme une graine",
+        excerpt="Une foi grande comme une graine de moutarde suffit.",
         content="…",
         content_type=Article.ContentType.MEDITATION,
         status=Article.Status.PUBLISHED,
         published_at=timezone.now(),
         scope_node=tree.saint_dominique,
-        author=person("pere@sd.sn"),
+        author=author,
         category=ArticleCategory.objects.create(name="Méditation", slug="meditation"),
     )
-    assert liturgy_day(day=DAY, user=fidele)["meditation"]["title"] == "Méditation : la foi comme une graine"
+    meditation = liturgy_day(day=DAY, user=fidele)["meditation"]
+    assert meditation["title"] == "Méditation : la foi comme une graine"
+    # Extrait, auteur et date dans la même réponse : plus de second appel à /news/{id}/.
+    assert meditation["excerpt"] == "Une foi grande comme une graine de moutarde suffit."
+    assert meditation["author_name"] == "Jean Sarr"
+    assert meditation["scope"] == "Saint-Dominique"
+    assert meditation["published_at"].startswith("2026-10-04")
     assert liturgy_day(day=DAY)["meditation"] is None  # anonyme : méditations globales seulement
+
+
+def test_bible_chapter_is_served_whole_in_one_request(bible, settings):
+    """Écart F9 : un long chapitre (Ps 119 : 176 versets) tient en une page, plafonnée à 200."""
+    settings.BIBLE_EDITION = "crampon1923"
+    chapter = bible["crampon"].chapter
+    Verse.objects.bulk_create(
+        Verse(chapter=chapter, number=n, text=f"v{n}", source_file="crampon1923") for n in range(6, 206)
+    )
+    url = f"/api/v1/bible/books/{chapter.book_id}/chapters/{chapter.number}/verses/"
+
+    whole = APIClient().get(url).data
+    capped = APIClient().get(url, {"limit": 500}).data
+
+    assert whole["count"] == 201
+    assert len(whole["results"]) == 200
+    assert capped["limit"] == 200

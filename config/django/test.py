@@ -68,3 +68,17 @@ PASSWORD_HASHERS = [
 
 # Email → en mémoire, pas de vrai serveur
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# Fichiers : toujours un stockage disque temporaire, quel que soit le `.env` de la machine
+# (un `.env` local en `FILE_UPLOAD_STORAGE=s3` faisait joindre MinIO pendant les tests).
+import tempfile  # noqa: E402
+
+from apps.files.enums import FileUploadStorage  # noqa: E402
+
+FILE_UPLOAD_STORAGE = FileUploadStorage.LOCAL
+MEDIA_ROOT = tempfile.mkdtemp(prefix="jangubi-test-media-")
+MEDIA_URL = "/media/"
+STORAGES = {
+    **STORAGES,  # noqa: F405
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+}

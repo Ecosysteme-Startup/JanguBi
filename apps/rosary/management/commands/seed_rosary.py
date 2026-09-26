@@ -122,11 +122,12 @@ class Command(BaseCommand):
                     order = m_data["order"]
                     title = m_data["title"]
                     meditation = m_data.get("meditation", "")
+                    fruit = m_data.get("fruit", "")
 
                     mystery, created = Mystery.objects.update_or_create(
                         group=group,
                         order=order,
-                        defaults={"title": title, "meditation": meditation}
+                        defaults={"title": title, "meditation": meditation, "fruit": fruit}
                     )
 
                     if not created:

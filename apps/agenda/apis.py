@@ -16,6 +16,7 @@ from apps.agenda.serializers import (
     EventFilterSerializer,
     EventOutputSerializer,
     EventUpdateInputSerializer,
+    RegisterInputSerializer,
     RegistrationOutputSerializer,
     StaffEventFilterSerializer,
     registrations_csv_rows,
@@ -91,13 +92,18 @@ class EventDetailApi(_PublicApi):
 class EventRegisterApi(_AuthedApi):
     @extend_schema(
         tags=TAG,
-        summary="S'inscrire (409 si complet ; idempotent)",
-        request=None,
-        responses={201: EventOutputSerializer, 409: OpenApiResponse(description="Événement complet")},
+        summary="S'inscrire ou mettre à jour son inscription (400 si clos ; 409 si complet)",
+        request=RegisterInputSerializer,
+        responses={
+            201: EventOutputSerializer,
+            409: OpenApiResponse(description="Événement complet ou places insuffisantes"),
+        },
     )
     def post(self, request: Request, event_id: int) -> Response:
+        serializer = RegisterInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         event = selectors.event_get_public(event_id=event_id)
-        services.event_register(event=event, user=request.user)
+        services.event_register(event=event, user=request.user, **serializer.validated_data)
         return Response(
             EventOutputSerializer(selectors.event_get_public(event_id=event_id, viewer=request.user)).data,
             status=status.HTTP_201_CREATED,

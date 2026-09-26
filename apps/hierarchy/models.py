@@ -96,6 +96,28 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
         verbose_name=_("situé dans"),
         help_text=_("Lien géographique d'un nœud non territorial (ex. communauté située dans un diocèse)."),
     )
+    # --- Vie paroissiale : secrétariat et demandes d'actes (modifiables avec horaires.gerer) ---
+    phone = models.CharField(_("téléphone du secrétariat"), max_length=30, blank=True, default="", db_default="")
+    email = models.EmailField(_("e-mail du secrétariat"), blank=True, default="", db_default="")
+    office_hours = models.JSONField(
+        _("horaires d'accueil"),
+        default=list,
+        db_default=[],
+        blank=True,
+        help_text=_("Liste de créneaux : [{« days » : « Lun. – ven. », « hours » : « 9 h-12 h »}]."),
+    )
+    secretariat_public = models.BooleanField(
+        _("secrétariat publié"),
+        default=False,
+        db_default=False,
+        help_text=_("Téléphone, e-mail et horaires d'accueil affichés sur la fiche publique."),
+    )
+    acts_delay_days = models.PositiveSmallIntegerField(
+        _("délai indicatif des actes (jours ouvrés)"), null=True, blank=True
+    )
+    acts_welcome_message = models.TextField(
+        _("message d'accueil des demandes d'actes"), blank=True, default="", db_default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -302,6 +324,29 @@ class OfficeAssignment(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.office_type} — {self.node} ({self.get_status_display()})"
+
+
+class DeclarationAttachment(BaseModel):
+    """Justificatif joint à une déclaration d'état de vie (celebret, lettre d'obédience…).
+
+    Donnée religieuse sensible : visible de la personne et de qui a ``personnes.verifier``
+    sur son incardination ; effacée avec le compte."""
+
+    person = models.ForeignKey(
+        "users.BaseUser", on_delete=models.CASCADE, related_name="declaration_attachments", verbose_name=_("personne")
+    )
+    file = models.ForeignKey("files.File", on_delete=models.PROTECT, related_name="+", verbose_name=_("fichier"))
+
+    class Meta:
+        verbose_name = _("justificatif de déclaration")
+        verbose_name_plural = _("justificatifs de déclaration")
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["person", "file"], name="hierarchy_declaration_attachment_unique"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Justificatif {self.pk}"
 
 
 class CapabilityOverride(BaseModel):

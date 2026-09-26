@@ -13,6 +13,7 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin
 from apps.api.pagination import LimitOffsetPagination, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
+from apps.core.request_context import client_ip
 from apps.hierarchy.authz import HasCapability
 from apps.users import selectors_accounts, services_accounts
 from apps.users.keycloak_accounts import MFA_NONE, MFA_TOTP, MFA_WEBAUTHN, keycloak_directory
@@ -65,7 +66,7 @@ class AccountDetailOutputSerializer(AccountOutputSerializer):
 
 
 def _ip(request: Request) -> str | None:
-    return request.META.get("REMOTE_ADDR")
+    return client_ip(request.META)
 
 
 class _PlatformApi(V1ApiMixin, ApiAuthMixin, APIView):

@@ -126,6 +126,9 @@ class Article(BaseModel):
     )
     sunday_date = models.DateField(_("dimanche concerné"), null=True, blank=True)
     publish_at = models.DateTimeField(_("publication programmée"), null=True, blank=True)
+    # Option « notifier les fidèles » : lue au moment de la publication (immédiate ou
+    # programmée). Les préférences de chacun (sujet, canaux, plage de silence) s'appliquent.
+    notify_followers = models.BooleanField(_("notifier les fidèles"), default=True, db_default=True)
 
     # --- Statut & workflow ---
     status = models.CharField(

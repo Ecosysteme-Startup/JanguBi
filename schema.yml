@@ -93,7 +93,7 @@ paths:
     post:
       operationId: v1_agenda_register_create
       description: À placer en premier dans les bases des vues V1.
-      summary: S'inscrire (409 si complet ; idempotent)
+      summary: S'inscrire ou mettre à jour son inscription (400 si clos ; 409 si complet)
       parameters:
       - in: path
         name: event_id
@@ -102,6 +102,17 @@ paths:
         required: true
       tags:
       - agenda
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
       security:
       - keycloakBearer: []
       responses:
@@ -112,7 +123,7 @@ paths:
                 $ref: '#/components/schemas/EventOutput'
           description: ''
         '409':
-          description: Événement complet
+          description: Événement complet ou places insuffisantes
     delete:
       operationId: v1_agenda_register_destroy
       description: À placer en premier dans les bases des vues V1.
@@ -280,8 +291,10 @@ paths:
   /api/v1/bible/books/{book_id}/chapters/{chapter_number}/verses/:
     get:
       operationId: v1_bible_books_chapters_verses_list
-      description: Returns list of verses for a specific chapter.
-      summary: List verses for a specific chapter
+      description: |-
+        Versets d'un chapitre. Une page couvre un chapitre entier (le plus long, Ps 119, a
+        176 versets) : ``limit`` vaut 200 par défaut et au plus.
+      summary: Versets d'un chapitre (le chapitre entier en une requête)
       parameters:
       - in: path
         name: book_id
@@ -302,7 +315,7 @@ paths:
         name: limit
         schema:
           type: integer
-        description: Number of results to return per page.
+        description: 'Versets par page : 200 par défaut et au plus (un chapitre entier).'
       - in: query
         name: offset
         schema:
@@ -328,9 +341,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/VerseOutput'
+                $ref: '#/components/schemas/PaginatedVerseOutputList'
           description: ''
   /api/v1/bible/homilenotes/:
     get:
@@ -1252,8 +1263,8 @@ paths:
     get:
       operationId: hierarchy_assignments_list
       description: À placer en premier dans les bases des vues V1.
-      summary: Nominations visibles (celles des nœuds où j'ai offices.nommer, et les
-        miennes)
+      summary: 'Nominations visibles : celles des nœuds où j''ai offices.nommer, en
+        lecture celles des nœuds où j''ai tableau_bord.voir, et les miennes'
       parameters:
       - in: query
         name: limit
@@ -1891,6 +1902,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlaceOutput'
           description: ''
+  /api/v1/hierarchy/nodes/{node_id}/settings/:
+    get:
+      operationId: v1_hierarchy_nodes_settings_retrieve
+      description: |-
+        Paramètres « vie paroissiale » (secrétariat, accueil, actes) : le secrétariat les tient
+        avec ``horaires.gerer`` ; nom, code, statut et rattachement restent sous ``structure.gerer``
+        (PATCH du nœud). La lecture est réservée aux mêmes capacités : le public ne voit que ce que
+        la paroisse publie (fiche publique).
+      summary: Paramètres du secrétariat d'un nœud (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeSettingsOutput'
+          description: ''
+    patch:
+      operationId: v1_hierarchy_nodes_settings_partial_update
+      description: |-
+        Paramètres « vie paroissiale » (secrétariat, accueil, actes) : le secrétariat les tient
+        avec ``horaires.gerer`` ; nom, code, statut et rattachement restent sous ``structure.gerer``
+        (PATCH du nœud). La lecture est réservée aux mêmes capacités : le public ne voit que ce que
+        la paroisse publie (fiche publique).
+      summary: Modifier les paramètres du secrétariat (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeSettingsOutput'
+          description: ''
   /api/v1/hierarchy/office-types/:
     get:
       operationId: v1_hierarchy_office_types_list
@@ -1908,6 +1983,41 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OfficeTypeOutput'
+          description: ''
+  /api/v1/hierarchy/persons/:
+    get:
+      operationId: hierarchy_persons_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Rechercher la personne à nommer (offices.nommer ; e-mail masqué)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 2
+        description: Nom, prénom ou e-mail (2 caractères au moins)
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonSearchOutputList'
           description: ''
   /api/v1/hierarchy/places/{place_id}/:
     get:
@@ -2144,7 +2254,7 @@ paths:
     get:
       operationId: v1_hierarchy_verifications_retrieve
       description: À placer en premier dans les bases des vues V1.
-      summary: Déclarations d'état de vie à vérifier (personnes.verifier)
+      summary: Déclarations d'état de vie à vérifier ou en attente de complément (personnes.verifier)
       parameters:
       - in: query
         name: limit
@@ -2156,6 +2266,19 @@ paths:
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: statut
+        schema:
+          enum:
+          - declare
+          - complement
+          type: string
+          minLength: 1
+        description: |-
+          « declare » : à vérifier ; « complement » : en attente du complément demandé
+
+          * `declare` - declare
+          * `complement` - complement
       tags:
       - hierarchy
       security:
@@ -2171,7 +2294,8 @@ paths:
     post:
       operationId: v1_hierarchy_verifications_decision_create
       description: À placer en premier dans les bases des vues V1.
-      summary: Vérifier ou rejeter une déclaration (personnes.verifier sur l'incardination)
+      summary: Vérifier, rejeter ou demander un complément (personnes.verifier sur
+        l'incardination)
       parameters:
       - in: path
         name: person_id
@@ -2619,8 +2743,8 @@ paths:
     post:
       operationId: v1_me_declaration_create
       description: À placer en premier dans les bases des vues V1.
-      summary: Déclarer mon état de vie (reste « déclaré » jusqu'à vérification ;
-        aucun effet sur les droits)
+      summary: Déclarer ou compléter mon état de vie (reste « déclaré » jusqu'à vérification
+        ; aucun effet sur les droits). Les justificatifs s'ajoutent aux précédents.
       tags:
       - me
       requestBody:
@@ -3884,7 +4008,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedNodeOutputList'
+                $ref: '#/components/schemas/PaginatedPublicNodeOutputList'
           description: ''
   /api/v1/public/nodes/{node_id}/week/:
     get:
@@ -3949,7 +4073,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NodeOutput'
+                $ref: '#/components/schemas/PublicNodeDetailOutput'
           description: ''
   /api/v1/rosary/community/:
     get:
@@ -4282,6 +4406,12 @@ paths:
       summary: Événements à gérer (evenements.gerer)
       parameters:
       - in: query
+        name: from
+        schema:
+          type: string
+          format: date
+        description: Début de période (jour inclus)
+      - in: query
         name: include_past
         schema:
           type: boolean
@@ -4301,6 +4431,12 @@ paths:
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date
+        description: Fin de période (jour inclus)
       tags:
       - agenda
       security:
@@ -4628,6 +4764,12 @@ paths:
       summary: File de traitement (actes.traiter)
       parameters:
       - in: query
+        name: assignee
+        schema:
+          type: string
+          minLength: 1
+        description: « me » (moi), « none » (à assigner) ou l'identifiant d'une personne
+      - in: query
         name: document_type
         schema:
           enum:
@@ -4666,6 +4808,37 @@ paths:
         schema:
           type: boolean
           default: false
+      - in: query
+        name: reason
+        schema:
+          enum:
+          - religious_marriage
+          - godparent
+          - catechism
+          - parish_file
+          - personal
+          - other
+          type: string
+          minLength: 1
+        description: |-
+          * `religious_marriage` - Mariage religieux
+          * `godparent` - Parrain / marraine
+          * `catechism` - Inscription catéchèse
+          * `parish_file` - Dossier paroissial
+          * `personal` - Usage personnel
+          * `other` - Autre
+      - in: query
+        name: received_from
+        schema:
+          type: string
+          format: date
+        description: Reçue à partir de (inclus)
+      - in: query
+        name: received_to
+        schema:
+          type: string
+          format: date
+        description: Reçue jusqu'au (inclus)
       - in: query
         name: search
         schema:
@@ -4767,11 +4940,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProcessorOutput'
           description: ''
-  /api/v1/staff/documents/{request_id}/logs/:
-    get:
-      operationId: v1_staff_documents_logs_list
+  /api/v1/staff/documents/{request_id}/assign/:
+    post:
+      operationId: staff_documents_assign
       description: À placer en premier dans les bases des vues V1.
-      summary: Journal des statuts
+      summary: Confier la demande à une personne de l'équipe (ou la remettre « à assigner
+        »)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessorOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/assignees/:
+    get:
+      operationId: staff_documents_assignees
+      description: À placer en premier dans les bases des vues V1.
+      summary: Personnes de l'équipe à qui confier la demande (actes.traiter sur la
+        paroisse)
       parameters:
       - in: path
         name: request_id
@@ -4790,7 +5000,70 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/StatusLog'
+                  $ref: '#/components/schemas/AssigneeOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/attachments/{attachment_id}/:
+    get:
+      operationId: staff_documents_attachment_content
+      description: |-
+        Ouverture d'une pièce jointe par son lien de consultation (onglet du navigateur, sans
+        en-tête d'authentification) : le jeton signé tient lieu d'accès, et le service revérifie
+        que la personne qu'il désigne traite toujours les actes de la paroisse.
+      summary: Consulter une pièce jointe du fidèle (lien à durée limitée)
+      parameters:
+      - in: path
+        name: attachment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: token
+        schema:
+          type: string
+        description: Jeton du lien de consultation
+        required: true
+      tags:
+      - documents
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '403':
+          description: No response body
+  /api/v1/staff/documents/{request_id}/logs/:
+    get:
+      operationId: v1_staff_documents_logs_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Journal des statuts (avec l'auteur)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessorStatusLog'
           description: ''
   /api/v1/staff/documents/{request_id}/notes/:
     get:
@@ -4952,6 +5225,18 @@ paths:
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: place
+        schema:
+          type: integer
+        description: Lieu de culte de l'annonce
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 1
+        description: Recherche dans le titre, le chapô et le texte
       - in: query
         name: status
         schema:
@@ -5172,6 +5457,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/StaffArticleOutput'
           description: ''
+  /api/v1/staff/news/sunday-sheet/:
+    get:
+      operationId: staff_news_sunday_sheet
+      description: |-
+        ``annonces.publier`` sur au moins un nœud (ou plateforme) ; le nœud précis est
+        vérifié par le service, et les objets hors portée répondent 404.
+      summary: 'Feuille d''annonces d''un dimanche (à imprimer) : annonces du nœud
+        et des nœuds parents'
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: 'Dimanche concerné (défaut : le dimanche à venir)'
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud (paroisse) de la feuille
+        required: true
+      tags:
+      - news
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SundaySheetOutput'
+          description: ''
 components:
   schemas:
     AccountDetailOutput:
@@ -5386,6 +5704,14 @@ components:
           type: string
           format: date
           nullable: true
+        cover_image_id:
+          type: integer
+          nullable: true
+          description: 'Bannière : fichier image téléversé via /files/upload/'
+        notify_followers:
+          type: boolean
+          default: true
+          description: Notifier les fidèles à la publication
       required:
       - category_id
       - content
@@ -5542,6 +5868,10 @@ components:
           format: date-time
           nullable: true
           description: 'Futur : publication programmée'
+        notify:
+          type: boolean
+          description: 'Notifier les fidèles (préférences et plage de silence respectées)
+            ; absent : choix enregistré'
     ArticleStatusEnum:
       enum:
       - draft
@@ -5560,6 +5890,28 @@ components:
         reason:
           type: string
           default: ''
+    AssignInput:
+      type: object
+      properties:
+        assignee_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Personne de l'équipe, ou null pour « à assigner »
+      required:
+      - assignee_id
+    AssigneeOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - full_name
+      - id
     AssignmentCreateInput:
       type: object
       properties:
@@ -5661,6 +6013,36 @@ components:
         * `active` - Active
         * `terminee` - Terminée
         * `annulee` - Annulée
+    AttachmentOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        content_type:
+          type: string
+        size:
+          type: integer
+          nullable: true
+          description: Octets ; null si le fichier est illisible
+        uploaded_at:
+          type: string
+          format: date-time
+        url:
+          type: string
+          description: Lien de consultation personnel, à durée limitée
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - content_type
+      - expires_at
+      - id
+      - name
+      - size
+      - uploaded_at
+      - url
     AttendanceInput:
       type: object
       properties:
@@ -5683,6 +6065,11 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        actor_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Prénom et nom de l'acteur ; null pour une action du système
         action:
           type: string
           maxLength: 80
@@ -5698,11 +6085,19 @@ components:
           readOnly: true
           nullable: true
         metadata: {}
+        ip:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Adresse du client, tronquée (IPv4 /24, IPv6 /48) ; null hors
+            requête
       required:
       - action
       - actor_id
+      - actor_name
       - at
       - id
+      - ip
       - node_id
       - target_id
       - target_type
@@ -6184,10 +6579,35 @@ components:
       enum:
       - verifie
       - rejete
+      - complement
       type: string
       description: |-
         * `verifie` - verifie
         * `rejete` - rejete
+        * `complement` - complement
+    DeclarationAttachmentOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        file_name:
+          type: string
+        file_type:
+          type: string
+        url:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Lien de téléchargement (présigné en stockage S3)
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created_at
+      - file_name
+      - file_type
+      - id
+      - url
     DeclarationInput:
       type: object
       properties:
@@ -6205,6 +6625,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        attachment_file_ids:
+          type: array
+          items:
+            type: integer
+          description: Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés
+            d'abord via /files/upload/
+          maxItems: 5
       required:
       - etat_de_vie
     DegreOrdreEnum:
@@ -6322,6 +6749,10 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
+          nullable: true
       required:
       - end_at
       - start_at
@@ -6372,17 +6803,46 @@ components:
           maximum: 2147483647
           minimum: 0
           nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Clôture des inscriptions
         registrations_count:
           type: integer
           readOnly: true
           default: 0
+        seats_taken:
+          type: integer
+          readOnly: true
+          default: 0
+          description: Places réservées (somme des personnes)
+        seats_remaining:
+          type: integer
+          nullable: true
+          readOnly: true
+          description: 'Vide : pas de jauge'
         is_full:
           type: boolean
           readOnly: true
+        registrations_open:
+          type: boolean
+          readOnly: true
+          description: Ni annulé, ni terminé, ni clos
         is_registered:
           type: boolean
           readOnly: true
           default: false
+        my_seats:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Mon inscription
+        my_note:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Ma remarque
         is_cancelled:
           type: boolean
           readOnly: true
@@ -6392,10 +6852,15 @@ components:
       - is_cancelled
       - is_full
       - is_registered
+      - my_note
+      - my_seats
       - node_id
       - node_name
       - place_id
       - registrations_count
+      - registrations_open
+      - seats_remaining
+      - seats_taken
       - start_at
       - title
     EventTypeEnum:
@@ -6883,6 +7348,9 @@ components:
         meditation_source:
           type: string
           maxLength: 255
+        fruit:
+          type: string
+          maxLength: 255
         audio_file:
           type: string
           format: uri
@@ -7046,6 +7514,55 @@ components:
       - id
       - name
       - type
+    NodeSettingsOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        phone:
+          type: string
+          title: Téléphone du secrétariat
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          title: E-mail du secrétariat
+          maxLength: 254
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+        secretariat_public:
+          type: boolean
+          title: Secrétariat publié
+          description: Téléphone, e-mail et horaires d'accueil affichés sur la fiche
+            publique.
+        acts_delay_days:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          title: Délai indicatif des actes (jours ouvrés)
+        acts_welcome_message:
+          type: string
+          title: Message d'accueil des demandes d'actes
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - office_hours
+      - updated_at
     NodeStatusEnum:
       enum:
       - en_fondation
@@ -7141,6 +7658,9 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        author_name:
+          type: string
+          readOnly: true
         content:
           type: string
         created_at:
@@ -7148,6 +7668,7 @@ components:
           format: date-time
       required:
       - author_id
+      - author_name
       - content
       - id
     NotificationOutput:
@@ -7266,6 +7787,20 @@ components:
       required:
       - id
       - office_type
+    OfficeHoursItem:
+      type: object
+      properties:
+        days:
+          type: string
+          description: Jours concernés, ex. « Lun. – ven. »
+          maxLength: 40
+        hours:
+          type: string
+          description: Heures, ex. « 9 h-12 h · 15 h 30-18 h » ou « Fermé »
+          maxLength: 120
+      required:
+      - days
+      - hours
     OfficeTypeOutput:
       type: object
       properties:
@@ -7522,6 +8057,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedPersonSearchOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonSearchOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedPersonStatusOutputList:
       type: object
       properties:
@@ -7541,6 +8102,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PersonStatusOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedPublicNodeOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicNodeOutput'
       required:
       - count
       - limit
@@ -7678,6 +8265,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedVerseOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerseOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     ParoisseSuivieInput:
       type: object
       properties:
@@ -7720,6 +8333,16 @@ components:
           type: string
           format: date
           nullable: true
+        place_id:
+          type: integer
+          nullable: true
+          description: 'Lieu de culte (vide : tout le nœud)'
+        cover_image_id:
+          type: integer
+          nullable: true
+          description: 'Bannière (vide : la retirer)'
+        notify_followers:
+          type: boolean
     PatchedAssignmentUpdateInput:
       type: object
       properties:
@@ -7753,6 +8376,10 @@ components:
           type: integer
           minimum: 1
           nullable: true
+        registration_closes_at:
+          type: string
+          format: date-time
+          nullable: true
     PatchedHomilieNoteInput:
       type: object
       properties:
@@ -7783,6 +8410,42 @@ components:
         phone:
           type: string
           nullable: true
+    PatchedNodeSettingsUpdateInput:
+      type: object
+      description: 'Champs « vie paroissiale » : modifiables avec ``horaires.gerer``
+        (ou ``structure.gerer``).'
+      properties:
+        address:
+          type: string
+          maxLength: 300
+        city:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          maxLength: 30
+          pattern: ^\+?[0-9 ().-]{6,30}$
+        email:
+          type: string
+          format: email
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+          maxItems: 7
+        secretariat_public:
+          type: boolean
+          description: Afficher téléphone, e-mail et horaires d'accueil sur la fiche
+            publique
+        acts_delay_days:
+          type: integer
+          maximum: 90
+          minimum: 1
+          nullable: true
+          description: Jours ouvrés
+        acts_welcome_message:
+          type: string
+          maxLength: 1000
     PatchedNodeUpdateInput:
       type: object
       properties:
@@ -7862,6 +8525,38 @@ components:
       - email
       - full_name
       - id
+    PersonSearchOutput:
+      type: object
+      description: Juste ce qu'il faut pour choisir la personne à nommer (jamais l'e-mail
+        en clair).
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          readOnly: true
+        email_masked:
+          type: string
+          readOnly: true
+        etat_de_vie:
+          type: string
+        degre_ordre:
+          type: string
+        statut_verification:
+          $ref: '#/components/schemas/StatutVerificationEnum'
+        incardination_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+      required:
+      - degre_ordre
+      - email_masked
+      - etat_de_vie
+      - full_name
+      - id
+      - incardination_node
+      - statut_verification
     PersonStatusOutput:
       type: object
       properties:
@@ -7871,14 +8566,24 @@ components:
         email:
           type: string
           format: email
+        full_name:
+          type: string
+          readOnly: true
+          description: Prénom et nom ; vide s'ils ne sont pas renseignés
         etat_de_vie:
           type: string
         degre_ordre:
           type: string
         statut_verification:
-          type: string
+          $ref: '#/components/schemas/StatutVerificationEnum'
         verification_note:
           type: string
+          description: Motif du refus ou du complément demandé
+        declared_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date de la dernière déclaration
         incardination_node:
           allOf:
           - $ref: '#/components/schemas/NodeRef'
@@ -7887,10 +8592,18 @@ components:
           allOf:
           - $ref: '#/components/schemas/NodeRef'
           nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeclarationAttachmentOutput'
+          readOnly: true
       required:
+      - attachments
+      - declared_at
       - degre_ordre
       - email
       - etat_de_vie
+      - full_name
       - id
       - incardination_node
       - institut_node
@@ -8153,6 +8866,19 @@ components:
           type: boolean
       required:
       - received
+    PriestOfficeOutput:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Code de l'office (cure, vicaire_paroissial, aumonier…)
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+          description: 'Libellé de l''office : Curé, Vicaire paroissial…'
+      required:
+      - code
+      - label
     ProcessorOutput:
       type: object
       description: 'Vue de la paroisse : identité complète, registre, lieu de retrait.'
@@ -8174,6 +8900,9 @@ components:
           maxLength: 255
         reason:
           $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
         reason_free:
           type: string
           maxLength: 255
@@ -8237,12 +8966,22 @@ components:
         history:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/ProcessorStatusLog'
           readOnly: true
         can_cancel:
           type: boolean
           readOnly: true
+        indicative_days:
+          type: integer
+          readOnly: true
+          description: Délai indicatif de la paroisse (jours)
+        estimated_ready_on:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: Mise à disposition estimée (indicative) ; null une fois l'acte
+            prêt ou la demande close
         created_at:
           type: string
           format: date-time
@@ -8264,23 +9003,37 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        assigned_to_name:
+          type: string
+          nullable: true
+          readOnly: true
         pickup_mode:
           $ref: '#/components/schemas/PickupModeEnum'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentOutput'
+          readOnly: true
       required:
       - assigned_to_id
+      - assigned_to_name
+      - attachments
       - can_cancel
       - contact_email
       - contact_phone
       - date_of_birth
       - document_type
       - document_type_label
+      - estimated_ready_on
       - father_last_name
       - history
       - id
+      - indicative_days
       - mother_last_name
       - pickup
       - place_of_birth
       - reason
+      - reason_label
       - reference
       - register
       - requester_first_names
@@ -8290,6 +9043,303 @@ components:
       - status_label
       - target_node
       - updated_at
+    ProcessorStatusLog:
+      type: object
+      description: 'Historique vu de la paroisse : auteur de chaque changement.'
+      properties:
+        from_status:
+          type: string
+          maxLength: 30
+        to_status:
+          type: string
+          maxLength: 30
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        changed_by_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        changed_by_name:
+          type: string
+          readOnly: true
+        by_requester:
+          type: boolean
+          readOnly: true
+          description: Changement fait par le fidèle lui-même
+      required:
+      - by_requester
+      - changed_by_id
+      - changed_by_name
+      - to_status
+    PublicActsInfo:
+      type: object
+      properties:
+        delay_days:
+          type: integer
+          nullable: true
+        welcome_message:
+          type: string
+      required:
+      - delay_days
+      - welcome_message
+    PublicClergy:
+      type: object
+      properties:
+        name:
+          type: string
+        office:
+          type: string
+          description: Libellé de l'office (Curé, Vicaire paroissial…)
+      required:
+      - name
+      - office
+    PublicNodeDetailOutput:
+      type: object
+      description: 'Fiche publique : ajoute le secrétariat (s''il est publié), le
+        clergé et l''accueil des demandes d''actes.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NodeTypeRef'
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        code:
+          type: string
+          maxLength: 64
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NodeStatusEnum'
+          title: Statut
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Latitude
+        lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Longitude
+        erected_at:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'érection
+        is_active_on_platform:
+          type: boolean
+          title: Active sur Jàngu Bi
+        located_in_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        depth:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        parent_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Identifiant du parent (null pour une racine).
+        has_children:
+          type: boolean
+          readOnly: true
+        parent_name:
+          type: string
+          nullable: true
+          readOnly: true
+        deanery_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Doyenné (null s'il n'y en a pas)
+        diocese_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Diocèse (null s'il n'y en a pas)
+        sunday_masses:
+          type: array
+          items:
+            type: string
+            format: time
+          readOnly: true
+          description: Heures des messes du prochain dimanche (aujourd'hui si c'est
+            dimanche), exceptions comprises
+        secretariat:
+          allOf:
+          - $ref: '#/components/schemas/PublicSecretariat'
+          nullable: true
+          readOnly: true
+          description: null tant que la paroisse ne l'a pas publié
+        clergy:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicClergy'
+          readOnly: true
+          description: Clercs titulaires d'un office actif sur ce nœud
+        acts:
+          allOf:
+          - $ref: '#/components/schemas/PublicActsInfo'
+          readOnly: true
+      required:
+      - acts
+      - clergy
+      - code
+      - deanery_name
+      - depth
+      - diocese_name
+      - has_children
+      - id
+      - located_in_id
+      - name
+      - parent_id
+      - parent_name
+      - secretariat
+      - sunday_masses
+      - type
+    PublicNodeOutput:
+      type: object
+      description: |-
+        Nœud de l'annuaire public : juridiction et messes du dimanche.
+
+        Contexte attendu (calculé en lot, pas de N+1) : ``lineage`` {chemin: nœud ancêtre},
+        ``sunday_masses`` {id du nœud: [heures]}.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NodeTypeRef'
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        code:
+          type: string
+          maxLength: 64
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NodeStatusEnum'
+          title: Statut
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Latitude
+        lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Longitude
+        erected_at:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'érection
+        is_active_on_platform:
+          type: boolean
+          title: Active sur Jàngu Bi
+        located_in_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        depth:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        parent_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Identifiant du parent (null pour une racine).
+        has_children:
+          type: boolean
+          readOnly: true
+        parent_name:
+          type: string
+          nullable: true
+          readOnly: true
+        deanery_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Doyenné (null s'il n'y en a pas)
+        diocese_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Diocèse (null s'il n'y en a pas)
+        sunday_masses:
+          type: array
+          items:
+            type: string
+            format: time
+          readOnly: true
+          description: Heures des messes du prochain dimanche (aujourd'hui si c'est
+            dimanche), exceptions comprises
+      required:
+      - code
+      - deanery_name
+      - depth
+      - diocese_name
+      - has_children
+      - id
+      - located_in_id
+      - name
+      - parent_id
+      - parent_name
+      - sunday_masses
+      - type
+    PublicSecretariat:
+      type: object
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+      required:
+      - email
+      - office_hours
+      - phone
     PushDeviceInput:
       type: object
       properties:
@@ -8330,6 +9380,14 @@ components:
         document_type_label:
           type: string
           readOnly: true
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
+        reason_free:
+          type: string
+          maxLength: 255
         status:
           $ref: '#/components/schemas/DocumentRequestStatusEnum'
         status_label:
@@ -8348,6 +9406,10 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        assigned_to_name:
+          type: string
+          nullable: true
+          readOnly: true
         age_days:
           type: integer
           nullable: true
@@ -8365,10 +9427,13 @@ components:
       required:
       - age_days
       - assigned_to_id
+      - assigned_to_name
       - document_type
       - document_type_label
       - id
       - is_overdue
+      - reason
+      - reason_label
       - reference
       - requester_name
       - status_label
@@ -8393,10 +9458,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/Availability'
           nullable: true
+        office:
+          allOf:
+          - $ref: '#/components/schemas/PriestOfficeOutput'
+          nullable: true
+          description: Office de la nomination active principale (paroisse suivie
+            d'abord)
       required:
       - availability
       - full_name
       - nodes
+      - office
       - user_id
     ReactInput:
       type: object
@@ -8488,6 +9560,20 @@ components:
         * `parish_file` - Dossier paroissial
         * `personal` - Usage personnel
         * `other` - Autre
+    RegisterInput:
+      type: object
+      properties:
+        seats:
+          type: integer
+          maximum: 10
+          minimum: 1
+          default: 1
+          description: Nombre de personnes (1 à 10)
+        note:
+          type: string
+          default: ''
+          description: Remarque, lue par les organisateurs
+          maxLength: 300
     RegisterRefInput:
       type: object
       properties:
@@ -8519,6 +9605,15 @@ components:
           type: string
           format: email
           readOnly: true
+        seats:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          title: Nombre de personnes
+        note:
+          type: string
+          title: Remarque
+          maxLength: 300
         registered_at:
           type: string
           format: date-time
@@ -8639,6 +9734,9 @@ components:
           maxLength: 255
         reason:
           $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
         reason_free:
           type: string
           maxLength: 255
@@ -8702,12 +9800,22 @@ components:
         history:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/StatusLog'
           readOnly: true
         can_cancel:
           type: boolean
           readOnly: true
+        indicative_days:
+          type: integer
+          readOnly: true
+          description: Délai indicatif de la paroisse (jours)
+        estimated_ready_on:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: Mise à disposition estimée (indicative) ; null une fois l'acte
+            prêt ou la demande close
         created_at:
           type: string
           format: date-time
@@ -8726,13 +9834,16 @@ components:
       - date_of_birth
       - document_type
       - document_type_label
+      - estimated_ready_on
       - father_last_name
       - history
       - id
+      - indicative_days
       - mother_last_name
       - pickup
       - place_of_birth
       - reason
+      - reason_label
       - reference
       - requester_first_names
       - requester_last_name
@@ -8761,7 +9872,7 @@ components:
           readOnly: true
         weekday:
           allOf:
-          - $ref: '#/components/schemas/RosaryDayWeekdayEnum'
+          - $ref: '#/components/schemas/WeekdayEnum'
           minimum: -2147483648
           maximum: 2147483647
         weekday_display:
@@ -8776,24 +9887,6 @@ components:
       - id
       - weekday
       - weekday_display
-    RosaryDayWeekdayEnum:
-      enum:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      type: integer
-      description: |-
-        * `0` - Monday
-        * `1` - Tuesday
-        * `2` - Wednesday
-        * `3` - Thursday
-        * `4` - Friday
-        * `5` - Saturday
-        * `6` - Sunday
     RuleCreateInput:
       type: object
       properties:
@@ -9183,6 +10276,17 @@ components:
         unpublish_reason:
           type: string
           title: Motif de dépublication
+        cover_image_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        cover_image_url:
+          type: string
+          nullable: true
+          readOnly: true
+        notify_followers:
+          type: boolean
+          title: Notifier les fidèles
         reads_count:
           type: integer
           readOnly: true
@@ -9198,6 +10302,8 @@ components:
       - author_name
       - category
       - content
+      - cover_image_id
+      - cover_image_url
       - id
       - reads_count
       - scope
@@ -9236,6 +10342,7 @@ components:
         * `bloque` - Bloqué
     StatusLog:
       type: object
+      description: 'Historique vu du fidèle : jamais le nom des membres de l''équipe.'
       properties:
         from_status:
           type: string
@@ -9250,6 +10357,75 @@ components:
           format: date-time
       required:
       - to_status
+    StatutVerificationEnum:
+      enum:
+      - declare
+      - verifie
+      - rejete
+      - complement
+      type: string
+      description: |-
+        * `declare` - Déclaré
+        * `verifie` - Vérifié
+        * `rejete` - Rejeté
+        * `complement` - Complément demandé
+    SundaySheetItemOutput:
+      type: object
+      description: 'Une annonce de la feuille : le texte à lire, sa portée et son
+        état.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        excerpt:
+          type: string
+          title: Résumé court
+          maxLength: 400
+        content:
+          type: string
+          title: Contenu
+        content_format:
+          allOf:
+          - $ref: '#/components/schemas/ContentFormatEnum'
+          title: Format du contenu
+        scope:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ArticleStatusEnum'
+          title: Statut
+      required:
+      - content
+      - id
+      - scope
+      - title
+    SundaySheetOutput:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        node_name:
+          type: string
+        sunday:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SundaySheetItemOutput'
+      required:
+      - items
+      - node_id
+      - node_name
+      - sunday
     SupplementInput:
       type: object
       properties:
@@ -9335,15 +10511,15 @@ components:
       - OTHER
       type: string
       description: |-
-        * `SIGN_OF_CROSS` - Sign of Cross
-        * `CREED` - Apostles Creed
-        * `OUR_FATHER` - Our Father
-        * `HAIL_MARY` - Hail Mary
-        * `GLORY_BE` - Glory Be
-        * `FATIMA` - Fatima Prayer
-        * `HOLY_QUEEN` - Hail Holy Queen
-        * `FINAL_PRAYER` - Final Prayer
-        * `OTHER` - Other
+        * `SIGN_OF_CROSS` - Signe de la croix
+        * `CREED` - Je crois en Dieu
+        * `OUR_FATHER` - Notre Père
+        * `HAIL_MARY` - Je vous salue Marie
+        * `GLORY_BE` - Gloire au Père
+        * `FATIMA` - Prière de Fatima
+        * `HOLY_QUEEN` - Salve Regina
+        * `FINAL_PRAYER` - Prière finale
+        * `OTHER` - Autre
     VerificationDecisionInput:
       type: object
       properties:
@@ -9352,6 +10528,7 @@ components:
         note:
           type: string
           default: ''
+          description: Motif, obligatoire pour « complement » ; transmis à la personne
           maxLength: 255
       required:
       - decision

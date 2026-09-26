@@ -31,11 +31,15 @@ UPDATABLE_FIELDS = (
     "content",
     "content_format",
     "category",
-    "cover_image",
+    "cover_image_id",
+    "place",
     "is_sunday_notice",
     "sunday_date",
     "content_type",
+    "notify_followers",
 )
+# Bannière : formats affichables par tous les navigateurs (le HEIC des iPhone ne l'est pas).
+COVER_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
 
 
 # --- Autorisation --------------------------------------------------------------------------
@@ -81,6 +85,25 @@ def _place_check(*, node: Node | None, place: PlaceOfWorship | None) -> None:
         raise ApplicationError("Le lieu de culte doit appartenir au nœud de l'annonce.", code="place_not_in_node")
 
 
+def _cover_image_get(*, file_id: int | None, user: Any) -> Any:
+    """Bannière d'annonce : un fichier du mécanisme ``apps/files``, envoyé par la personne
+    qui l'attache, entièrement téléversé, et une image affichable."""
+    if file_id is None:
+        return None
+    from apps.files.models import File
+
+    file_obj = File.objects.filter(pk=file_id).first()
+    if file_obj is None:
+        raise ApplicationError("Image introuvable.", {"file_id": file_id}, code="file_not_found")
+    if file_obj.uploaded_by_id is None or file_obj.uploaded_by_id != user.pk:
+        raise PermissionDeniedError("Cette image ne vous appartient pas.", code="file_forbidden")
+    if not file_obj.is_valid:
+        raise ApplicationError("L'image n'a pas fini d'être envoyée.", code="file_incomplete")
+    if (file_obj.file_type or "").split(";")[0].strip().lower() not in COVER_IMAGE_TYPES:
+        raise ApplicationError("La bannière doit être une image JPEG, PNG ou WebP.", code="cover_not_image")
+    return file_obj
+
+
 # --- Écritures -----------------------------------------------------------------------------
 
 
@@ -96,9 +119,10 @@ def article_create(
     content_type: str = Article.ContentType.ANNOUNCEMENT,
     content_format: str = Article.ContentFormat.TEXT,
     excerpt: str = "",
-    cover_image: Any = None,
+    cover_image_id: int | None = None,
     is_sunday_notice: bool = False,
     sunday_date: datetime.date | None = None,
+    notify_followers: bool = True,
 ) -> Article:
     """Crée un brouillon. La publication est une étape distincte (immédiate ou programmée)."""
     article_publish_check(user=author, node=node)
@@ -106,6 +130,7 @@ def article_create(
         raise ApplicationError("Ce type de contenu n'est pas disponible en V1.", code="content_type_frozen")
     _place_check(node=node, place=place)
     _sunday_check(is_sunday_notice=is_sunday_notice, sunday_date=sunday_date)
+    cover_image = _cover_image_get(file_id=cover_image_id, user=author)
 
     article = Article.objects.create(
         author=author,
@@ -123,6 +148,7 @@ def article_create(
         is_sunday_notice=is_sunday_notice,
         sunday_date=sunday_date,
         announcement_date=sunday_date,
+        notify_followers=notify_followers,
         status=Article.Status.DRAFT,
     )
     audit_log(actor=author, action="annonce.creation", target=article, node=node)
@@ -140,6 +166,15 @@ def article_update(*, article: Article, editor: Any, data: dict[str, Any]) -> Ar
     is_sunday = data.get("is_sunday_notice", article.is_sunday_notice)
     sunday_date = data.get("sunday_date", article.sunday_date)
     _sunday_check(is_sunday_notice=is_sunday, sunday_date=sunday_date)
+    data = dict(data)
+    if "place" in data:
+        _place_check(node=article.scope_node, place=data["place"])
+        article.scope_place = data.pop("place")
+    if "cover_image_id" in data:
+        cover_id = data.pop("cover_image_id")
+        # La bannière déjà en place (envoyée par un collègue) se renvoie telle quelle.
+        if cover_id != article.cover_image_id:
+            article.cover_image = _cover_image_get(file_id=cover_id, user=editor)
 
     for field, value in data.items():
         setattr(article, field, value)
@@ -153,13 +188,21 @@ def article_update(*, article: Article, editor: Any, data: dict[str, Any]) -> Ar
 
 
 @transaction.atomic
-def article_publish(*, article: Article, editor: Any, publish_at: datetime.datetime | None = None) -> Article:
-    """Publie tout de suite, ou programme la publication (EF-PAROI-03)."""
+def article_publish(
+    *, article: Article, editor: Any, publish_at: datetime.datetime | None = None, notify: bool | None = None
+) -> Article:
+    """Publie tout de suite, ou programme la publication (EF-PAROI-03).
+
+    ``notify`` : notifier les fidèles à la publication (``None`` : garder le choix enregistré).
+    Le choix est conservé sur l'article, donc appliqué aussi à une publication programmée."""
     article_publish_check(user=editor, node=article.scope_node)
     # Relu sous verrou : la tâche de publication programmée peut agir en même temps.
     article = Article.objects.select_for_update(of=("self",)).select_related("scope_node").get(pk=article.pk)
     if article.status == Article.Status.PUBLISHED:
         raise ApplicationError("L'article est déjà publié.", code="already_published")
+    if notify is not None and notify != article.notify_followers:
+        article.notify_followers = notify
+        article.save(update_fields=["notify_followers", "updated_at"])
     now = timezone.now()
     if publish_at is not None and publish_at > now:
         article.status = Article.Status.SCHEDULED
@@ -177,6 +220,8 @@ def _publish_now(*, article: Article, at: datetime.datetime) -> None:
     article.published_at = at
     article.publish_at = None
     article.save(update_fields=["status", "published_at", "publish_at", "updated_at"])
+    if not article.notify_followers:
+        return
     from apps.news.notifications import article_published_notify
 
     transaction.on_commit(lambda: article_published_notify(article_id=str(article.pk)))

@@ -103,6 +103,40 @@ def test_valid_token_authenticates_and_provisions_once(keys):
     assert get_user_model().objects.filter(email="awa@test.sn").count() == 1
 
 
+def test_phone_from_registration_fills_the_new_profile(keys):
+    """Attribut Keycloak « phone » (claim phone_number) saisi à l'inscription → Profile.phone."""
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="tel@test.sn", phone_number="77 412 36 58")).get(ME).status_code == 200
+
+    profile = get_user_model().objects.get(keycloak_sub=sub).profile
+    assert str(profile.phone) == "+221774123658"
+
+
+@pytest.mark.parametrize("raw", ["12345", "", "   ", "pas un numéro"])
+def test_invalid_or_missing_phone_is_ignored(keys, raw):
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="sans-tel@test.sn", phone_number=raw)).get(ME).status_code == 200
+
+    assert get_user_model().objects.get(keycloak_sub=sub).profile.phone is None
+
+
+def test_phone_from_token_never_overwrites_a_saved_phone(keys):
+    from apps.users.models import Profile
+
+    existing = BaseUserFactory.create(email="migre-tel@test.sn")
+    Profile.objects.update_or_create(user=existing, defaults={"phone": "+221781112233"})
+    empty = BaseUserFactory.create(email="migre-vide@test.sn")
+    Profile.objects.update_or_create(user=empty, defaults={"phone": None})
+
+    api(keys.token(email="migre-tel@test.sn", phone_number="+221 77 412 36 58")).get(ME)
+    api(keys.token(email="migre-vide@test.sn", phone_number="+221 77 412 36 58")).get(ME)
+
+    assert str(Profile.objects.get(user=existing).phone) == "+221781112233"
+    assert str(Profile.objects.get(user=empty).phone) == "+221774123658"
+
+
 @pytest.mark.parametrize(
     ("overrides", "reason"),
     [

@@ -165,12 +165,24 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--jb-primary); w
 .jb-form-register > * { grid-column: span 2; }
 .jb-form-register > .jb-group:has(#firstName) { grid-column: span 1; order: 1; }
 .jb-form-register > .jb-group:has(#lastName) { grid-column: span 1; order: 2; }
-.jb-form-register > .jb-group:has(#email) { order: 3; }
-.jb-form-register > .jb-group:has(#password) { order: 4; }
-.jb-form-register > .jb-group:has(#password-confirm) { order: 5; }
-.jb-form-register > .jb-group:not(:has(#firstName, #lastName, #email, #password, #password-confirm)) { order: 6; }
-.jb-form-register > .form-group { order: 7; }
-.jb-form-register > .jb-actions { order: 8; }
+.jb-form-register > .jb-group:has(#email) { grid-column: span 1; order: 3; }
+.jb-form-register > .jb-group:has(#phone) { grid-column: span 1; order: 4; }
+.jb-form-register > .jb-group:has(#password) { order: 5; }
+.jb-form-register > .jb-group:has(#password-confirm) { order: 6; }
+.jb-form-register > .jb-group:not(:has(#firstName, #lastName, #email, #phone, #password, #password-confirm)) { order: 7; }
+.jb-form-register > .form-group { order: 8; }
+.jb-form-register > .jb-actions { order: 9; }
+/* Téléphone mobile (PUB-Inscription-Compte) : l'indicatif +221 accolé au champ. Le texte
+   « avant » du profil utilisateur Keycloak (inputHelperTextBefore) sert de préfixe. */
+.jb-group:has(#phone) .jb-input-wrap { display: grid; grid-template-columns: auto minmax(0, 1fr); row-gap: 8px; }
+.jb-group:has(#phone) .jb-input-wrap > * { grid-column: 1 / -1; }
+.jb-group:has(#phone) #form-help-text-before-phone {
+  grid-column: 1; display: inline-flex; align-items: center; height: 48px; padding: 0 12px;
+  background: var(--jb-surface-2); border: 1px solid var(--jb-line-field); border-right: 0; border-radius: 2px 0 0 2px;
+  font-size: 13px; color: var(--jb-ink-2); font-variant-numeric: tabular-nums;
+}
+.jb-group:has(#phone) #phone { grid-column: 2; border-radius: 0 2px 2px 0; }
+.jb-group:has(#phone) #form-help-text-after-phone { font-size: 14px; }
 .jb-group { display: flex; flex-direction: column; gap: 8px; margin: 0; min-width: 0; }
 .jb-fieldset { border: 0; padding: 0; }
 .jb-label-wrap { display: flex; gap: 4px; align-items: baseline; font-size: 14px; }
@@ -264,7 +276,8 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--jb-primary); w
   .jb-main { padding: 32px 16px; }
 }
 @media (max-width: 560px) {
-  .jb-form-register > .jb-group:has(#firstName), .jb-form-register > .jb-group:has(#lastName) { grid-column: span 2; }
+  .jb-form-register > .jb-group:has(#firstName), .jb-form-register > .jb-group:has(#lastName),
+  .jb-form-register > .jb-group:has(#email), .jb-form-register > .jb-group:has(#phone) { grid-column: span 2; }
   .jb-rules { grid-template-columns: 1fr; }
   .jb-actions { flex-direction: column-reverse; align-items: stretch; }
   .jb-title { font-size: 34px; }

@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 from django.utils.text import slugify
 
 from apps.core.exceptions import ApplicationError
+from apps.hierarchy.audit import audit_log
 from apps.hierarchy.enums import NodeStatus, PlaceKind, ScheduleKind
 from apps.hierarchy.models import MassSchedule, Node, NodeType, PlaceOfWorship, ScheduleException
 
@@ -21,6 +22,17 @@ NODE_UPDATABLE_FIELDS = (
     "erected_at",
     "is_active_on_platform",
     "located_in",
+)
+# Vie paroissiale : modifiables avec horaires.gerer (le secrétariat), pas seulement structure.gerer.
+NODE_SETTINGS_FIELDS = (
+    "address",
+    "city",
+    "phone",
+    "email",
+    "office_hours",
+    "secretariat_public",
+    "acts_delay_days",
+    "acts_welcome_message",
 )
 PLACE_UPDATABLE_FIELDS = ("name", "kind", "is_main", "address", "city", "lat", "lng", "is_active")
 
@@ -111,6 +123,24 @@ def node_update(*, node: Node, data: dict[str, Any]) -> Node:
     for field, value in data.items():
         setattr(node, field, value)
     node.save(update_fields=[*data.keys(), "updated_at"] if data else None)
+    return node
+
+
+@transaction.atomic
+def node_settings_update(*, node: Node, data: dict[str, Any], actor: Any) -> Node:
+    """Paramètres du secrétariat (EF-PAROI) : coordonnées, accueil, délai et message des actes.
+
+    L'audit ne garde que la liste des champs modifiés, pas leurs valeurs."""
+    unknown = set(data) - set(NODE_SETTINGS_FIELDS)
+    if unknown:
+        raise ApplicationError("Champs non modifiables.", {"fields": sorted(unknown)}, code="field_not_updatable")
+    changed = sorted(field for field, value in data.items() if getattr(node, field) != value)
+    if not changed:
+        return node
+    for field in changed:
+        setattr(node, field, data[field])
+    node.save(update_fields=[*changed, "updated_at"])
+    audit_log(actor=actor, action="node.settings_update", target=node, node=node, metadata={"fields": changed})
     return node
 
 

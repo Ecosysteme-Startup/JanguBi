@@ -226,6 +226,11 @@ class DocumentSlaSetting(BaseModel):
     escalate_days = models.PositiveSmallIntegerField(_("relance de la paroisse (jours)"), default=7)
     requester_reminder_days = models.PositiveSmallIntegerField(_("relance du fidèle (jours)"), default=5)
     pickup_reminder_days = models.PositiveSmallIntegerField(_("rappel de retrait (jours)"), default=3)
+    # Délai annoncé au fidèle (« mise à disposition estimée »). Vide : réglage hérité, sinon
+    # DOCUMENTS_DEFAULT_INDICATIVE_DAYS. Indicatif, jamais un engagement.
+    indicative_days = models.PositiveSmallIntegerField(
+        _("délai indicatif annoncé au fidèle (jours)"), null=True, blank=True
+    )
 
     class Meta:
         verbose_name = _("Délais de traitement")

@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.mixins import ApiAuthMixin
-from apps.api.pagination import LimitOffsetPagination, get_paginated_response
+from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
 from apps.bible.editions import edition_filter
 from apps.bible.models import Book, Chapter, DailyText, Testament, Verse
 from apps.bible.serializers import (
@@ -154,10 +154,12 @@ class ChapterListApi(APIView):
 
 
 class VerseListApi(APIView):
-    """Returns list of verses for a specific chapter."""
+    """Versets d'un chapitre. Une page couvre un chapitre entier (le plus long, Ps 119, a
+    176 versets) : ``limit`` vaut 200 par défaut et au plus."""
 
     class Pagination(LimitOffsetPagination):
-        default_limit = 100
+        default_limit = 200
+        max_limit = 200
 
     class FilterSerializer(serializers.Serializer):
         excerpt = serializers.BooleanField(required=False, default=False)
@@ -167,12 +169,13 @@ class VerseListApi(APIView):
     @extend_schema(
         parameters=[
             FilterSerializer,
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Number of results to return per page.", required=False),
+            OpenApiParameter("limit", OpenApiTypes.INT, description="Versets par page : 200 par défaut et au plus (un chapitre entier).", required=False),
             OpenApiParameter("offset", OpenApiTypes.INT, description="The initial index from which to return the results.", required=False)
         ],
-        responses=VerseOutputSerializer(many=True),
+        responses=paginated_response_serializer(VerseOutputSerializer),
+        operation_id="v1_bible_books_chapters_verses_list",
         tags=["Bible"],
-        summary="List verses for a specific chapter"
+        summary="Versets d'un chapitre (le chapitre entier en une requête)"
     )
     @method_decorator(cache_page(60 * 60 * 6))
     def get(self, request, book_id, chapter_number):
