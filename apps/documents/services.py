@@ -479,9 +479,9 @@ class SlaResolver:
         # Délai annoncé au fidèle : celui que la paroisse règle elle-même (Paramètres,
         # Node.acts_delay_days) l'emporte, au même nœud, sur le réglage SLA hérité.
         indicative = {s.node.path: s.indicative_days for s in rows if s.indicative_days}
-        indicative.update(
-            Node.objects.filter(acts_delay_days__isnull=False).values_list("path", "acts_delay_days")
-        )
+        for path, days in Node.objects.filter(acts_delay_days__isnull=False).values_list("path", "acts_delay_days"):
+            if days:
+                indicative[path] = days
         self._indicative = sorted(indicative.items(), key=lambda item: len(item[0]), reverse=True)
         self._by_path = sorted(
             (
