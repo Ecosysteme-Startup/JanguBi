@@ -1,89 +1,101 @@
-/* Jàngu Bi · thème de connexion : bandeau liturgique et robustesse du mot de passe. */
+/* Jàngu Bi · thème de connexion : robustesse du mot de passe, confirmation recopiée,
+   coche « adresse valide », état vide du champ date. Amélioration progressive : sans
+   JavaScript, tous les champs restent visibles et le formulaire fonctionne. */
 (function () {
   'use strict';
 
-  var MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-  var DAYS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
-  var COLORS = { vert: 'Vert', violet: 'Violet', blanc: 'Blanc', rouge: 'Rouge', rose: 'Rose' };
-
-  function banner() {
-    var now = new Date();
-    var start = new Date(now.getFullYear(), 0, 0);
-    var dayNum = Math.floor((now - start) / 86400000);
-    var date = document.querySelector('[data-jb-date]');
-    var num = document.querySelector('[data-jb-daynum]');
-    if (date) date.textContent = DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()] + ' ' + now.getFullYear();
-    if (num) num.textContent = 'Jour ' + dayNum;
-
-    var api = document.body.getAttribute('data-api-url');
-    if (!api || !window.fetch) return;
-    fetch(api.replace(/\/$/, '') + '/liturgy/today/', { credentials: 'omit' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (day) {
-        if (!day || !day.calendar) return;
-        var slot = document.querySelector('[data-jb-celebration]');
-        if (slot) {
-          slot.textContent = '';
-          var label = document.createElement('span');
-          label.textContent = day.calendar.celebration;
-          var pill = document.createElement('span');
-          var color = day.calendar.color;
-          pill.className = 'jb-pill jb-lit-' + (COLORS[color] ? color : 'vert');
-          pill.title = 'Couleur liturgique du jour : ' + (COLORS[color] || 'Vert').toLowerCase();
-          pill.textContent = COLORS[color] || 'Vert';
-          slot.appendChild(label);
-          slot.appendChild(pill);
-          slot.hidden = false;
-        }
-        var refs = (day.readings || []).map(function (r) { return r.citation; }).filter(Boolean);
-        var link = document.querySelector('[data-jb-refs]');
-        if (link && refs.length) link.textContent = refs.join(' · ');
-      })
-      .catch(function () { /* hors ligne : la date suffit */ });
-  }
+  // Règles de la politique du realm (length(10), upperCase, lowerCase, digits) ; le symbole est un bonus.
+  var RULES = {
+    length: function (v) { return v.length >= 10; },
+    case: function (v) { return /[a-z]/.test(v) && /[A-Z]/.test(v); },
+    digit: function (v) { return /\d/.test(v); }
+  };
 
   function strength() {
     var input = document.querySelector('[data-jb-strength]');
     if (!input) return;
     var meter = document.querySelector('.jb-strength');
+    var bars = meter ? meter.querySelectorAll('.jb-bars span') : [];
     var label = document.querySelector('[data-jb-strength-label]');
-    var rules = {
-      length: function (v) { return v.length >= 10; },
-      case: function (v) { return /[a-z]/.test(v) && /[A-Z]/.test(v); },
-      digit: function (v) { return /\d/.test(v); },
-      symbol: function (v) { return /[^A-Za-z0-9]/.test(v); }
-    };
-    input.addEventListener('input', function () {
+    function update() {
       var v = input.value;
-      var score = 0;
-      Object.keys(rules).forEach(function (key) {
-        var ok = rules[key](v);
-        if (ok) score += 1;
+      var met = 0;
+      Object.keys(RULES).forEach(function (key) {
+        var ok = RULES[key](v);
+        if (ok) met += 1;
         var item = document.querySelector('[data-rule="' + key + '"]');
         if (item) item.classList.toggle('is-met', ok);
       });
-      if (meter) meter.setAttribute('data-level', v ? String(score) : '0');
-      if (label) {
-        var word = !v ? '' : score >= 4 ? label.dataset.strong : score >= 3 ? label.dataset.fair : label.dataset.weak;
-        label.textContent = word ? label.dataset.prefix + ' : ' + word : '';
+      var level = v ? met + (/[^A-Za-z0-9]/.test(v) ? 1 : 0) : 0;
+      var state = !v ? '' : met === 3 ? 'strong' : level >= 2 ? 'fair' : 'weak';
+      if (meter) {
+        meter.setAttribute('data-level', String(Math.min(level, 4)));
+        meter.setAttribute('data-state', state);
       }
+      for (var i = 0; i < bars.length; i += 1) bars[i].classList.toggle('is-on', i < level);
+      if (label) label.textContent = state ? label.dataset[state === 'strong' ? 'strong' : state === 'fair' ? 'fair' : 'weak'] : '';
+    }
+    input.addEventListener('input', update);
+    update();
+  }
+
+  // Keycloak exige « password-confirm » : l'œil sert de vérification, la confirmation est recopiée.
+  function confirmCopy() {
+    var box = document.querySelector('[data-jb-confirm]');
+    var pw = document.getElementById('password');
+    var confirm = document.getElementById('password-confirm');
+    if (!box || !pw || !confirm) return;
+    box.classList.add('jb-sr');
+    box.setAttribute('aria-hidden', 'true');
+    confirm.setAttribute('tabindex', '-1');
+    box.querySelectorAll('button').forEach(function (b) { b.setAttribute('tabindex', '-1'); });
+    var sync = function () { confirm.value = pw.value; };
+    pw.addEventListener('input', sync);
+    var form = pw.form;
+    if (form) form.addEventListener('submit', sync);
+    sync();
+  }
+
+  function validMarks() {
+    document.querySelectorAll('[data-jb-valid]').forEach(function (wrap) {
+      var input = wrap.querySelector('input');
+      if (!input) return;
+      var update = function () {
+        var ok = !!input.value && input.validity.valid && input.getAttribute('aria-invalid') !== 'true';
+        wrap.classList.toggle('is-valid', ok);
+      };
+      input.addEventListener('input', function () {
+        input.removeAttribute('aria-invalid');
+        update();
+      });
+      update();
     });
   }
 
-  // Téléphone mobile : le champ annonce son indicatif (+221), son aide et son erreur.
-  function phone() {
-    var input = document.getElementById('phone');
-    if (!input) return;
-    if (!input.getAttribute('autocomplete')) input.setAttribute('autocomplete', 'tel-national');
-    var ids = ['form-help-text-before-phone', 'input-error-phone', 'form-help-text-after-phone'].filter(function (id) {
-      return document.getElementById(id);
+  function dates() {
+    document.querySelectorAll('[data-jb-date]').forEach(function (input) {
+      var update = function () { input.classList.toggle('jb-date-empty', !input.value); };
+      input.addEventListener('input', update);
+      input.addEventListener('change', update);
+      update();
     });
-    if (ids.length) input.setAttribute('aria-describedby', ids.join(' '));
+  }
+
+  // Un seul envoi par formulaire (double clic, réseau lent).
+  function singleSubmit() {
+    document.querySelectorAll('form.jb-form').forEach(function (form) {
+      form.addEventListener('submit', function () {
+        var btn = form.querySelector('button[type="submit"].jb-btn-primary');
+        if (btn) window.setTimeout(function () { btn.disabled = true; }, 0);
+      });
+    });
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    banner();
     strength();
-    phone();
+    confirmCopy();
+    validMarks();
+    dates();
+    singleSubmit();
   });
 })();
