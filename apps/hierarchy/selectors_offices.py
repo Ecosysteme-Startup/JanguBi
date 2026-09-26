@@ -130,7 +130,7 @@ def declaration_attachments_prefetch() -> Prefetch:
 def audit_list(*, actor: Any, filters: dict[str, Any] | None = None) -> QuerySet[AuditEvent]:
     """Journal visible : tout pour la plateforme, sinon les événements des nœuds où ``audit.voir`` (EF-DASH-04)."""
     filters = filters or {}
-    qs = AuditEvent.objects.select_related("actor", "node")
+    qs = AuditEvent.objects.select_related("actor", "actor__profile", "node")
     if not authz.peut(actor, "audit.voir", None):
         qs = qs.filter(node__in=authz.noeuds_autorises(actor, "audit.voir"))
     if node_id := filters.get("node"):

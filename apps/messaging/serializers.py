@@ -225,11 +225,19 @@ class AvailabilitySerializer(serializers.ModelSerializer):
         return value
 
 
+class PriestOfficeOutputSerializer(serializers.Serializer):
+    code = serializers.SlugField(help_text="Code de l'office (cure, vicaire_paroissial, aumonier…)")
+    label = serializers.CharField(help_text="Libellé de l'office : Curé, Vicaire paroissial…")  # type: ignore[assignment]  # drf-stubs: champ « label » vs Field.label
+
+
 class ReachablePriestOutputSerializer(serializers.Serializer):
     user_id = serializers.UUIDField(source="user.id")
     full_name = serializers.SerializerMethodField()
     nodes = serializers.SerializerMethodField()
     availability = AvailabilitySerializer(allow_null=True)
+    office = PriestOfficeOutputSerializer(
+        allow_null=True, help_text="Office de la nomination active principale (paroisse suivie d'abord)"
+    )
 
     def get_full_name(self, row) -> str:
         profile = getattr(row["user"], "profile", None)

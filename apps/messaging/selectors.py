@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
 from django.db import models
@@ -142,13 +142,46 @@ def priests_reachable_for(*, user: BaseUser) -> list[dict]:
             if priest.pk != user.pk:
                 rows.setdefault(priest.pk, {"user": priest, "nodes": []})["nodes"].append(node)
     availabilities = {a.user_id: a for a in MessagingAvailability.objects.filter(user_id__in=list(rows))}
+    offices = _principal_offices(person_ids=list(rows), nodes=targets, parish=parish)
     result = []
     for row in rows.values():
         availability = availabilities.get(row["user"].pk)
         if availability is not None and not availability.accepts_new_conversations:
             continue
-        result.append({**row, "availability": availability})
+        result.append({**row, "availability": availability, "office": offices.get(row["user"].pk)})
     return sorted(result, key=lambda r: r["user"].email)
+
+
+def _principal_offices(*, person_ids: list, nodes: list, parish: Any) -> dict:
+    """Office de la nomination active principale de chaque prêtre, parmi les nœuds où il est
+    joignable : d'abord la paroisse suivie, puis un office à titulaire unique (curé,
+    aumônier) avant un office partagé (vicaire), puis la nomination la plus ancienne."""
+    from django.utils import timezone
+
+    from apps.hierarchy.enums import AssignmentStatus, Cardinality
+    from apps.hierarchy.models import OfficeAssignment
+
+    if not person_ids:
+        return {}
+    today = timezone.localdate()
+    assignments = (
+        OfficeAssignment.objects.filter(
+            person_id__in=person_ids,
+            node__in=nodes,
+            status=AssignmentStatus.ACTIVE,
+            start_date__lte=today,
+            office_type__capabilities__code="messagerie.recevoir_fideles",
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .select_related("office_type")
+    )
+    offices: dict = {}
+    for a in sorted(
+        assignments,
+        key=lambda a: (a.node_id != parish.pk, a.office_type.cardinality != Cardinality.ONE, a.start_date),
+    ):
+        offices.setdefault(a.person_id, a.office_type)
+    return offices
 
 
 def block_list(*, user: BaseUser) -> QuerySet[MessageBlock]:

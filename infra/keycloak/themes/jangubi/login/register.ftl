@@ -1,7 +1,10 @@
 <#import "template.ftl" as layout>
 <#import "user-profile-commons.ftl" as userProfileCommons>
 <#import "register-commons.ftl" as registerCommons>
-<#-- PUB-Inscription-Compte : étape 1 sur 3 (compte). Les étapes 2 et 3 vivent dans l'application (/bienvenue). -->
+<#-- PUB-Inscription-Compte : étape 1 sur 3 (compte). Les étapes 2 et 3 vivent dans l'application (/bienvenue).
+     Les champs viennent du profil utilisateur déclaratif (realm-jangubi.json) : prénom, nom, e-mail et
+     « Téléphone mobile » (attribut facultatif « phone », jeton : phone_number). L'indicatif +221 est le
+     texte « avant » du champ, mis en forme de préfixe par jangubi.css. -->
 <@layout.registrationLayout displayMessage=messagesPerField.exists('global') displayRequiredFields=true aside="register"; section>
     <#if section = "stepper">
         <ol class="jb-stepper" aria-label="Étapes de l'inscription">
