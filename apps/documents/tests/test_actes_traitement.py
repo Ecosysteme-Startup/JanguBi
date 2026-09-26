@@ -341,6 +341,21 @@ def test_indicative_days_come_from_the_closest_setting(world):
     assert view["indicative_days"] == 10 and view["estimated_ready_on"] == datetime.date(2026, 10, 1)
 
 
+def test_parish_delay_setting_wins_over_inherited_sla(world):
+    # Arrange : le diocèse annonce 10 jours, la paroisse règle elle-même 4 jours (Paramètres).
+    DocumentSlaSetting.objects.create(node=world.dakar, indicative_days=10)
+    world.saint_dominique.acts_delay_days = 4
+    world.saint_dominique.save(update_fields=["acts_delay_days"])
+
+    # Act
+    with freeze_time("2026-09-21 10:00:00"):
+        r = submit(world)
+        view = client_for(world.fidele).get(f"/api/v1/documents/requests/{r.pk}/").data
+
+    # Assert
+    assert view["indicative_days"] == 4 and view["estimated_ready_on"] == datetime.date(2026, 9, 25)
+
+
 def test_indicative_date_is_never_in_the_past_and_disappears_once_ready(world):
     with freeze_time("2026-09-01 10:00:00"):
         r = submit(world)

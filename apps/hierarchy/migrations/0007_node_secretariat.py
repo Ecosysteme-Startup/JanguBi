@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('hierarchy', '0005_drop_legacy_ids'),
+        ('hierarchy', '0006_declaration_attachment'),
     ]
 
     operations = [
