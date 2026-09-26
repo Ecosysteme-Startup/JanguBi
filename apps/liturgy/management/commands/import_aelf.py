@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.liturgy.tasks import bulk_import_task
@@ -24,14 +25,15 @@ class Command(BaseCommand):
         parser.add_argument(
             "--zones",
             nargs="+",
-            default=["romain"],
-            help="List of zones (e.g. romain afrique france)",
+            default=None,
+            help="Zones (ex. afrique romain france). Par défaut : LITURGY_ZONE, la zone servie par l'API.",
         )
 
     def handle(self, *args, **options):
         start_date = options["start"]
         end_date = options["end"]
-        zones = options["zones"]
+        # Sans --zones, on importe la zone que l'API sert : sinon les lectures restent introuvables.
+        zones = options["zones"] or [settings.LITURGY_ZONE]
 
         # Validate format roughly
         try:

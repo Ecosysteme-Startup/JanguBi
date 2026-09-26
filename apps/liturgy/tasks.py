@@ -2,6 +2,7 @@ import logging
 from datetime import date, timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def daily_sync_task(self, date_str: str | None = None, zones: list[str] | None =
         # apps/liturgy/apis.py). Avec "romain" seul, le cache nocturne n'était
         # jamais utilisé : chaque requête retombait sur un fetch AELF live
         # (9 appels HTTP, retries 5×15 s) dans le cycle requête → lenteur/500.
-        zones = ["afrique"]
+        zones = [settings.LITURGY_ZONE]
 
     logger.info(f"Starting scheduled daily AELF sync for dates: {date_str} in zones: {zones}")
 

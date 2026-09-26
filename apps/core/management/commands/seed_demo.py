@@ -8,6 +8,7 @@ rattache à la personne existante (ADR-015). ``--reset`` retire tout ce qui a é
 import datetime
 from typing import Any
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
@@ -21,9 +22,20 @@ PEOPLE = [
     ("doyen", "Augustin", "Ndiaye", "clerc", "pretre", datetime.date(1965, 8, 28)),
     ("fidele", "Awa", "Diop", "laic", "aucun", datetime.date(1995, 3, 4)),
     ("fidele2", "Moussa", "Mendy", "laic", "aucun", datetime.date(1990, 11, 1)),
+    # Mineur : la messagerie lui est refusée (RG-13), avec explication.
+    ("mineur", "Fatou", "Sène", "laic", "aucun", datetime.date(2012, 5, 10)),
+    ("chancelier", "Théodore", "Diatta", "clerc", "pretre", datetime.date(1968, 1, 25)),
+    # Administrateur paroissial (qualité de l'office « cure ») d'une seconde paroisse de démonstration.
+    ("admin_paroissial", "Robert", "Sagna", "clerc", "pretre", datetime.date(1978, 10, 4)),
+    # Administrateur plateforme : rôle de realm Keycloak `platform_admin`, aucune nomination.
+    ("plateforme", "Mariama", "Ba", "laic", "aucun", datetime.date(1988, 2, 14)),
 ]
-OFFICES = [("cure", "cure", "parish"), ("vicaire", "vicaire_paroissial", "parish"),
-           ("secretaire", "secretaire_paroissial", "parish"), ("doyen", "doyen", "deanery")]  # fmt: skip
+# (personne, office, où, qualité)
+OFFICES = [("cure", "cure", "parish", "cure"), ("vicaire", "vicaire_paroissial", "parish", ""),
+           ("secretaire", "secretaire_paroissial", "parish", ""), ("doyen", "doyen", "deanery", ""),
+           ("chancelier", "chancelier", "diocese", ""),
+           ("admin_paroissial", "cure", "parish2", "administrateur")]  # fmt: skip
+SECOND_PARISH_CODE = "DEMO-STE-THERESE"
 
 
 class Command(BaseCommand):
@@ -62,7 +74,7 @@ class Command(BaseCommand):
                     "degre_ordre": degre,
                     "statut_verification": "verifie",
                     "paroisse_suivie": parish,
-                    "consent_version": "demo",
+                    "consent_version": settings.CONSENT_CURRENT_VERSION,
                     "consent_at": timezone.now(),
                 },
             )
@@ -79,15 +91,38 @@ class Command(BaseCommand):
         from apps.hierarchy.models import OfficeAssignment, OfficeType
 
         deanery = parish.get_parent()
-        for key, office_code, where in OFFICES:
-            node = parish if where == "parish" else deanery
+        diocese = next(n for n in reversed(parish.get_ancestors()) if n.type.code == "diocese")
+        nodes = {"parish": parish, "deanery": deanery, "diocese": diocese, "parish2": self._second_parish(deanery)}
+        for key, office_code, where, quality in OFFICES:
             OfficeAssignment.objects.get_or_create(
                 person=people[key],
                 office_type=OfficeType.objects.get(code=office_code),
-                node=node,
-                defaults={"start_date": datetime.date(2024, 9, 1), "status": "active", "note": "Démonstration"},
+                node=nodes[where],
+                defaults={
+                    "start_date": datetime.date(2024, 9, 1),
+                    "status": "active",
+                    "note": "Démonstration",
+                    "quality": quality,
+                },
             )
             authz.invalidate_user(people[key].pk)
+
+    def _second_parish(self, deanery: Any) -> Any:
+        from apps.hierarchy.models import Node, NodeType
+        from apps.hierarchy.services import node_create
+
+        existing = Node.objects.filter(code=SECOND_PARISH_CODE).first()
+        if existing is not None:
+            return existing
+        return node_create(
+            node_type=NodeType.objects.get(code="paroisse"),
+            name="Sainte-Thérèse de Grand-Dakar",
+            parent=deanery,
+            code=SECOND_PARISH_CODE,
+            city="Dakar",
+            address="Grand-Dakar",
+            is_active_on_platform=True,
+        )
 
     def _content(self, people: dict[str, Any], parish: Any) -> None:
         from apps.agenda.models import Event
@@ -167,7 +202,7 @@ class Command(BaseCommand):
         from apps.agenda.models import Event
         from apps.confessions.models import ConfessionSlot, ConfessionSlotRule
         from apps.documents.models import DocumentRequest
-        from apps.hierarchy.models import OfficeAssignment
+        from apps.hierarchy.models import Node, OfficeAssignment
         from apps.news.models import Article
         from apps.users.models import BaseUser
 
@@ -179,6 +214,7 @@ class Command(BaseCommand):
             Article.objects.filter(author__in=people).delete()
             DocumentRequest.objects.filter(requester__in=people).delete()
             OfficeAssignment.objects.filter(person__in=people).delete()
+            Node.objects.filter(code=SECOND_PARISH_CODE).delete()
             count = people.count()
             people.delete()
         self.stdout.write(self.style.SUCCESS(f"{count} compte(s) de démonstration supprimé(s)."))
