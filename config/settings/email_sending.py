@@ -12,7 +12,8 @@ if EMAIL_SENDING_STRATEGY == EmailSendingStrategy.LOCAL:
 
 if EMAIL_SENDING_STRATEGY == EmailSendingStrategy.MAILHOG:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = env("MAILHOG_HOST", default="mailhog")
+    # Stratégie « mailhog » = SMTP local sans authentification ; en dev, le conteneur est Mailpit.
+    EMAIL_HOST = env("MAILHOG_HOST", default="mailpit")
     EMAIL_PORT = env.int("MAILHOG_PORT", default=1025)
     EMAIL_USE_TLS = False
     EMAIL_USE_SSL = False
