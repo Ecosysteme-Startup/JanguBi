@@ -13,7 +13,7 @@ from apps.documents.services import SLA_KEY_BY_STATUS, SlaResolver
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 
-_RELATED = ("requester", "assigned_to", "target_node", "target_node__type", "pickup_place")
+_RELATED = ("requester", "assigned_to", "assigned_to__profile", "target_node", "target_node__type", "pickup_place")
 
 
 # --- Fidèle -------------------------------------------------------------------------------
@@ -69,6 +69,19 @@ def queue_for(*, user: Any, filters: dict[str, Any] | None = None) -> QuerySet[D
             | Q(requester_last_name__icontains=search)
             | Q(requester_first_names__icontains=search)
         )
+    if reason := filters.get("reason"):
+        qs = qs.filter(reason=reason)
+    assignee = filters.get("assignee")
+    if assignee == "me":
+        qs = qs.filter(assigned_to=user)
+    elif assignee == "none":
+        qs = qs.filter(assigned_to__isnull=True)
+    elif assignee:
+        qs = qs.filter(assigned_to_id=assignee)
+    if received_from := filters.get("received_from"):
+        qs = qs.filter(created_at__date__gte=received_from)
+    if received_to := filters.get("received_to"):
+        qs = qs.filter(created_at__date__lte=received_to)
     if filters.get("overdue"):
         qs = qs.filter(pk__in=overdue_ids(qs))
     return qs.order_by("-created_at")
@@ -92,8 +105,16 @@ def request_get_for_processor(*, user: Any, request_id: Any) -> DocumentRequest:
         return (
             queue_for(user=user)
             .prefetch_related(
-                Prefetch("status_logs", queryset=DocumentRequestStatusLog.objects.select_related("changed_by").order_by("created_at")),
-                Prefetch("attachments", queryset=DocumentRequestAttachment.objects.select_related("file")),
+                Prefetch(
+                    "status_logs",
+                    queryset=DocumentRequestStatusLog.objects.select_related("changed_by", "changed_by__profile").order_by(
+                        "created_at"
+                    ),
+                ),
+                Prefetch(
+                    "attachments",
+                    queryset=DocumentRequestAttachment.objects.select_related("file").order_by("created_at"),
+                ),
             )
             .get(pk=request_id)
         )
@@ -109,11 +130,27 @@ def status_counts(*, queryset: QuerySet[DocumentRequest]) -> dict[str, Any]:
 
 
 def internal_notes(*, request_obj: DocumentRequest) -> QuerySet[InternalNote]:
-    return InternalNote.objects.filter(request=request_obj).select_related("author").order_by("created_at")
+    return InternalNote.objects.filter(request=request_obj).select_related("author", "author__profile").order_by("created_at")
 
 
 def status_logs(*, request_obj: DocumentRequest) -> QuerySet[DocumentRequestStatusLog]:
-    return DocumentRequestStatusLog.objects.filter(request=request_obj).select_related("changed_by").order_by("created_at")
+    return (
+        DocumentRequestStatusLog.objects.filter(request=request_obj)
+        .select_related("request", "changed_by", "changed_by__profile")
+        .order_by("created_at")
+    )
+
+
+def assignees_for(*, request_obj: DocumentRequest) -> QuerySet[Any]:
+    """Équipe à qui confier la demande : titulaires d'``actes.traiter`` sur la paroisse même."""
+    from apps.hierarchy.selectors_offices import capability_holders
+
+    return (
+        capability_holders(node=request_obj.target_node, capability="actes.traiter", direct_only=True)
+        .filter(is_active=True)
+        .select_related("profile")
+        .order_by("profile__last_name", "profile__first_name", "email")
+    )
 
 
 # --- SLA ------------------------------------------------------------------------------------

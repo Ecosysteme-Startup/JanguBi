@@ -4628,6 +4628,12 @@ paths:
       summary: File de traitement (actes.traiter)
       parameters:
       - in: query
+        name: assignee
+        schema:
+          type: string
+          minLength: 1
+        description: « me » (moi), « none » (à assigner) ou l'identifiant d'une personne
+      - in: query
         name: document_type
         schema:
           enum:
@@ -4666,6 +4672,37 @@ paths:
         schema:
           type: boolean
           default: false
+      - in: query
+        name: reason
+        schema:
+          enum:
+          - religious_marriage
+          - godparent
+          - catechism
+          - parish_file
+          - personal
+          - other
+          type: string
+          minLength: 1
+        description: |-
+          * `religious_marriage` - Mariage religieux
+          * `godparent` - Parrain / marraine
+          * `catechism` - Inscription catéchèse
+          * `parish_file` - Dossier paroissial
+          * `personal` - Usage personnel
+          * `other` - Autre
+      - in: query
+        name: received_from
+        schema:
+          type: string
+          format: date
+        description: Reçue à partir de (inclus)
+      - in: query
+        name: received_to
+        schema:
+          type: string
+          format: date
+        description: Reçue jusqu'au (inclus)
       - in: query
         name: search
         schema:
@@ -4767,11 +4804,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProcessorOutput'
           description: ''
-  /api/v1/staff/documents/{request_id}/logs/:
-    get:
-      operationId: v1_staff_documents_logs_list
+  /api/v1/staff/documents/{request_id}/assign/:
+    post:
+      operationId: staff_documents_assign
       description: À placer en premier dans les bases des vues V1.
-      summary: Journal des statuts
+      summary: Confier la demande à une personne de l'équipe (ou la remettre « à assigner
+        »)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AssignInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessorOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/assignees/:
+    get:
+      operationId: staff_documents_assignees
+      description: À placer en premier dans les bases des vues V1.
+      summary: Personnes de l'équipe à qui confier la demande (actes.traiter sur la
+        paroisse)
       parameters:
       - in: path
         name: request_id
@@ -4790,7 +4864,70 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/StatusLog'
+                  $ref: '#/components/schemas/AssigneeOutput'
+          description: ''
+  /api/v1/staff/documents/{request_id}/attachments/{attachment_id}/:
+    get:
+      operationId: staff_documents_attachment_content
+      description: |-
+        Ouverture d'une pièce jointe par son lien de consultation (onglet du navigateur, sans
+        en-tête d'authentification) : le jeton signé tient lieu d'accès, et le service revérifie
+        que la personne qu'il désigne traite toujours les actes de la paroisse.
+      summary: Consulter une pièce jointe du fidèle (lien à durée limitée)
+      parameters:
+      - in: path
+        name: attachment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: token
+        schema:
+          type: string
+        description: Jeton du lien de consultation
+        required: true
+      tags:
+      - documents
+      responses:
+        '200':
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+          description: ''
+        '403':
+          description: No response body
+  /api/v1/staff/documents/{request_id}/logs/:
+    get:
+      operationId: v1_staff_documents_logs_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Journal des statuts (avec l'auteur)
+      parameters:
+      - in: path
+        name: request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcessorStatusLog'
           description: ''
   /api/v1/staff/documents/{request_id}/notes/:
     get:
@@ -5560,6 +5697,28 @@ components:
         reason:
           type: string
           default: ''
+    AssignInput:
+      type: object
+      properties:
+        assignee_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Personne de l'équipe, ou null pour « à assigner »
+      required:
+      - assignee_id
+    AssigneeOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          readOnly: true
+      required:
+      - full_name
+      - id
     AssignmentCreateInput:
       type: object
       properties:
@@ -5661,6 +5820,36 @@ components:
         * `active` - Active
         * `terminee` - Terminée
         * `annulee` - Annulée
+    AttachmentOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        content_type:
+          type: string
+        size:
+          type: integer
+          nullable: true
+          description: Octets ; null si le fichier est illisible
+        uploaded_at:
+          type: string
+          format: date-time
+        url:
+          type: string
+          description: Lien de consultation personnel, à durée limitée
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - content_type
+      - expires_at
+      - id
+      - name
+      - size
+      - uploaded_at
+      - url
     AttendanceInput:
       type: object
       properties:
@@ -7141,6 +7330,9 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        author_name:
+          type: string
+          readOnly: true
         content:
           type: string
         created_at:
@@ -7148,6 +7340,7 @@ components:
           format: date-time
       required:
       - author_id
+      - author_name
       - content
       - id
     NotificationOutput:
@@ -8174,6 +8367,9 @@ components:
           maxLength: 255
         reason:
           $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
         reason_free:
           type: string
           maxLength: 255
@@ -8237,12 +8433,22 @@ components:
         history:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/ProcessorStatusLog'
           readOnly: true
         can_cancel:
           type: boolean
           readOnly: true
+        indicative_days:
+          type: integer
+          readOnly: true
+          description: Délai indicatif de la paroisse (jours)
+        estimated_ready_on:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: Mise à disposition estimée (indicative) ; null une fois l'acte
+            prêt ou la demande close
         created_at:
           type: string
           format: date-time
@@ -8264,23 +8470,37 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        assigned_to_name:
+          type: string
+          nullable: true
+          readOnly: true
         pickup_mode:
           $ref: '#/components/schemas/PickupModeEnum'
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentOutput'
+          readOnly: true
       required:
       - assigned_to_id
+      - assigned_to_name
+      - attachments
       - can_cancel
       - contact_email
       - contact_phone
       - date_of_birth
       - document_type
       - document_type_label
+      - estimated_ready_on
       - father_last_name
       - history
       - id
+      - indicative_days
       - mother_last_name
       - pickup
       - place_of_birth
       - reason
+      - reason_label
       - reference
       - register
       - requester_first_names
@@ -8290,6 +8510,38 @@ components:
       - status_label
       - target_node
       - updated_at
+    ProcessorStatusLog:
+      type: object
+      description: 'Historique vu de la paroisse : auteur de chaque changement.'
+      properties:
+        from_status:
+          type: string
+          maxLength: 30
+        to_status:
+          type: string
+          maxLength: 30
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        changed_by_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        changed_by_name:
+          type: string
+          readOnly: true
+        by_requester:
+          type: boolean
+          readOnly: true
+          description: Changement fait par le fidèle lui-même
+      required:
+      - by_requester
+      - changed_by_id
+      - changed_by_name
+      - to_status
     PushDeviceInput:
       type: object
       properties:
@@ -8330,6 +8582,14 @@ components:
         document_type_label:
           type: string
           readOnly: true
+        reason:
+          $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
+        reason_free:
+          type: string
+          maxLength: 255
         status:
           $ref: '#/components/schemas/DocumentRequestStatusEnum'
         status_label:
@@ -8348,6 +8608,10 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        assigned_to_name:
+          type: string
+          nullable: true
+          readOnly: true
         age_days:
           type: integer
           nullable: true
@@ -8365,10 +8629,13 @@ components:
       required:
       - age_days
       - assigned_to_id
+      - assigned_to_name
       - document_type
       - document_type_label
       - id
       - is_overdue
+      - reason
+      - reason_label
       - reference
       - requester_name
       - status_label
@@ -8639,6 +8906,9 @@ components:
           maxLength: 255
         reason:
           $ref: '#/components/schemas/ReasonEnum'
+        reason_label:
+          type: string
+          readOnly: true
         reason_free:
           type: string
           maxLength: 255
@@ -8702,12 +8972,22 @@ components:
         history:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/StatusLog'
           readOnly: true
         can_cancel:
           type: boolean
           readOnly: true
+        indicative_days:
+          type: integer
+          readOnly: true
+          description: Délai indicatif de la paroisse (jours)
+        estimated_ready_on:
+          type: string
+          format: date
+          nullable: true
+          readOnly: true
+          description: Mise à disposition estimée (indicative) ; null une fois l'acte
+            prêt ou la demande close
         created_at:
           type: string
           format: date-time
@@ -8726,13 +9006,16 @@ components:
       - date_of_birth
       - document_type
       - document_type_label
+      - estimated_ready_on
       - father_last_name
       - history
       - id
+      - indicative_days
       - mother_last_name
       - pickup
       - place_of_birth
       - reason
+      - reason_label
       - reference
       - requester_first_names
       - requester_last_name
@@ -9236,6 +9519,7 @@ components:
         * `bloque` - Bloqué
     StatusLog:
       type: object
+      description: 'Historique vu du fidèle : jamais le nom des membres de l''équipe.'
       properties:
         from_status:
           type: string
