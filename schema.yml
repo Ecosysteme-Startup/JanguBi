@@ -6649,8 +6649,8 @@ components:
           type: array
           items:
             type: integer
-          description: Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés
-            d'abord via /files/upload/
+          description: 'Justificatifs à ajouter (PDF ou image : celebret, lettre d''obédience…),
+            envoyés d''abord via /files/upload/ ; 5 au plus au total'
           maxItems: 5
       required:
       - etat_de_vie

@@ -385,7 +385,10 @@ class DeclarationInputSerializer(serializers.Serializer):
         required=False,
         default=list,
         max_length=5,
-        help_text="Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés d'abord via /files/upload/",
+        help_text=(
+            "Justificatifs à ajouter (PDF ou image : celebret, lettre d'obédience…), envoyés d'abord via "
+            "/files/upload/ ; 5 au plus au total"
+        ),
     )
 
 

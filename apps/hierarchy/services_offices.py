@@ -329,6 +329,7 @@ def person_declaration_submit(
     if institut_node is not None and institut_node.type.code not in {"institut", "province_religieuse", "communaute"}:
         raise ApplicationError("Choisissez un institut de vie consacrée.", code="invalid_declaration")
 
+    answers_complement = person.statut_verification == StatutVerification.COMPLEMENT
     person.etat_de_vie = etat_de_vie
     person.degre_ordre = degre_ordre
     person.incardination_node = incardination_node
@@ -356,12 +357,40 @@ def person_declaration_submit(
         action="personne.declaration",
         target=person,
         node=incardination_node or institut_node,
-        metadata={"etat_de_vie": etat_de_vie, "degre_ordre": degre_ordre, "justificatifs": attached},
+        metadata={
+            "etat_de_vie": etat_de_vie,
+            "degre_ordre": degre_ordre,
+            "justificatifs": attached,
+            "complement": answers_complement,
+        },
     )
+    if answers_complement and etat_de_vie != EtatDeVie.LAIC:
+        transaction.on_commit(partial(_notify_verifiers_complement, person))
     return person
 
 
+def _notify_verifiers_complement(person: Any) -> None:
+    """La personne a répondu à la demande de complément : la chancellerie qui vérifie
+    (``personnes.verifier`` sur l'incardination ou l'institut) est prévenue en application.
+    Ni l'état de vie ni les justificatifs ne figurent dans la notification."""
+    from apps.hierarchy.selectors_offices import capability_holders
+    from apps.messaging.services_notifications import people_notify
+
+    node = verification_node(person)
+    if node is None:
+        return
+    holders = capability_holders(node=node, capability="personnes.verifier").exclude(pk=person.pk)
+    people_notify(
+        user_ids=list(holders.values_list("pk", flat=True)),
+        topic=None,
+        event_type="personnes.complement_fourni",
+        payload={"person_id": str(person.pk), "node_id": str(node.pk)},
+    )
+
+
 MAX_DECLARATION_ATTACHMENTS = 5
+# Justificatifs : scans ou photos, jamais un fichier audio (pourtant accepté par /files/).
+DECLARATION_ATTACHMENT_TYPES = frozenset({"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"})
 
 
 def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
@@ -380,6 +409,10 @@ def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
             raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
         if not file_obj.is_valid:
             raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
+        if file_obj.file_type not in DECLARATION_ATTACHMENT_TYPES:
+            raise ApplicationError(
+                "Un justificatif est un PDF ou une image.", {"file_id": file_id}, code="file_type_not_allowed"
+            )
     existing = set(DeclarationAttachment.objects.filter(person=person).values_list("file_id", flat=True))
     new_ids = [i for i in ids if i not in existing]
     if len(existing) + len(new_ids) > MAX_DECLARATION_ATTACHMENTS:
