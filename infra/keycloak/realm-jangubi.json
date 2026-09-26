@@ -280,5 +280,17 @@
         }
       }
     ]
+  },
+  "smtpServer": {
+    "host": "${KC_SMTP_HOST:mailpit}",
+    "port": "${KC_SMTP_PORT:1025}",
+    "from": "${KC_SMTP_FROM:noreply@jangubi.sn}",
+    "fromDisplayName": "Jàngu Bi",
+    "replyTo": "",
+    "starttls": "${KC_SMTP_STARTTLS:false}",
+    "ssl": "false",
+    "auth": "${KC_SMTP_AUTH:false}",
+    "user": "${KC_SMTP_USER:}",
+    "password": "${KC_SMTP_PASSWORD:}"
   }
 }

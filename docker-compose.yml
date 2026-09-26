@@ -137,12 +137,18 @@ services:
   # ===========================================
   # Serveur SMTP de dev (MailHog)
   # ===========================================
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: mailhog
+  # Piège à e-mails de dev (Django ET Keycloak) : tout est capturé, rien ne part.
+  # Interface http://localhost:8025, API REST http://localhost:8025/api/v1/messages (tests e2e).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "2000"
     ports:
       - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI → http://localhost:8025
+      - "8025:8025"   # Interface web + API
     networks:
       - app_network
 
@@ -234,6 +240,14 @@ services:
       KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
       # Lu par le thème de connexion (bandeau liturgique).
       JANGUBI_API_URL: ${JANGUBI_API_URL:-http://localhost:8001/api/v1}
+      # SMTP du realm (vérification d'e-mail, mot de passe oublié) : Mailpit en dev.
+      KC_SMTP_HOST: ${KC_SMTP_HOST:-mailpit}
+      KC_SMTP_PORT: ${KC_SMTP_PORT:-1025}
+      KC_SMTP_FROM: ${KC_SMTP_FROM:-noreply@jangubi.sn}
+      KC_SMTP_STARTTLS: ${KC_SMTP_STARTTLS:-false}
+      KC_SMTP_AUTH: ${KC_SMTP_AUTH:-false}
+      KC_SMTP_USER: ${KC_SMTP_USER:-}
+      KC_SMTP_PASSWORD: ${KC_SMTP_PASSWORD:-}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
       # Thème de connexion Jàngu Bi (maquettes PUB-Connexion, PUB-Inscription-Compte).
