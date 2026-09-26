@@ -221,7 +221,7 @@ def test_sheet_lists_public_clergy_name_and_office_only(world):
     non_verifie = _named(priest("declare@sd.sn", verified=False), "Jean", "Faux")
     sans_nom = priest("anonyme@sd.sn")
     _named(world.secretaire, "Germaine", "Faye")  # laïque : pas dans le clergé
-    nominate(cure, "cure", world.saint_dominique, start_date=date(2023, 9, 1))
+    nominate(cure, "cure", world.saint_dominique, start_date=date(2023, 9, 1), quality="administrateur")
     nominate(vicaire, "vicaire_paroissial", world.saint_dominique, start_date=date(2024, 9, 1))
     nominate(ancien, "vicaire_paroissial", world.saint_dominique, end_date=date(2021, 1, 1))
     nominate(non_verifie, "vicaire_paroissial", world.saint_dominique)
@@ -231,7 +231,7 @@ def test_sheet_lists_public_clergy_name_and_office_only(world):
     response = client_for().get(f"{PUBLIC}/by-code/{world.saint_dominique.code}/")
 
     assert response.data["clergy"] == [
-        {"name": "Augustin Ndiaye", "office": "Curé / administrateur paroissial"},
+        {"name": "Augustin Ndiaye", "office": "Administrateur paroissial"},  # son titre réel
         {"name": "Emmanuel Tine", "office": "Vicaire paroissial"},
     ]
     assert "sd.sn" not in str(response.data)

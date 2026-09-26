@@ -66,3 +66,76 @@ def test_fruits_migration_fills_only_empty_fruits():
     kept.refresh_from_db()
     assert empty.fruit == "La foi"
     assert kept.fruit == "Saisi à la main"
+
+
+@pytest.mark.django_db
+def test_fruits_relecture_migration_replaces_only_old_wording():
+    import importlib
+
+    from django.apps import apps
+
+    from apps.rosary.models import Mystery
+
+    migration = importlib.import_module("apps.rosary.migrations.0004_mystere_fruits_relecture")
+    joyeux = MysteryGroup.objects.create(name="Joyeux", slug="joyeux")
+    douloureux = MysteryGroup.objects.create(name="Douloureux", slug="douloureux")
+    old_joyeux = Mystery.objects.create(
+        group=joyeux, order=5, title="Jésus retrouvé", fruit="La recherche de Dieu en toutes choses"
+    )
+    old_douloureux = Mystery.objects.create(
+        group=douloureux, order=3, title="Le couronnement", fruit="Le courage face au mépris du monde"
+    )
+    custom = Mystery.objects.create(group=joyeux, order=4, title="La Présentation", fruit="Saisi à la main")
+
+    migration.fruits_correct(apps, None)
+
+    old_joyeux.refresh_from_db()
+    old_douloureux.refresh_from_db()
+    custom.refresh_from_db()
+    assert old_joyeux.fruit == "La recherche de Dieu et la vraie sagesse"
+    assert old_douloureux.fruit == "Le détachement des vanités du monde"
+    assert custom.fruit == "Saisi à la main"
+
+    migration.fruits_restore(apps, None)
+
+    old_joyeux.refresh_from_db()
+    assert old_joyeux.fruit == "La recherche de Dieu en toutes choses"
+
+
+@pytest.mark.django_db
+def test_fruits_relecture_migration_keeps_manual_edit():
+    import importlib
+
+    from django.apps import apps
+
+    from apps.rosary.models import Mystery
+
+    migration = importlib.import_module("apps.rosary.migrations.0004_mystere_fruits_relecture")
+    joyeux = MysteryGroup.objects.create(name="Joyeux", slug="joyeux")
+    edited = Mystery.objects.create(group=joyeux, order=5, title="Jésus retrouvé", fruit="Autre formulation")
+
+    migration.fruits_correct(apps, None)
+
+    edited.refresh_from_db()
+    assert edited.fruit == "Autre formulation"
+
+
+def test_seed_file_carries_corrected_fruits():
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    path = Path(settings.BASE_DIR) / "init" / "rosary" / "format" / "json" / "rosary_french.json"
+    raw = path.read_text(encoding="utf-8")
+    data = json.loads(raw)
+    assert "en toutes choses" not in raw
+    assert "mépris du monde" not in raw
+    for day in data.values():
+        if not isinstance(day, dict) or "group" not in day:
+            continue
+        fruits = {m["order"]: m.get("fruit") for m in day.get("mysteries", [])}
+        if day["group"] == "Joyeux":
+            assert fruits[5] == "La recherche de Dieu et la vraie sagesse"
+        if day["group"] == "Douloureux":
+            assert fruits[3] == "Le détachement des vanités du monde"

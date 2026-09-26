@@ -122,6 +122,27 @@ def cardinality_check(*, office_type: OfficeType, node: Node, start: date, end: 
         )
 
 
+def quality_resolve(*, office_type: OfficeType, quality: str = "") -> str:
+    """Qualité validée contre celles de l'office ; par défaut, la première. Un office sans
+    qualités n'en accepte aucune."""
+    codes = office_type.quality_codes
+    if not codes:
+        if quality:
+            raise ApplicationError(
+                f"L'office « {office_type.label} » n'a pas de qualité.", {"quality": quality}, code="invalid_quality"
+            )
+        return ""
+    if not quality:
+        return codes[0]
+    if quality not in codes:
+        raise ApplicationError(
+            f"Qualité inconnue pour l'office « {office_type.label} » : « {quality} ».",
+            {"quality": quality, "qualities": codes},
+            code="invalid_quality",
+        )
+    return quality
+
+
 # --- Nominations -------------------------------------------------------------------------
 
 
@@ -137,6 +158,7 @@ def assignment_create(
     decree_ref: str = "",
     decree_file: Any = None,
     note: str = "",
+    quality: str = "",
     ip: str | None = None,
 ) -> OfficeAssignment:
     start_date = start_date or timezone.localdate()
@@ -149,6 +171,7 @@ def assignment_create(
     appointing_authority_check(actor=actor, office_type=office_type, node=node)
     node_type_check(office_type=office_type, node=node)
     _order_check(person=person, office_type=office_type)
+    quality = quality_resolve(office_type=office_type, quality=quality)
     # Verrou sur le nœud : deux nominations concurrentes au même office ne passent pas toutes les deux.
     Node.objects.select_for_update().filter(pk=node.pk).first()
     cardinality_check(office_type=office_type, node=node, start=start_date, end=end_date)
@@ -165,13 +188,20 @@ def assignment_create(
         decree_ref=decree_ref,
         decree_file=decree_file,
         note=note,
+        quality=quality,
     )
     audit_log(
         actor=actor,
         action="office.nomination",
         target=assignment,
         node=node,
-        metadata={"office": office_type.code, "person": str(person.pk), "start": str(start_date), "status": status},
+        metadata={
+            "office": office_type.code,
+            "quality": quality,
+            "person": str(person.pk),
+            "start": str(start_date),
+            "status": status,
+        },
         ip=ip,
     )
     _invalidate(person.pk)
@@ -203,6 +233,33 @@ def assignment_terminate(
         ip=ip,
     )
     _invalidate(assignment.person_id)
+    return assignment
+
+
+@transaction.atomic
+def assignment_quality_set(
+    *, actor: Any, assignment: OfficeAssignment, quality: str, ip: str | None = None
+) -> OfficeAssignment:
+    """Change la qualité d'une nomination en cours (ex. l'administrateur paroissial devient curé)."""
+    appointing_authority_check(actor=actor, office_type=assignment.office_type, node=assignment.node)
+    if assignment.status not in OPEN_STATUSES:
+        raise ApplicationError("Cette nomination n'est plus en cours.", code="assignment_closed")
+    if not quality:
+        raise ApplicationError("Indiquez la qualité.", {"quality": "obligatoire"}, code="invalid_quality")
+    previous = assignment.quality
+    assignment.quality = quality_resolve(office_type=assignment.office_type, quality=quality)
+    assignment.save(update_fields=["quality", "updated_at"])
+    audit_log(
+        actor=actor,
+        action="office.qualite",
+        target=assignment,
+        node=assignment.node,
+        metadata={"from": previous, "to": assignment.quality},
+        ip=ip,
+    )
+    # Le titre fait partie des droits en cache (/me/capacites/) ; les capacités, elles, ne changent pas.
+    authz.invalidate_user(assignment.person_id)
+    transaction.on_commit(partial(authz.invalidate_user, assignment.person_id))
     return assignment
 
 
@@ -272,6 +329,7 @@ def person_declaration_submit(
     if institut_node is not None and institut_node.type.code not in {"institut", "province_religieuse", "communaute"}:
         raise ApplicationError("Choisissez un institut de vie consacrée.", code="invalid_declaration")
 
+    answers_complement = person.statut_verification == StatutVerification.COMPLEMENT
     person.etat_de_vie = etat_de_vie
     person.degre_ordre = degre_ordre
     person.incardination_node = incardination_node
@@ -299,12 +357,40 @@ def person_declaration_submit(
         action="personne.declaration",
         target=person,
         node=incardination_node or institut_node,
-        metadata={"etat_de_vie": etat_de_vie, "degre_ordre": degre_ordre, "justificatifs": attached},
+        metadata={
+            "etat_de_vie": etat_de_vie,
+            "degre_ordre": degre_ordre,
+            "justificatifs": attached,
+            "complement": answers_complement,
+        },
     )
+    if answers_complement and etat_de_vie != EtatDeVie.LAIC:
+        transaction.on_commit(partial(_notify_verifiers_complement, person))
     return person
 
 
+def _notify_verifiers_complement(person: Any) -> None:
+    """La personne a répondu à la demande de complément : la chancellerie qui vérifie
+    (``personnes.verifier`` sur l'incardination ou l'institut) est prévenue en application.
+    Ni l'état de vie ni les justificatifs ne figurent dans la notification."""
+    from apps.hierarchy.selectors_offices import capability_holders
+    from apps.messaging.services_notifications import people_notify
+
+    node = verification_node(person)
+    if node is None:
+        return
+    holders = capability_holders(node=node, capability="personnes.verifier").exclude(pk=person.pk)
+    people_notify(
+        user_ids=list(holders.values_list("pk", flat=True)),
+        topic=None,
+        event_type="personnes.complement_fourni",
+        payload={"person_id": str(person.pk), "node_id": str(node.pk)},
+    )
+
+
 MAX_DECLARATION_ATTACHMENTS = 5
+# Justificatifs : scans ou photos, jamais un fichier audio (pourtant accepté par /files/).
+DECLARATION_ATTACHMENT_TYPES = frozenset({"application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic"})
 
 
 def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
@@ -323,6 +409,10 @@ def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
             raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
         if not file_obj.is_valid:
             raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
+        if file_obj.file_type not in DECLARATION_ATTACHMENT_TYPES:
+            raise ApplicationError(
+                "Un justificatif est un PDF ou une image.", {"file_id": file_id}, code="file_type_not_allowed"
+            )
     existing = set(DeclarationAttachment.objects.filter(person=person).values_list("file_id", flat=True))
     new_ids = [i for i in ids if i not in existing]
     if len(existing) + len(new_ids) > MAX_DECLARATION_ATTACHMENTS:

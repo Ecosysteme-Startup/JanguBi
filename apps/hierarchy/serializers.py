@@ -269,7 +269,15 @@ class PersonRefSerializer(serializers.Serializer):
         return name or obj.email
 
 
+class OfficeQualitySerializer(serializers.Serializer):
+    code = serializers.SlugField()
+    label = serializers.CharField()  # type: ignore[assignment]  # drf-stubs: champ « label » vs Field.label
+
+
 class OfficeTypeOutputSerializer(serializers.ModelSerializer):
+    qualities = OfficeQualitySerializer(
+        many=True, read_only=True, help_text="Titres possibles du titulaire ; le premier est le titre par défaut."
+    )
     node_types: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
     appointed_by: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
     capabilities: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
@@ -286,13 +294,17 @@ class OfficeTypeOutputSerializer(serializers.ModelSerializer):
             "appointed_by_platform",
             "capabilities",
             "inherits_down",
+            "qualities",
         ]
 
 
 class AssignmentOutputSerializer(serializers.ModelSerializer):
     person = PersonRefSerializer(read_only=True)
     office = serializers.CharField(source="office_type.code", read_only=True)
-    office_label = serializers.CharField(source="office_type.label", read_only=True)
+    office_label = serializers.CharField(
+        source="title", read_only=True, help_text="Titre du titulaire : « Curé », « Administrateur paroissial », « Vicaire paroissial »…"
+    )
+    quality = serializers.CharField(read_only=True, help_text="Code de la qualité (vide si l'office n'en a pas)")
     node = NodeRefSerializer(read_only=True)
     appointed_by_id = serializers.UUIDField(read_only=True, allow_null=True)
 
@@ -303,6 +315,7 @@ class AssignmentOutputSerializer(serializers.ModelSerializer):
             "person",
             "office",
             "office_label",
+            "quality",
             "node",
             "start_date",
             "end_date",
@@ -329,11 +342,20 @@ class AssignmentCreateInputSerializer(serializers.Serializer):
     end_date = serializers.DateField(required=False, allow_null=True)
     decree_ref = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    quality = serializers.SlugField(
+        max_length=40,
+        required=False,
+        allow_blank=True,
+        help_text="Qualité parmi celles de l'office (ex. cure, administrateur) ; défaut : la première",
+    )
 
 
 class AssignmentUpdateInputSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=["terminer", "annuler"])
+    action = serializers.ChoiceField(choices=["terminer", "annuler", "qualifier"])
     end_date = serializers.DateField(required=False, allow_null=True, help_text="Terminer : date de fin (défaut : aujourd'hui)")
+    quality = serializers.SlugField(
+        max_length=40, required=False, allow_blank=True, help_text="Qualifier : nouvelle qualité"
+    )
 
 
 class AssignmentImportQuerySerializer(serializers.Serializer):
@@ -348,6 +370,9 @@ class CapaciteOutputSerializer(serializers.Serializer):
     node_type = serializers.CharField(help_text="Code du type de nœud ; « plateforme » hors arbre.")
     herite = serializers.BooleanField()
     office = serializers.CharField()
+    office_label = serializers.CharField(
+        help_text="Titre de la nomination qui accorde la capacité (« Curé », « Administrateur paroissial »…)"
+    )
 
 
 class DeclarationInputSerializer(serializers.Serializer):
@@ -360,7 +385,10 @@ class DeclarationInputSerializer(serializers.Serializer):
         required=False,
         default=list,
         max_length=5,
-        help_text="Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés d'abord via /files/upload/",
+        help_text=(
+            "Justificatifs à ajouter (PDF ou image : celebret, lettre d'obédience…), envoyés d'abord via "
+            "/files/upload/ ; 5 au plus au total"
+        ),
     )
 
 

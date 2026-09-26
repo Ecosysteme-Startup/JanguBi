@@ -32,6 +32,8 @@ UPDATABLE_FIELDS = (
     "content_format",
     "category",
     "cover_image_id",
+    "cover_image_alt",
+    "cover_image_decorative",
     "place",
     "is_sunday_notice",
     "sunday_date",
@@ -104,6 +106,22 @@ def _cover_image_get(*, file_id: int | None, user: Any) -> Any:
     return file_obj
 
 
+def _cover_alt_clean(*, has_cover: bool, alt: str, decorative: bool) -> tuple[str, bool]:
+    """Texte alternatif de la bannière : requis si une bannière non décorative est présente.
+    Décorative : alternative vide (``alt=""``). Sans bannière : rien à décrire."""
+    if not has_cover:
+        return "", False
+    if decorative:
+        return "", True
+    alt = (alt or "").strip()
+    if not alt:
+        raise ApplicationError(
+            "Décrivez la bannière (texte alternatif) ou indiquez qu'elle est décorative.",
+            code="cover_alt_required",
+        )
+    return alt, False
+
+
 # --- Écritures -----------------------------------------------------------------------------
 
 
@@ -120,6 +138,8 @@ def article_create(
     content_format: str = Article.ContentFormat.TEXT,
     excerpt: str = "",
     cover_image_id: int | None = None,
+    cover_image_alt: str = "",
+    cover_image_decorative: bool = False,
     is_sunday_notice: bool = False,
     sunday_date: datetime.date | None = None,
     notify_followers: bool = True,
@@ -131,6 +151,9 @@ def article_create(
     _place_check(node=node, place=place)
     _sunday_check(is_sunday_notice=is_sunday_notice, sunday_date=sunday_date)
     cover_image = _cover_image_get(file_id=cover_image_id, user=author)
+    cover_image_alt, cover_image_decorative = _cover_alt_clean(
+        has_cover=cover_image is not None, alt=cover_image_alt, decorative=cover_image_decorative
+    )
 
     article = Article.objects.create(
         author=author,
@@ -142,6 +165,8 @@ def article_create(
         content_type=content_type,
         category=category,
         cover_image=cover_image,
+        cover_image_alt=cover_image_alt,
+        cover_image_decorative=cover_image_decorative,
         scope_node=node,
         scope_place=place,
         # Ancienne colonne conservée jusqu'en L9 : cohérente pour les lecteurs historiques.
@@ -170,11 +195,19 @@ def article_update(*, article: Article, editor: Any, data: dict[str, Any]) -> Ar
     if "place" in data:
         _place_check(node=article.scope_node, place=data["place"])
         article.scope_place = data.pop("place")
+    # Bannière touchée (image, alternative ou caractère décoratif) : l'état final est vérifié.
+    cover_touched = bool({"cover_image_id", "cover_image_alt", "cover_image_decorative"} & set(data))
     if "cover_image_id" in data:
         cover_id = data.pop("cover_image_id")
         # La bannière déjà en place (envoyée par un collègue) se renvoie telle quelle.
         if cover_id != article.cover_image_id:
             article.cover_image = _cover_image_get(file_id=cover_id, user=editor)
+    if cover_touched:
+        article.cover_image_alt, article.cover_image_decorative = _cover_alt_clean(
+            has_cover=article.cover_image is not None,
+            alt=data.pop("cover_image_alt", article.cover_image_alt),
+            decorative=data.pop("cover_image_decorative", article.cover_image_decorative),
+        )
 
     for field, value in data.items():
         setattr(article, field, value)

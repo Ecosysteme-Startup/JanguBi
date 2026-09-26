@@ -67,5 +67,5 @@ def node_public_clergy(*, node: Node, today: date) -> list[dict[str, str]]:
     for assignment in assignments:
         name = _display_name(assignment.person)
         if name:
-            clergy.append({"name": name, "office": assignment.office_type.label})
+            clergy.append({"name": name, "office": assignment.title})
     return clergy

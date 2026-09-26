@@ -227,7 +227,7 @@ class AvailabilitySerializer(serializers.ModelSerializer):
 
 class PriestOfficeOutputSerializer(serializers.Serializer):
     code = serializers.SlugField(help_text="Code de l'office (cure, vicaire_paroissial, aumonier…)")
-    label = serializers.CharField(help_text="Libellé de l'office : Curé, Vicaire paroissial…")  # type: ignore[assignment]  # drf-stubs: champ « label » vs Field.label
+    label = serializers.CharField(help_text="Titre du prêtre : Curé, Administrateur paroissial, Vicaire paroissial…")  # type: ignore[assignment]  # drf-stubs: champ « label » vs Field.label
 
 
 class ReachablePriestOutputSerializer(serializers.Serializer):

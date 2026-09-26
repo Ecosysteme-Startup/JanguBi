@@ -216,7 +216,7 @@ def _offices(user: BaseUser) -> list[dict[str, Any]]:
         }
         offices.append(
             {
-                "office_label": a.office_type.label,
+                "office_label": a.title,
                 "node_name": a.node.name,
                 "start_date": a.start_date,
                 "capabilities": sorted(c.code for c in a.office_type.capabilities.all() if c.code not in withdrawn),

@@ -204,7 +204,9 @@ class RequesterOutputSerializer(_BaseOutputSerializer):
     pickup = serializers.SerializerMethodField()
     history = serializers.SerializerMethodField()
     can_cancel = serializers.SerializerMethodField()
-    indicative_days = serializers.SerializerMethodField(help_text="Délai indicatif de la paroisse (jours)")
+    indicative_days = serializers.SerializerMethodField(
+        help_text="Délai indicatif (jours) : type d'acte, sinon paroisse, sinon réglage hérité, sinon défaut"
+    )
     estimated_ready_on = serializers.SerializerMethodField(
         help_text="Mise à disposition estimée (indicative) ; null une fois l'acte prêt ou la demande close"
     )
@@ -272,7 +274,9 @@ class RequesterOutputSerializer(_BaseOutputSerializer):
         return resolver
 
     def get_indicative_days(self, obj: DocumentRequest) -> int:
-        return self._resolver().indicative_days_for_path(obj.target_node.path if obj.target_node else None)
+        return self._resolver().indicative_days_for(
+            obj.target_node.path if obj.target_node else None, obj.document_type
+        )
 
     def get_estimated_ready_on(self, obj: DocumentRequest) -> datetime.date | None:
         from django.utils import timezone
@@ -452,3 +456,39 @@ class CountsOutputSerializer(serializers.Serializer):
 class StatsOutputSerializer(CountsOutputSerializer):
     median_days_to_collect = serializers.FloatField(allow_null=True)
     overdue = serializers.IntegerField()
+
+
+# --- Délais par type d'acte (Paramètres de la paroisse) ------------------------------------
+
+
+class TypeDelayItemOutputSerializer(serializers.Serializer):
+    document_type = serializers.ChoiceField(choices=DocumentRequest.DocumentType.choices)
+    document_type_label = serializers.CharField()
+    days = serializers.IntegerField(allow_null=True, help_text="Délai du type (jours ouvrés) ; null : délai global")
+
+
+class TypeDelaysOutputSerializer(serializers.Serializer):
+    node_id = serializers.UUIDField()
+    default_days = serializers.IntegerField(
+        help_text="Délai appliqué aux types sans réglage propre (paroisse, sinon hérité, sinon défaut)"
+    )
+    items = TypeDelayItemOutputSerializer(many=True)
+
+
+class TypeDelayItemInputSerializer(serializers.Serializer):
+    document_type = serializers.ChoiceField(
+        choices=[c for c in DocumentRequest.DocumentType.choices if c[0] != DocumentRequest.DocumentType.OTHER]
+    )
+    days = serializers.IntegerField(
+        allow_null=True, min_value=1, max_value=90, help_text="Jours ouvrés ; null : retirer (délai global)"
+    )
+
+
+class TypeDelaysUpdateInputSerializer(serializers.Serializer):
+    items = TypeDelayItemInputSerializer(many=True)
+
+    def validate_items(self, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        types = [item["document_type"] for item in value]
+        if len(types) != len(set(types)):
+            raise serializers.ValidationError("Chaque type d'acte ne peut figurer qu'une fois.")
+        return value

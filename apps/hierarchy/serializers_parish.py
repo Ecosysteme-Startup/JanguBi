@@ -115,7 +115,7 @@ class PublicSecretariatSerializer(serializers.Serializer):
 
 class PublicClergySerializer(serializers.Serializer):
     name = serializers.CharField()
-    office = serializers.CharField(help_text="Libellé de l'office (Curé, Vicaire paroissial…)")
+    office = serializers.CharField(help_text="Titre du clerc (Curé, Administrateur paroissial, Vicaire paroissial…)")
 
 
 class PublicActsInfoSerializer(serializers.Serializer):
