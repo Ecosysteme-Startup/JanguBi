@@ -115,6 +115,7 @@ class AssignmentListCreateApi(AuthedV1Api):
             end_date=data.get("end_date"),
             decree_ref=data["decree_ref"],
             note=data["note"],
+            quality=data.get("quality", ""),
             ip=_ip(request),
         )
         return Response(AssignmentOutputSerializer(assignment).data, status=status.HTTP_201_CREATED)
@@ -138,7 +139,7 @@ class AssignmentDetailApi(AuthedV1Api):
 
     @extend_schema(
         tags=TAG,
-        summary="Terminer ou annuler une nomination",
+        summary="Terminer, annuler ou changer la qualité d'une nomination",
         request=AssignmentUpdateInputSerializer,
         responses=AssignmentOutputSerializer,
     )
@@ -146,9 +147,14 @@ class AssignmentDetailApi(AuthedV1Api):
         assignment = self._get_visible(request, assignment_id)
         serializer = AssignmentUpdateInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if serializer.validated_data["action"] == "terminer":
+        action = serializer.validated_data["action"]
+        if action == "terminer":
             assignment = services_offices.assignment_terminate(
                 actor=request.user, assignment=assignment, end_date=serializer.validated_data.get("end_date"), ip=_ip(request)
+            )
+        elif action == "qualifier":
+            assignment = services_offices.assignment_quality_set(
+                actor=request.user, assignment=assignment, quality=serializer.validated_data.get("quality", ""), ip=_ip(request)
             )
         else:
             assignment = services_offices.assignment_cancel(actor=request.user, assignment=assignment, ip=_ip(request))

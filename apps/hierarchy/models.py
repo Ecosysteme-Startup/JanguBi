@@ -264,6 +264,16 @@ class OfficeType(BaseModel):
     capabilities = models.ManyToManyField(Capability, blank=True, related_name="office_types")
     inherits_down = models.BooleanField(_("hérite sur le sous-arbre"), default=True)
     is_system = models.BooleanField(_("office du profil par défaut"), default=False)
+    qualities = models.JSONField(
+        _("qualités"),
+        default=list,
+        db_default=[],
+        blank=True,
+        help_text=_(
+            "Titres possibles du titulaire : [{« code » : « cure », « label » : « Curé »}, …]. "
+            "La première est la qualité par défaut."
+        ),
+    )
 
     class Meta:
         verbose_name = _("type d'office")
@@ -272,6 +282,13 @@ class OfficeType(BaseModel):
 
     def __str__(self) -> str:
         return self.label
+
+    @property
+    def quality_codes(self) -> list[str]:
+        return [q["code"] for q in self.qualities or []]
+
+    def quality_label(self, code: str) -> str | None:
+        return next((q["label"] for q in self.qualities or [] if q["code"] == code), None)
 
 
 class OfficeAssignment(BaseModel):
@@ -300,6 +317,14 @@ class OfficeAssignment(BaseModel):
         "files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+", verbose_name=_("décret")
     )
     note = models.CharField(_("note"), max_length=255, blank=True, default="")
+    quality = models.CharField(
+        _("qualité"),
+        max_length=40,
+        blank=True,
+        default="",
+        db_default="",
+        help_text=_("Code d'une qualité de l'office (ex. curé ou administrateur paroissial)."),
+    )
 
     class Meta:
         verbose_name = _("nomination")
@@ -323,7 +348,17 @@ class OfficeAssignment(BaseModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.office_type} — {self.node} ({self.get_status_display()})"
+        return f"{self.title} — {self.node} ({self.get_status_display()})"
+
+    @property
+    def title(self) -> str:
+        """Titre réel du titulaire : libellé de sa qualité (« Curé », « Administrateur
+        paroissial »), sinon de la qualité par défaut de l'office, sinon libellé de l'office."""
+        office = self.office_type
+        codes = office.quality_codes
+        if not codes:
+            return office.label
+        return office.quality_label(self.quality) or office.quality_label(codes[0]) or office.label
 
 
 class DeclarationAttachment(BaseModel):

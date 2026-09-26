@@ -176,6 +176,7 @@ def test_me_capacites_lists_inheritance(world):
             "node_name": "Saint-Dominique",
             "herite": True,
             "office": "secretaire_paroissial",
+            "office_label": "Secrétaire paroissial",
             "node_type": "paroisse",
         }
     ]

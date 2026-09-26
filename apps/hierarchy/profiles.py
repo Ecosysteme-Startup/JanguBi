@@ -6,7 +6,7 @@ Saint-Dominique (SRS EF-HIE-07).
 """
 
 from datetime import time
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class NodeTypeSpec(TypedDict):
@@ -138,6 +138,18 @@ class CapabilitySpec(TypedDict):
     domain: str
 
 
+class QualitySpec(TypedDict):
+    code: str
+    label: str
+
+
+# Qualités du titulaire d'une cure : on affiche le titre réel, jamais la double forme (c. 539-540).
+CURE_QUALITIES: list[QualitySpec] = [
+    {"code": "cure", "label": "Curé"},
+    {"code": "administrateur", "label": "Administrateur paroissial"},
+]
+
+
 class OfficeSpec(TypedDict):
     code: str
     label: str
@@ -148,6 +160,7 @@ class OfficeSpec(TypedDict):
     appointed_by_platform: bool
     inherits_down: bool
     capabilities: list[str]
+    qualities: NotRequired[list[QualitySpec]]
 
 
 # Catalogue FERMÉ (RG-14) : ajouter une capacité = une décision + un ADR + du code.
@@ -192,7 +205,7 @@ OFFICES: list[OfficeSpec] = [
     {"code": "delegue_numerique_diocesain", "label": "Délégué diocésain au numérique", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "horaires.gerer", "tableau_bord.voir"]},
     {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir"]},
     {"code": "doyen", "label": "Doyen", "node_types": ["doyenne"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser"]},
-    {"code": "cure", "label": "Curé / administrateur paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES},
+    {"code": "cure", "label": "Curé / administrateur paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES, "qualities": CURE_QUALITIES},
     # Curés « in solidum » (c. 517) : l'exception à la cardinalité du curé (EF-PER-05).
     {"code": "cure_in_solidum", "label": "Curé in solidum", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES},
     {"code": "vicaire_paroissial", "label": "Vicaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["annonces.publier", "evenements.gerer", "actes.traiter", "messagerie.recevoir_fideles", "confessions.gerer"]},

@@ -32,9 +32,14 @@ def load_offices_catalogue(*, Capability: Any, OfficeType: Any, NodeType: Any) -
                 "appointed_by_platform": o["appointed_by_platform"],
                 "inherits_down": o["inherits_down"],
                 "is_system": True,
+                "qualities": o.get("qualities", []),
             },
         )
         offices[o["code"]] = obj
+        # Complète un office existant sans qualités (ne réécrit jamais un paramétrage).
+        if not was_created and o.get("qualities") and not obj.qualities:
+            obj.qualities = o["qualities"]
+            obj.save(update_fields=["qualities"])
         if was_created:
             created["office_types"] += 1
             obj.node_types.add(*[node_types[t] for t in o["node_types"] if t in node_types])

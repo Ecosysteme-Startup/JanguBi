@@ -143,7 +143,7 @@ def test_me_capacites_api(world):
     response = client_for(world.cure).get("/api/v1/me/capacites/")
 
     assert response.status_code == 200
-    assert {"capacite": "actes.traiter", "node_id": str(world.saint_dominique.pk), "node_name": "Saint-Dominique", "herite": True, "office": "cure", "node_type": "paroisse"} in response.data
+    assert {"capacite": "actes.traiter", "node_id": str(world.saint_dominique.pk), "node_name": "Saint-Dominique", "herite": True, "office": "cure", "office_label": "Curé", "node_type": "paroisse"} in response.data
 
 
 def test_me_capacites_requires_authentication(db):

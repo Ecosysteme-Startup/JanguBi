@@ -156,7 +156,7 @@ def test_api_priests_expose_the_office_of_the_principal_assignment(world):
 
     rows = {row["user_id"]: row for row in client_for(world.adulte).get("/api/v1/messaging/priests/").data}
 
-    assert rows[str(cure.pk)]["office"] == {"code": "cure", "label": "Curé / administrateur paroissial"}
+    assert rows[str(cure.pk)]["office"] == {"code": "cure", "label": "Curé"}
     assert rows[str(world.pere.pk)]["office"]["code"] == "vicaire_paroissial"
     assert rows[str(aumonier.pk)]["office"]["code"] == "aumonier"
 
