@@ -24,6 +24,7 @@ from apps.documents.models import (
     DocumentRequestAttachment,
     DocumentRequestStatusLog,
     DocumentSlaSetting,
+    DocumentTypeDelay,
     InternalNote,
 )
 from apps.hierarchy import authz
@@ -483,6 +484,13 @@ class SlaResolver:
             if days:
                 indicative[path] = days
         self._indicative = sorted(indicative.items(), key=lambda item: len(item[0]), reverse=True)
+        # Délai par type d'acte, réglé par la paroisse elle-même : prioritaire au nœud exact.
+        self._by_type: dict[tuple[str, str], int] = {
+            (path, document_type): days
+            for path, document_type, days in DocumentTypeDelay.objects.values_list(
+                "node__path", "document_type", "days"
+            )
+        }
         self._by_path = sorted(
             (
                 (
@@ -506,13 +514,66 @@ class SlaResolver:
                     return dict(values)
         return dict(DEFAULT_SLA)
 
+    def indicative_days_for(self, path: str | None, document_type: str | None) -> int:
+        """Délai annoncé au fidèle pour une demande : délai du type d'acte réglé par la
+        paroisse, sinon délai global de la paroisse, sinon réglage SLA hérité, sinon le défaut."""
+        if path and document_type:
+            days = self._by_type.get((path, document_type))
+            if days:
+                return int(days)
+        return self.indicative_days_for_path(path)
+
     def indicative_days_for_path(self, path: str | None) -> int:
-        """Délai annoncé au fidèle : réglage renseigné le plus proche, sinon le défaut."""
+        """Délai global : réglage renseigné le plus proche (paroisse, puis SLA hérité), sinon le défaut."""
         if path:
             for prefix, days in self._indicative:
                 if path.startswith(prefix):
                     return int(days)
         return int(settings.DOCUMENTS_DEFAULT_INDICATIVE_DAYS)
+
+
+# Types d'actes dont la paroisse règle le délai (« Autre » garde le délai global).
+TYPE_DELAY_DOCUMENT_TYPES: tuple[str, ...] = tuple(
+    t for t in DocumentRequest.DocumentType.values if t != DocumentRequest.DocumentType.OTHER
+)
+TYPE_DELAY_MAX_DAYS = 90
+TYPE_DELAY_CAPABILITIES = ("horaires.gerer", "structure.gerer")
+
+
+def type_delays_check(*, user: Any, node: Node) -> None:
+    """Mêmes capacités que les autres paramètres du secrétariat (``nodes/{id}/settings/``)."""
+    if not any(authz.peut(user, capability, node) for capability in TYPE_DELAY_CAPABILITIES):
+        raise PermissionDeniedError("Vous ne pouvez pas régler les délais de ce nœud.", code="type_delays_forbidden")
+
+
+@transaction.atomic
+def document_type_delays_set(*, node: Node, delays: dict[str, int | None], actor: Any) -> dict[str, int]:
+    """Règle les délais par type d'acte d'un nœud. ``None`` retire le délai du type (retour au
+    délai global). Les types absents sont laissés tels quels. L'audit ne garde que les types."""
+    type_delays_check(user=actor, node=node)
+    unknown = set(delays) - set(TYPE_DELAY_DOCUMENT_TYPES)
+    if unknown:
+        raise ApplicationError("Type d'acte inconnu.", {"document_types": sorted(unknown)}, code="document_type_invalid")
+    for document_type, days in delays.items():
+        if days is not None and not 1 <= days <= TYPE_DELAY_MAX_DAYS:
+            raise ApplicationError(
+                f"Le délai doit être compris entre 1 et {TYPE_DELAY_MAX_DAYS} jours.",
+                {"document_type": document_type},
+                code="type_delay_out_of_range",
+            )
+    current = dict(DocumentTypeDelay.objects.filter(node=node).values_list("document_type", "days"))
+    changed = sorted(t for t, days in delays.items() if current.get(t) != days)
+    for document_type in changed:
+        days = delays[document_type]
+        if days is None:
+            DocumentTypeDelay.objects.filter(node=node, document_type=document_type).delete()
+        else:
+            DocumentTypeDelay.objects.update_or_create(node=node, document_type=document_type, defaults={"days": days})
+    if changed:
+        audit_log(
+            actor=actor, action="actes.delais_par_type", target=node, node=node, metadata={"document_types": changed}
+        )
+    return dict(DocumentTypeDelay.objects.filter(node=node).values_list("document_type", "days"))
 
 
 def sla_for_node(node: Node | None) -> dict[str, int]:

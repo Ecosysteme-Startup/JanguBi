@@ -5180,6 +5180,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/CountsOutput'
           description: ''
+  /api/v1/staff/documents/nodes/{node_id}/type-delays/:
+    get:
+      operationId: v1_staff_documents_nodes_type_delays_retrieve
+      description: |-
+        Délais indicatifs par type d'acte d'un nœud (Paramètres, « Actes délivrés »). Mêmes
+        capacités que les autres paramètres du secrétariat : ``horaires.gerer`` ou ``structure.gerer``.
+      summary: Délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeDelaysOutput'
+          description: ''
+    put:
+      operationId: v1_staff_documents_nodes_type_delays_update
+      description: |-
+        Délais indicatifs par type d'acte d'un nœud (Paramètres, « Actes délivrés »). Mêmes
+        capacités que les autres paramètres du secrétariat : ``horaires.gerer`` ou ``structure.gerer``.
+      summary: Régler les délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - documents
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypeDelaysUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TypeDelaysUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TypeDelaysUpdateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TypeDelaysOutput'
+          description: ''
   /api/v1/staff/documents/stats/:
     get:
       operationId: v1_staff_documents_stats_retrieve
@@ -5710,6 +5771,13 @@ components:
           type: integer
           nullable: true
           description: 'Bannière : fichier image téléversé via /files/upload/'
+        cover_image_alt:
+          type: string
+          description: Texte alternatif de la bannière (requis si bannière non décorative)
+          maxLength: 250
+        cover_image_decorative:
+          type: boolean
+          description: 'Bannière purement décorative : texte alternatif vide'
         notify_followers:
           type: boolean
           default: true
@@ -5770,6 +5838,13 @@ components:
           type: string
           nullable: true
           readOnly: true
+        cover_image_alt:
+          type: string
+          title: Texte alternatif de la bannière
+          maxLength: 250
+        cover_image_decorative:
+          type: boolean
+          title: Bannière décorative
         published_at:
           type: string
           format: date-time
@@ -5843,6 +5918,13 @@ components:
           type: string
           nullable: true
           readOnly: true
+        cover_image_alt:
+          type: string
+          title: Texte alternatif de la bannière
+          maxLength: 250
+        cover_image_decorative:
+          type: boolean
+          title: Bannière décorative
         published_at:
           type: string
           format: date-time
@@ -8380,6 +8462,13 @@ components:
           type: integer
           nullable: true
           description: 'Bannière (vide : la retirer)'
+        cover_image_alt:
+          type: string
+          description: Texte alternatif de la bannière (requis si bannière non décorative)
+          maxLength: 250
+        cover_image_decorative:
+          type: boolean
+          description: 'Bannière purement décorative : texte alternatif vide'
         notify_followers:
           type: boolean
     PatchedAssignmentUpdateInput:
@@ -9019,7 +9108,8 @@ components:
         indicative_days:
           type: integer
           readOnly: true
-          description: Délai indicatif de la paroisse (jours)
+          description: 'Délai indicatif (jours) : type d''acte, sinon paroisse, sinon
+            réglage hérité, sinon défaut'
         estimated_ready_on:
           type: string
           format: date
@@ -9853,7 +9943,8 @@ components:
         indicative_days:
           type: integer
           readOnly: true
-          description: Délai indicatif de la paroisse (jours)
+          description: 'Délai indicatif (jours) : type d''acte, sinon paroisse, sinon
+            réglage hérité, sinon défaut'
         estimated_ready_on:
           type: string
           format: date
@@ -10329,6 +10420,13 @@ components:
           type: string
           nullable: true
           readOnly: true
+        cover_image_alt:
+          type: string
+          title: Texte alternatif de la bannière
+          maxLength: 250
+        cover_image_decorative:
+          type: boolean
+          title: Bannière décorative
         notify_followers:
           type: boolean
           title: Notifier les fidèles
@@ -10543,6 +10641,76 @@ components:
           type: string
           default: ''
           maxLength: 255
+    TypeDelayItemInput:
+      type: object
+      properties:
+        document_type:
+          $ref: '#/components/schemas/TypeDelayItemInputDocumentTypeEnum'
+        days:
+          type: integer
+          maximum: 90
+          minimum: 1
+          nullable: true
+          description: 'Jours ouvrés ; null : retirer (délai global)'
+      required:
+      - days
+      - document_type
+    TypeDelayItemInputDocumentTypeEnum:
+      enum:
+      - baptism
+      - first_communion
+      - confirmation
+      - religious_marriage
+      - godparent
+      type: string
+      description: |-
+        * `baptism` - Certificat de baptême
+        * `first_communion` - Attestation de première communion
+        * `confirmation` - Attestation de confirmation
+        * `religious_marriage` - Attestation de mariage religieux
+        * `godparent` - Attestation parrain / marraine
+    TypeDelayItemOutput:
+      type: object
+      properties:
+        document_type:
+          $ref: '#/components/schemas/DocumentTypeEnum'
+        document_type_label:
+          type: string
+        days:
+          type: integer
+          nullable: true
+          description: 'Délai du type (jours ouvrés) ; null : délai global'
+      required:
+      - days
+      - document_type
+      - document_type_label
+    TypeDelaysOutput:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        default_days:
+          type: integer
+          description: Délai appliqué aux types sans réglage propre (paroisse, sinon
+            hérité, sinon défaut)
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeDelayItemOutput'
+      required:
+      - default_days
+      - items
+      - node_id
+    TypeDelaysUpdateInput:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeDelayItemInput'
+      required:
+      - items
     TypeEnum:
       enum:
       - SIGN_OF_CROSS

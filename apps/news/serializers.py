@@ -64,6 +64,8 @@ class ArticleOutputSerializer(serializers.ModelSerializer):
             "is_sunday_notice",
             "sunday_date",
             "cover_image_url",
+            "cover_image_alt",
+            "cover_image_decorative",
             "published_at",
             "reactions",
         ]
@@ -126,6 +128,8 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
             "unpublish_reason",
             "cover_image_id",
             "cover_image_url",
+            "cover_image_alt",
+            "cover_image_decorative",
             "notify_followers",
             "reads_count",
             "created_at",
@@ -198,6 +202,15 @@ class ArticleCreateInputSerializer(serializers.Serializer):
     cover_image_id = serializers.IntegerField(
         required=False, allow_null=True, help_text="Bannière : fichier image téléversé via /files/upload/"
     )
+    cover_image_alt = serializers.CharField(
+        max_length=250,
+        required=False,
+        allow_blank=True,
+        help_text="Texte alternatif de la bannière (requis si bannière non décorative)",
+    )
+    cover_image_decorative = serializers.BooleanField(
+        required=False, help_text="Bannière purement décorative : texte alternatif vide"
+    )
     notify_followers = serializers.BooleanField(default=True, help_text="Notifier les fidèles à la publication")
 
 
@@ -214,6 +227,15 @@ class ArticleUpdateInputSerializer(serializers.Serializer):
         required=False, allow_null=True, help_text="Lieu de culte (vide : tout le nœud)"
     )
     cover_image_id = serializers.IntegerField(required=False, allow_null=True, help_text="Bannière (vide : la retirer)")
+    cover_image_alt = serializers.CharField(
+        max_length=250,
+        required=False,
+        allow_blank=True,
+        help_text="Texte alternatif de la bannière (requis si bannière non décorative)",
+    )
+    cover_image_decorative = serializers.BooleanField(
+        required=False, help_text="Bannière purement décorative : texte alternatif vide"
+    )
     notify_followers = serializers.BooleanField(required=False)
 
 

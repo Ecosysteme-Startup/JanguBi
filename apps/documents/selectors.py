@@ -8,8 +8,14 @@ from django.db.models import Count, Prefetch, Q, QuerySet
 from django.utils import timezone
 
 from apps.core.exceptions import NotFoundError
-from apps.documents.models import DocumentRequest, DocumentRequestAttachment, DocumentRequestStatusLog, InternalNote
-from apps.documents.services import SLA_KEY_BY_STATUS, SlaResolver
+from apps.documents.models import (
+    DocumentRequest,
+    DocumentRequestAttachment,
+    DocumentRequestStatusLog,
+    DocumentTypeDelay,
+    InternalNote,
+)
+from apps.documents.services import SLA_KEY_BY_STATUS, TYPE_DELAY_DOCUMENT_TYPES, SlaResolver
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 
@@ -184,4 +190,18 @@ def supervision_stats(*, user: Any, node_id: Any = None) -> dict[str, Any]:
         **status_counts(queryset=qs),
         "median_days_to_collect": statistics.median(durations) if durations else None,
         "overdue": len(overdue_ids(qs)),
+    }
+
+
+def document_type_delays_get(*, node: Node) -> dict[str, Any]:
+    """Délais par type d'acte d'un nœud, avec le délai global qui s'applique à défaut."""
+    delays = dict(DocumentTypeDelay.objects.filter(node=node).values_list("document_type", "days"))
+    labels = dict(DocumentRequest.DocumentType.choices)
+    return {
+        "node_id": node.pk,
+        "default_days": SlaResolver().indicative_days_for_path(node.path),
+        "items": [
+            {"document_type": t, "document_type_label": str(labels[t]), "days": delays.get(t)}
+            for t in TYPE_DELAY_DOCUMENT_TYPES
+        ],
     }
