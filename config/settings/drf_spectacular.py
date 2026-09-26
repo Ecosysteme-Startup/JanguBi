@@ -16,6 +16,7 @@ SPECTACULAR_SETTINGS = {
         'RequiredOrderEnum': 'apps.hierarchy.enums.RequiredOrder',
         'CardinalityEnum': 'apps.hierarchy.enums.Cardinality',
         'ArticleStatusEnum': 'apps.news.models.Article.Status',
+        'DocumentTypeEnum': 'apps.documents.models.DocumentRequest.DocumentType',
         'ArticleContentTypeEnum': 'apps.news.models.Article.ContentType',
         'DocumentRequestStatusEnum': 'apps.documents.models.DocumentRequest.Status',
         'PickupModeEnum': 'apps.documents.models.DocumentRequest.PickupMode',

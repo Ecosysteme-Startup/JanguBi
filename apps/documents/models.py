@@ -238,3 +238,25 @@ class DocumentSlaSetting(BaseModel):
 
     def __str__(self) -> str:
         return f"Délais — {self.node}"
+
+
+class DocumentTypeDelay(BaseModel):
+    """Délai indicatif d'un type d'acte, réglé par la paroisse (Paramètres, « Actes délivrés »).
+
+    Prioritaire sur le délai global de la paroisse (``Node.acts_delay_days``), lui-même
+    prioritaire sur le réglage SLA hérité, puis le défaut. Indicatif, jamais un engagement."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.CASCADE, related_name="document_type_delays")
+    document_type = models.CharField(_("type d'acte"), max_length=30, choices=DocumentRequest.DocumentType.choices)
+    days = models.PositiveSmallIntegerField(_("délai indicatif (jours ouvrés)"))
+
+    class Meta:
+        verbose_name = _("Délai par type d'acte")
+        verbose_name_plural = _("Délais par type d'acte")
+        constraints = [
+            models.UniqueConstraint(fields=["node", "document_type"], name="documents_type_delay_node_type_uniq"),
+            models.CheckConstraint(condition=models.Q(days__gte=1), name="documents_type_delay_days_positive"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Délai {self.document_type} — {self.node_id} : {self.days} j"

@@ -32,6 +32,8 @@ from apps.documents.serializers import (
     StatsOutputSerializer,
     SupplementInputSerializer,
     TransitionInputSerializer,
+    TypeDelaysOutputSerializer,
+    TypeDelaysUpdateInputSerializer,
 )
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
@@ -348,3 +350,40 @@ class AttachmentContentApi(V1ApiMixin, APIView):
         response["Cache-Control"] = "private, no-store"
         response["Referrer-Policy"] = "no-referrer"
         return response
+
+
+# --- Paramètres : délais par type d'acte --------------------------------------------------
+
+
+class TypeDelaysApi(_AuthedApi):
+    """Délais indicatifs par type d'acte d'un nœud (Paramètres, « Actes délivrés »). Mêmes
+    capacités que les autres paramètres du secrétariat : ``horaires.gerer`` ou ``structure.gerer``."""
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_type_delays_retrieve",
+        summary="Délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)",
+        responses=TypeDelaysOutputSerializer,
+    )
+    def get(self, request: Request, node_id: str) -> Response:
+        node = hierarchy_selectors.node_get(node_id=node_id)
+        services.type_delays_check(user=request.user, node=node)
+        return Response(TypeDelaysOutputSerializer(selectors.document_type_delays_get(node=node)).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_type_delays_update",
+        summary="Régler les délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)",
+        request=TypeDelaysUpdateInputSerializer,
+        responses=TypeDelaysOutputSerializer,
+    )
+    def put(self, request: Request, node_id: str) -> Response:
+        node = hierarchy_selectors.node_get(node_id=node_id)
+        serializer = TypeDelaysUpdateInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.document_type_delays_set(
+            node=node,
+            delays={item["document_type"]: item["days"] for item in serializer.validated_data["items"]},
+            actor=request.user,
+        )
+        return Response(TypeDelaysOutputSerializer(selectors.document_type_delays_get(node=node)).data)
