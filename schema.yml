@@ -5182,7 +5182,7 @@ paths:
           description: ''
   /api/v1/staff/documents/nodes/{node_id}/type-delays/:
     get:
-      operationId: staff_documents_type_delays_retrieve
+      operationId: v1_staff_documents_nodes_type_delays_retrieve
       description: |-
         Délais indicatifs par type d'acte d'un nœud (Paramètres, « Actes délivrés »). Mêmes
         capacités que les autres paramètres du secrétariat : ``horaires.gerer`` ou ``structure.gerer``.
@@ -5206,7 +5206,7 @@ paths:
                 $ref: '#/components/schemas/TypeDelaysOutput'
           description: ''
     put:
-      operationId: staff_documents_type_delays_update
+      operationId: v1_staff_documents_nodes_type_delays_update
       description: |-
         Délais indicatifs par type d'acte d'un nœud (Paramètres, « Actes délivrés »). Mêmes
         capacités que les autres paramètres du secrétariat : ``horaires.gerer`` ou ``structure.gerer``.

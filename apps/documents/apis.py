@@ -361,7 +361,6 @@ class TypeDelaysApi(_AuthedApi):
 
     @extend_schema(
         tags=TAG,
-        operation_id="staff_documents_type_delays_retrieve",
         summary="Délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)",
         responses=TypeDelaysOutputSerializer,
     )
@@ -372,7 +371,6 @@ class TypeDelaysApi(_AuthedApi):
 
     @extend_schema(
         tags=TAG,
-        operation_id="staff_documents_type_delays_update",
         summary="Régler les délais indicatifs par type d'acte (horaires.gerer ou structure.gerer)",
         request=TypeDelaysUpdateInputSerializer,
         responses=TypeDelaysOutputSerializer,
