@@ -281,7 +281,9 @@ def test_non_keycloak_bearer_token_is_refused(keys):
 async def test_websocket_closes_4401_on_invalid_ticket(keys):
     from config.asgi import application
 
-    communicator = WebsocketCommunicator(application, "/ws/notifications/?ticket=pas-un-ticket", headers=[(b"origin", b"http://localhost:3000")])
+    communicator = WebsocketCommunicator(
+        application, "/ws/notifications/?ticket=pas-un-ticket", headers=[(b"origin", b"http://localhost:3000")]
+    )
     connected, code = await communicator.connect()
     assert not connected
     assert code == 4401
@@ -294,7 +296,9 @@ async def test_websocket_ignores_a_token_in_the_url(keys):
     from config.asgi import application
 
     token = keys.token(email="ws@test.sn")
-    communicator = WebsocketCommunicator(application, f"/ws/notifications/?token={token}", headers=[(b"origin", b"http://localhost:3000")])
+    communicator = WebsocketCommunicator(
+        application, f"/ws/notifications/?token={token}", headers=[(b"origin", b"http://localhost:3000")]
+    )
     connected, _ = await communicator.connect()
     assert not connected
     await communicator.disconnect()
@@ -412,3 +416,70 @@ def test_account_migration_simulation_then_apply():
     assert [r["email"] for r in admin.created] == ["a@test.sn"]
     # MD5 en tests : le mot de passe ne peut pas être importé → réinitialisation exigée.
     assert admin.created[0]["requiredActions"] == ["UPDATE_PASSWORD"]
+
+
+# --- Rattachement hors transaction (recette 26/09/2026, DEF-01) ---------------------------
+
+
+class StaffSyncAdmin:
+    calls: list[tuple[str, str]] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def user_realm_roles(self, sub):
+        return set()
+
+    def add_realm_role(self, sub, role):
+        StaffSyncAdmin.calls.append(("add_role", role))
+
+    def user_has_otp(self, sub):
+        return False
+
+    def add_required_action(self, sub, action):
+        StaffSyncAdmin.calls.append(("required_action", action))
+
+
+@pytest.fixture
+def fake_admin(monkeypatch):
+    from apps.authentication import services_keycloak
+
+    StaffSyncAdmin.calls = []
+    monkeypatch.setattr(services_keycloak, "KeycloakAdmin", StaffSyncAdmin)
+    return StaffSyncAdmin
+
+
+def test_first_refused_request_keeps_the_account_link(keys, fake_admin):
+    # Arrange : un responsable (e-mail vérifié, nommé) jamais connecté, sans OTP.
+    tree = Tree()
+    secretary = person("secretaire@test.sn")
+    nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    sub = str(uuid.uuid4())
+    token = keys.token(sub=sub, email="secretaire@test.sn")
+
+    # Act : sa première requête est refusée (MFA requise).
+    response = api(token).get("/api/v1/audit/")
+
+    # Assert : le refus n'annule plus le rattachement, et le rôle staff est demandé à Keycloak.
+    assert response.status_code == 403
+    secretary.refresh_from_db()
+    assert secretary.keycloak_sub == sub
+    assert ("add_role", "staff") in fake_admin.calls
+    assert ("required_action", "CONFIGURE_TOTP") in fake_admin.calls
+
+
+def test_staff_sync_is_not_repeated_on_every_request(keys, fake_admin):
+    tree = Tree()
+    secretary = person("secretaire@test.sn")
+    nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    token = keys.token(sub=str(uuid.uuid4()), email="secretaire@test.sn")
+
+    for _ in range(3):
+        api(token).get("/api/v1/audit/")
+
+    assert fake_admin.calls.count(("add_role", "staff")) == 1
+
+
+def test_fidele_needs_no_staff_sync(keys, fake_admin):
+    assert api(keys.token()).get(ME).status_code == 200
+    assert fake_admin.calls == []

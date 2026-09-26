@@ -63,7 +63,9 @@ def direct_grant_client():
     response = httpx.post(f"{KC}/admin/realms/{REALM}/clients", json=rep, headers=headers)
     internal_id = response.headers["Location"].rsplit("/", 1)[-1]
     yield client_id
-    httpx.delete(f"{KC}/admin/realms/{REALM}/clients/{internal_id}", headers={"Authorization": f"Bearer {_admin_token()}"})
+    httpx.delete(
+        f"{KC}/admin/realms/{REALM}/clients/{internal_id}", headers={"Authorization": f"Bearer {_admin_token()}"}
+    )
 
 
 @pytest.fixture
@@ -126,4 +128,6 @@ def test_imported_django_hash_logs_in_and_the_api_provisions_the_person(kc_setti
     assignment.save()
     assert keycloak_staff_role_sync(person=person) == "removed"
 
-    httpx.delete(f"{KC}/admin/realms/{REALM}/users/{keycloak_id}", headers={"Authorization": f"Bearer {_admin_token()}"})
+    httpx.delete(
+        f"{KC}/admin/realms/{REALM}/users/{keycloak_id}", headers={"Authorization": f"Bearer {_admin_token()}"}
+    )
