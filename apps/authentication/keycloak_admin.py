@@ -164,7 +164,9 @@ def django_hash_to_keycloak_credential(encoded: str) -> dict[str, Any] | None:
         return None
     return {
         "type": "password",
-        "credentialData": json.dumps({"hashIterations": int(iterations), "algorithm": "pbkdf2-sha256", "additionalParameters": {}}),
+        "credentialData": json.dumps(
+            {"hashIterations": int(iterations), "algorithm": "pbkdf2-sha256", "additionalParameters": {}}
+        ),
         "secretData": json.dumps(
             {"value": hash_b64, "salt": base64.b64encode(salt.encode()).decode(), "additionalParameters": {}}
         ),

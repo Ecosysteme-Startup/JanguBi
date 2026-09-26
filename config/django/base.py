@@ -163,6 +163,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.core.request_context.RequestContextMiddleware",
+    # Hors de la transaction ATOMIC_REQUESTS : le rattachement du compte survit à un 401/403.
+    "apps.authentication.middleware.KeycloakProvisioningMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

@@ -152,7 +152,9 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
     if person is not None:
         return person
     if identity.email and identity.email_verified:
-        person = User.objects.select_for_update().filter(email__iexact=identity.email, keycloak_sub__isnull=True).first()
+        person = (
+            User.objects.select_for_update().filter(email__iexact=identity.email, keycloak_sub__isnull=True).first()
+        )
         if person is not None:
             person.keycloak_sub = identity.sub
             person.save(update_fields=["keycloak_sub", "updated_at"])
@@ -244,8 +246,8 @@ def activity_stamp(user: Any, *, mfa: bool) -> None:
         setattr(user, name, value)
 
 
-def authenticate_token(token: str) -> tuple[Any, KeycloakIdentity]:
-    identity = token_validate(token)
+def authenticate_token(token: str, identity: KeycloakIdentity | None = None) -> tuple[Any, KeycloakIdentity]:
+    identity = identity or token_validate(token)
     user = person_from_identity(identity)
     if not user.is_active:
         raise KeycloakTokenError("Compte désactivé.", code="user_inactive")
@@ -264,8 +266,11 @@ class KeycloakJWTAuthentication(BaseAuthentication):
         if len(parts) != 2 or parts[0].lower() != b"bearer":
             return None
         token = parts[1].decode("latin-1")
+        # Déjà validé par KeycloakProvisioningMiddleware pour ce même jeton : pas de 2ᵉ vérification.
+        cached = getattr(getattr(request, "_request", request), "_keycloak_identity", None)
+        identity = cached[1] if cached and cached[0] == token else None
         try:
-            return authenticate_token(token)
+            return authenticate_token(token, identity)
         except KeycloakTokenError as exc:
             raise exceptions.AuthenticationFailed(str(exc), code=exc.code) from exc
 
