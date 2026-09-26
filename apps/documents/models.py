@@ -60,9 +60,7 @@ class DocumentRequest(BaseModel):
     document_type_free = models.CharField(max_length=255, blank=True, default="")
     reason = models.CharField(max_length=30, choices=RequestReason.choices)
     reason_free = models.CharField(max_length=255, blank=True, default="")
-    status = models.CharField(
-        max_length=30, choices=Status.choices, default=Status.SUBMITTED, db_index=True
-    )
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.SUBMITTED, db_index=True)
     assigned_to = models.ForeignKey(
         BaseUser,
         null=True,

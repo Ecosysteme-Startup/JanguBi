@@ -71,7 +71,9 @@ class RequestListCreateApi(_AuthedApi):
         return get_paginated_response(
             pagination_class=LimitOffsetPagination,
             serializer_class=RequesterOutputSerializer,
-            queryset=selectors.request_list_for_requester(user=request.user, status=filters.validated_data.get("status")),
+            queryset=selectors.request_list_for_requester(
+                user=request.user, status=filters.validated_data.get("status")
+            ),
             request=request,
             view=self,
         )
@@ -89,7 +91,9 @@ class RequestListCreateApi(_AuthedApi):
         target = hierarchy_selectors.node_get(node_id=data.pop("target_node_id"))
         request_obj = services.document_request_create(requester=request.user, target_node=target, data=data)
         return Response(
-            RequesterOutputSerializer(selectors.request_get_for_requester(user=request.user, request_id=request_obj.pk)).data,
+            RequesterOutputSerializer(
+                selectors.request_get_for_requester(user=request.user, request_id=request_obj.pk)
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -126,29 +130,47 @@ class RequestOptionsApi(_AuthedApi):
 
 
 class RequestDetailApi(_AuthedApi):
-    @extend_schema(tags=TAG, summary="Suivi de ma demande (statut, historique, retrait)", responses=RequesterOutputSerializer)
+    @extend_schema(
+        tags=TAG, summary="Suivi de ma demande (statut, historique, retrait)", responses=RequesterOutputSerializer
+    )
     def get(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
         return Response(RequesterOutputSerializer(obj, context={"with_history": True}).data)
 
 
 class RequestSupplementApi(_AuthedApi):
-    @extend_schema(tags=TAG, summary="Envoyer le complément demandé", request=SupplementInputSerializer, responses=RequesterOutputSerializer)
+    @extend_schema(
+        tags=TAG,
+        summary="Envoyer le complément demandé",
+        request=SupplementInputSerializer,
+        responses=RequesterOutputSerializer,
+    )
     def post(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
         serializer = SupplementInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        services.document_request_submit_supplement(request_obj=obj, requester=request.user, **serializer.validated_data)
+        services.document_request_submit_supplement(
+            request_obj=obj, requester=request.user, **serializer.validated_data
+        )
         obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
         return Response(RequesterOutputSerializer(obj, context={"with_history": True}).data)
 
 
 class RequestCancelApi(_AuthedApi):
-    @extend_schema(tags=TAG, summary="Annuler ma demande (soumise ou en complément)", request=None, responses=RequesterOutputSerializer)
+    @extend_schema(
+        tags=TAG,
+        summary="Annuler ma demande (soumise ou en complément)",
+        request=None,
+        responses=RequesterOutputSerializer,
+    )
     def post(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_requester(user=request.user, request_id=request_id)
         services.document_request_cancel(request_obj=obj, requester=request.user)
-        return Response(RequesterOutputSerializer(selectors.request_get_for_requester(user=request.user, request_id=request_id)).data)
+        return Response(
+            RequesterOutputSerializer(
+                selectors.request_get_for_requester(user=request.user, request_id=request_id)
+            ).data
+        )
 
 
 # --- Paroisse -----------------------------------------------------------------------------
@@ -175,11 +197,18 @@ class QueueApi(_ProcessorApi):
 
 
 class QueueCountsApi(_ProcessorApi):
-    @extend_schema(tags=TAG, summary="Compteurs par statut de ma file", parameters=[NodeQuerySerializer], responses=CountsOutputSerializer)
+    @extend_schema(
+        tags=TAG,
+        summary="Compteurs par statut de ma file",
+        parameters=[NodeQuerySerializer],
+        responses=CountsOutputSerializer,
+    )
     def get(self, request: Request) -> Response:
         query = NodeQuerySerializer(data=request.query_params)
         query.is_valid(raise_exception=True)
-        return Response(selectors.status_counts(queryset=selectors.queue_for(user=request.user, filters=query.validated_data)))
+        return Response(
+            selectors.status_counts(queryset=selectors.queue_for(user=request.user, filters=query.validated_data))
+        )
 
 
 class SupervisionStatsApi(_AuthedApi):
@@ -241,7 +270,12 @@ class ProcessorTransitionApi(_ProcessorApi):
 
 
 class RegisterRefApi(_ProcessorApi):
-    @extend_schema(tags=TAG, summary="Références du registre (jamais visibles du fidèle)", request=RegisterRefInputSerializer, responses=ProcessorOutputSerializer)
+    @extend_schema(
+        tags=TAG,
+        summary="Références du registre (jamais visibles du fidèle)",
+        request=RegisterRefInputSerializer,
+        responses=ProcessorOutputSerializer,
+    )
     def put(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
         serializer = RegisterRefInputSerializer(data=request.data)
@@ -252,26 +286,33 @@ class RegisterRefApi(_ProcessorApi):
 
 
 class NotesApi(_ProcessorApi):
-    @extend_schema(tags=TAG, summary="Notes internes (jamais visibles du fidèle)", responses=NoteOutputSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Notes internes (jamais visibles du fidèle)", responses=NoteOutputSerializer(many=True)
+    )
     def get(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
         return Response(NoteOutputSerializer(selectors.internal_notes(request_obj=obj), many=True).data)
 
-    @extend_schema(tags=TAG, summary="Ajouter une note interne", request=NoteInputSerializer, responses={201: NoteOutputSerializer})
+    @extend_schema(
+        tags=TAG, summary="Ajouter une note interne", request=NoteInputSerializer, responses={201: NoteOutputSerializer}
+    )
     def post(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
         serializer = NoteInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        note = services.document_request_add_internal_note(request_obj=obj, author=request.user, **serializer.validated_data)
+        note = services.document_request_add_internal_note(
+            request_obj=obj, author=request.user, **serializer.validated_data
+        )
         return Response(NoteOutputSerializer(note).data, status=status.HTTP_201_CREATED)
 
 
 class LogsApi(_ProcessorApi):
-    @extend_schema(tags=TAG, summary="Journal des statuts (avec l'auteur)", responses=ProcessorStatusLogSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Journal des statuts (avec l'auteur)", responses=ProcessorStatusLogSerializer(many=True)
+    )
     def get(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
         return Response(ProcessorStatusLogSerializer(selectors.status_logs(request_obj=obj), many=True).data)
-
 
 
 class AssignApi(_ProcessorApi):

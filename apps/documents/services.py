@@ -7,8 +7,10 @@ appartient au nœud (RG-04) et se traite sous ``actes.traiter``.
 
 import datetime
 import logging
+import re
 import secrets
 from functools import partial
+from html import unescape
 from typing import Any
 
 from django.conf import settings
@@ -16,6 +18,7 @@ from django.core import signing
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from apps.core.exceptions import ApplicationError, PermissionDeniedError
 from apps.documents.constants import allowed_reasons_for, is_reason_allowed
@@ -80,7 +83,9 @@ def _form_check(*, document_type: str, document_type_free: str, reason: str, rea
         )
     missing = [f for f in _REQUIRED_DETAILS.get(document_type, []) if not details.get(f)]
     if missing:
-        raise ApplicationError("Informations manquantes pour ce document.", {"missing": missing}, code="details_missing")
+        raise ApplicationError(
+            "Informations manquantes pour ce document.", {"missing": missing}, code="details_missing"
+        )
 
 
 def _parish_check(node: Node) -> None:
@@ -172,13 +177,24 @@ def _notify_parish(request_obj: DocumentRequest, event: str) -> None:
     )
 
 
+def html_to_text(html: str) -> str:
+    """Version texte d'un e-mail : paragraphes et sauts de ligne conservés, balises retirées
+    (la partie texte affichait le HTML brut : ``<p>Bonjour…</p>``)."""
+    text = re.sub(r"(?i)<br\s*/?>", "\n", html)
+    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
+    text = unescape(strip_tags(text))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 def _email(*, to: str, subject: str, html: str) -> None:
     from apps.emails.models import Email
     from apps.emails.tasks import email_send as email_send_task
 
     if not to:
         return
-    email = Email.objects.create(to=to, subject=subject[:255], html=html, plain_text=html, status=Email.Status.SENDING)
+    email = Email.objects.create(
+        to=to, subject=subject[:255], html=html, plain_text=html_to_text(html), status=Email.Status.SENDING
+    )
     transaction.on_commit(partial(email_send_task.delay, email.id))
 
 
@@ -194,7 +210,11 @@ def document_request_create(*, requester: Any, target_node: Node, data: dict[str
     reason_free = (data.get("reason_free") or "").strip()
     details = data.get("document_details") or {}
     _form_check(
-        document_type=document_type, document_type_free=type_free, reason=reason, reason_free=reason_free, details=details
+        document_type=document_type,
+        document_type_free=type_free,
+        reason=reason,
+        reason_free=reason_free,
+        details=details,
     )
     if not data.get("consent_given"):
         raise ApplicationError("Le consentement est nécessaire pour transmettre la demande.", code="consent_required")
@@ -225,7 +245,9 @@ def document_request_create(*, requester: Any, target_node: Node, data: dict[str
         pickup_mode=data.get("pickup_mode") or DocumentRequest.PickupMode.SECRETARIAT,
         status=S.SUBMITTED,
     )
-    DocumentRequestStatusLog.objects.create(request=request_obj, from_status="", to_status=S.SUBMITTED, changed_by=requester)
+    DocumentRequestStatusLog.objects.create(
+        request=request_obj, from_status="", to_status=S.SUBMITTED, changed_by=requester
+    )
     audit_log(actor=requester, action="acte.depot", target=request_obj, node=target_node)
     if file_id := data.get("attachment_file_id"):
         _attach(request_obj=request_obj, file_id=file_id, uploaded_by=requester)
@@ -255,9 +277,11 @@ def _attach(*, request_obj: DocumentRequest, file_id: int, uploaded_by: Any) -> 
 def _lock(request_obj: DocumentRequest) -> DocumentRequest:
     """Relit la demande sous verrou : deux transitions concurrentes ne s'appliquent pas
     toutes les deux à partir du même statut."""
-    return DocumentRequest.objects.select_for_update(of=("self",)).select_related(
-        "target_node", "target_node__type", "requester"
-    ).get(pk=request_obj.pk)
+    return (
+        DocumentRequest.objects.select_for_update(of=("self",))
+        .select_related("target_node", "target_node__type", "requester")
+        .get(pk=request_obj.pk)
+    )
 
 
 def _requester_check(*, request_obj: DocumentRequest, user: Any) -> None:
@@ -267,7 +291,11 @@ def _requester_check(*, request_obj: DocumentRequest, user: Any) -> None:
 
 @transaction.atomic
 def document_request_submit_supplement(
-    *, request_obj: DocumentRequest, requester: Any, additional_info: str = "", document_details: dict | None = None,
+    *,
+    request_obj: DocumentRequest,
+    requester: Any,
+    additional_info: str = "",
+    document_details: dict | None = None,
     attachment_file_id: int | None = None,
 ) -> DocumentRequest:
     _requester_check(request_obj=request_obj, user=requester)
@@ -275,10 +303,14 @@ def document_request_submit_supplement(
     document_details = {k: v for k, v in (document_details or {}).items() if str(v).strip()}
     if not (additional_info.strip() or document_details or attachment_file_id):
         raise ApplicationError("Le complément est vide.", code="empty_supplement")
-    _transition(request_obj=request_obj, action="supplement", actor=requester, comment="Complément fourni par le demandeur.")
+    _transition(
+        request_obj=request_obj, action="supplement", actor=requester, comment="Complément fourni par le demandeur."
+    )
     if additional_info.strip():
         stamp = timezone.localtime().strftime("%d/%m/%Y %H:%M")
-        request_obj.additional_info = f"{request_obj.additional_info}\n\n[Complément du {stamp}]\n{additional_info}".strip()
+        request_obj.additional_info = (
+            f"{request_obj.additional_info}\n\n[Complément du {stamp}]\n{additional_info}".strip()
+        )
     if document_details:
         request_obj.document_details = {**request_obj.document_details, **document_details}
     request_obj.save()
@@ -341,7 +373,9 @@ def document_request_process(
 
 
 @transaction.atomic
-def document_request_register_ref_set(*, request_obj: DocumentRequest, actor: Any, data: dict[str, str]) -> DocumentRequest:
+def document_request_register_ref_set(
+    *, request_obj: DocumentRequest, actor: Any, data: dict[str, str]
+) -> DocumentRequest:
     """EF-ACT-05 : références du registre, visibles de la paroisse seulement."""
     processor_check(user=actor, request_obj=request_obj)
     fields = ["register_volume", "register_page", "register_number", "register_marginal_notes"]
@@ -367,9 +401,10 @@ def _is_processor_of(*, user: Any, node: Node) -> bool:
     """Titulaire (actif) d'``actes.traiter`` sur ``node``, héritage compris."""
     from apps.hierarchy.selectors_offices import capability_holders
 
-    return bool(getattr(user, "is_active", False)) and capability_holders(node=node, capability="actes.traiter").filter(
-        pk=user.pk
-    ).exists()
+    return (
+        bool(getattr(user, "is_active", False))
+        and capability_holders(node=node, capability="actes.traiter").filter(pk=user.pk).exists()
+    )
 
 
 @transaction.atomic
@@ -553,7 +588,9 @@ def document_type_delays_set(*, node: Node, delays: dict[str, int | None], actor
     type_delays_check(user=actor, node=node)
     unknown = set(delays) - set(TYPE_DELAY_DOCUMENT_TYPES)
     if unknown:
-        raise ApplicationError("Type d'acte inconnu.", {"document_types": sorted(unknown)}, code="document_type_invalid")
+        raise ApplicationError(
+            "Type d'acte inconnu.", {"document_types": sorted(unknown)}, code="document_type_invalid"
+        )
     for document_type, days in delays.items():
         if days is not None and not 1 <= days <= TYPE_DELAY_MAX_DAYS:
             raise ApplicationError(
@@ -618,7 +655,9 @@ def document_requests_remind(*, now: datetime.datetime | None = None) -> int:
                     _notify_parish(request_obj, "overdue")
                 else:
                     _notify_requester(
-                        request_obj, "Rappel : votre demande attend une action de votre part.", status=request_obj.status
+                        request_obj,
+                        "Rappel : votre demande attend une action de votre part.",
+                        status=request_obj.status,
                     )
             count += 1
         except Exception:  # noqa: BLE001 — journalisé, repris au passage suivant
