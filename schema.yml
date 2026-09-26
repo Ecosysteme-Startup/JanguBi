@@ -1371,7 +1371,7 @@ paths:
     patch:
       operationId: v1_hierarchy_assignments_partial_update
       description: À placer en premier dans les bases des vues V1.
-      summary: Terminer ou annuler une nomination
+      summary: Terminer, annuler ou changer la qualité d'une nomination
       parameters:
       - in: path
         name: assignment_id
@@ -5651,10 +5651,12 @@ components:
       enum:
       - terminer
       - annuler
+      - qualifier
       type: string
       description: |-
         * `terminer` - terminer
         * `annuler` - annuler
+        * `qualifier` - qualifier
     ArticleContentTypeEnum:
       enum:
       - announcement
@@ -5941,6 +5943,12 @@ components:
           type: string
           default: ''
           maxLength: 255
+        quality:
+          type: string
+          description: 'Qualité parmi celles de l''office (ex. cure, administrateur)
+            ; défaut : la première'
+          maxLength: 40
+          pattern: ^[-a-zA-Z0-9_]+$
       required:
       - node_id
       - office
@@ -5961,6 +5969,12 @@ components:
         office_label:
           type: string
           readOnly: true
+          description: 'Titre du titulaire : « Curé », « Administrateur paroissial
+            », « Vicaire paroissial »…'
+        quality:
+          type: string
+          readOnly: true
+          description: Code de la qualité (vide si l'office n'en a pas)
         node:
           allOf:
           - $ref: '#/components/schemas/NodeRef'
@@ -6000,6 +6014,7 @@ components:
       - office
       - office_label
       - person
+      - quality
       - start_date
     AssignmentStatusEnum:
       enum:
@@ -6322,6 +6337,10 @@ components:
           type: boolean
         office:
           type: string
+        office_label:
+          type: string
+          description: Titre de la nomination qui accorde la capacité (« Curé », «
+            Administrateur paroissial »…)
       required:
       - capacite
       - herite
@@ -6329,6 +6348,7 @@ components:
       - node_name
       - node_type
       - office
+      - office_label
     CardinalityEnum:
       enum:
       - one
@@ -7801,6 +7821,17 @@ components:
       required:
       - days
       - hours
+    OfficeQuality:
+      type: object
+      properties:
+        code:
+          type: string
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+      required:
+      - code
+      - label
     OfficeTypeOutput:
       type: object
       properties:
@@ -7843,12 +7874,20 @@ components:
         inherits_down:
           type: boolean
           title: Hérite sur le sous-arbre
+        qualities:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeQuality'
+          readOnly: true
+          description: Titres possibles du titulaire ; le premier est le titre par
+            défaut.
       required:
       - appointed_by
       - capabilities
       - code
       - label
       - node_types
+      - qualities
     PaginatedAccountOutputList:
       type: object
       properties:
@@ -8353,6 +8392,11 @@ components:
           format: date
           nullable: true
           description: 'Terminer : date de fin (défaut : aujourd''hui)'
+        quality:
+          type: string
+          description: 'Qualifier : nouvelle qualité'
+          maxLength: 40
+          pattern: ^[-a-zA-Z0-9_]+$
     PatchedEventUpdateInput:
       type: object
       properties:
@@ -8875,7 +8919,8 @@ components:
           pattern: ^[-a-zA-Z0-9_]+$
         label:
           type: string
-          description: 'Libellé de l''office : Curé, Vicaire paroissial…'
+          description: 'Titre du prêtre : Curé, Administrateur paroissial, Vicaire
+            paroissial…'
       required:
       - code
       - label
@@ -9093,7 +9138,7 @@ components:
           type: string
         office:
           type: string
-          description: Libellé de l'office (Curé, Vicaire paroissial…)
+          description: Titre du clerc (Curé, Administrateur paroissial, Vicaire paroissial…)
       required:
       - name
       - office

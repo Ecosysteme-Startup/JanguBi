@@ -216,14 +216,14 @@ def places_import_csv(*, content: str, dry_run: bool = True, actor: Any = None) 
 # --- Mouvement annuel des affectations (EF-PER-07) ---------------------------------------
 
 ASSIGNMENT_COLUMNS = ("action", "email", "office", "node_code")
-ASSIGNMENT_OPTIONAL = ("start_date", "end_date", "decree_ref")
+ASSIGNMENT_OPTIONAL = ("start_date", "end_date", "decree_ref", "quality")
 
 
 def assignments_import_csv(
     *, actor: Any, content: str, effective_date: date, dry_run: bool = True
 ) -> ImportReport:
     """Colonnes : action (``nommer`` | ``terminer``), email, office, node_code (+ start_date,
-    end_date, decree_ref). Date par défaut : ``effective_date``. Pour un office à titulaire
+    end_date, decree_ref, quality — ex. ``cure`` ou ``administrateur`` pour une cure). Date par défaut : ``effective_date``. Pour un office à titulaire
     unique, le titulaire en place est terminé la veille (avertissement)."""
     from apps.hierarchy.selectors_offices import person_get_by_email
     from apps.hierarchy.services_offices import (
@@ -271,6 +271,7 @@ def assignments_import_csv(
             start_date=start,
             end_date=_date(row.get("end_date", "")),
             decree_ref=row.get("decree_ref", ""),
+            quality=(row.get("quality") or "").strip(),
         )
         return (label, warning) if warning else label
 

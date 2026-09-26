@@ -40,6 +40,7 @@ class Grant:
     inherits: bool
     office: str
     node_type: str = ""  # code du type de nœud ("plateforme" hors arbre), pour grouper les contextes
+    office_label: str = ""  # titre de la nomination (« Curé », « Administrateur paroissial »…)
 
     def covers(self, path: str) -> bool:
         return path == self.path or (self.inherits and path.startswith(self.path))
@@ -88,7 +89,7 @@ def active_assignments(*, user: Any, on: Any = None) -> QuerySet[OfficeAssignmen
 def _grants_compute(user: Any) -> list[Grant]:
     grants: list[Grant] = []
     if is_platform_admin(user):
-        grants += [Grant(c, None, "Plateforme", "", True, "plateforme", "plateforme") for c in sorted(PLATFORM_ADMIN_CAPABILITIES)]
+        grants += [Grant(c, None, "Plateforme", "", True, "plateforme", "plateforme", "Administrateur plateforme") for c in sorted(PLATFORM_ADMIN_CAPABILITIES)]
 
     assignments = list(active_assignments(user=user).prefetch_related("office_type__capabilities"))
     if not assignments:
@@ -112,6 +113,7 @@ def _grants_compute(user: Any) -> list[Grant]:
                 a.office_type.inherits_down,
                 a.office_type.code,
                 a.node.type.code,
+                a.title,
             )
             for c in sorted(capabilities)
         ]
@@ -122,7 +124,7 @@ def _cache_key(user: Any) -> str:
     global_version = cache.get_or_set(_GLOBAL_VERSION_KEY, 1, None)
     user_version = cache.get_or_set(f"authz:uv:{user.pk}", 1, None)
     platform = int(is_platform_admin(user))  # le rôle vient du jeton : il fait partie de la clé
-    return f"authz:v2:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{platform}:{user.pk}"
+    return f"authz:v3:{timezone.localdate().isoformat()}:{global_version}:{user_version}:{platform}:{user.pk}"
 
 
 def grants(user: Any) -> list[Grant]:
@@ -185,9 +187,18 @@ def noeuds_autorises(user: Any, capacite: str) -> QuerySet[Node]:
 
 
 def capacites(user: Any) -> list[dict[str, Any]]:
-    """``[{capacite, node_id, node_name, node_type, herite, office}]`` pour ``GET /me/capacites/`` (EF-PER-10)."""
+    """``[{capacite, node_id, node_name, node_type, herite, office, office_label}]`` pour
+    ``GET /me/capacites/`` (EF-PER-10)."""
     return [
-        {"capacite": g.capability, "node_id": g.node_id, "node_name": g.node_name, "herite": g.inherits, "office": g.office, "node_type": g.node_type}
+        {
+            "capacite": g.capability,
+            "node_id": g.node_id,
+            "node_name": g.node_name,
+            "herite": g.inherits,
+            "office": g.office,
+            "office_label": g.office_label,
+            "node_type": g.node_type,
+        }
         for g in grants(user)
     ]
 

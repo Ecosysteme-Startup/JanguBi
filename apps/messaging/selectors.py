@@ -180,7 +180,7 @@ def _principal_offices(*, person_ids: list, nodes: list, parish: Any) -> dict:
         assignments,
         key=lambda a: (a.node_id != parish.pk, a.office_type.cardinality != Cardinality.ONE, a.start_date),
     ):
-        offices.setdefault(a.person_id, a.office_type)
+        offices.setdefault(a.person_id, {"code": a.office_type.code, "label": a.title})
     return offices
 
 

@@ -122,6 +122,27 @@ def cardinality_check(*, office_type: OfficeType, node: Node, start: date, end: 
         )
 
 
+def quality_resolve(*, office_type: OfficeType, quality: str = "") -> str:
+    """Qualité validée contre celles de l'office ; par défaut, la première. Un office sans
+    qualités n'en accepte aucune."""
+    codes = office_type.quality_codes
+    if not codes:
+        if quality:
+            raise ApplicationError(
+                f"L'office « {office_type.label} » n'a pas de qualité.", {"quality": quality}, code="invalid_quality"
+            )
+        return ""
+    if not quality:
+        return codes[0]
+    if quality not in codes:
+        raise ApplicationError(
+            f"Qualité inconnue pour l'office « {office_type.label} » : « {quality} ».",
+            {"quality": quality, "qualities": codes},
+            code="invalid_quality",
+        )
+    return quality
+
+
 # --- Nominations -------------------------------------------------------------------------
 
 
@@ -137,6 +158,7 @@ def assignment_create(
     decree_ref: str = "",
     decree_file: Any = None,
     note: str = "",
+    quality: str = "",
     ip: str | None = None,
 ) -> OfficeAssignment:
     start_date = start_date or timezone.localdate()
@@ -149,6 +171,7 @@ def assignment_create(
     appointing_authority_check(actor=actor, office_type=office_type, node=node)
     node_type_check(office_type=office_type, node=node)
     _order_check(person=person, office_type=office_type)
+    quality = quality_resolve(office_type=office_type, quality=quality)
     # Verrou sur le nœud : deux nominations concurrentes au même office ne passent pas toutes les deux.
     Node.objects.select_for_update().filter(pk=node.pk).first()
     cardinality_check(office_type=office_type, node=node, start=start_date, end=end_date)
@@ -165,13 +188,20 @@ def assignment_create(
         decree_ref=decree_ref,
         decree_file=decree_file,
         note=note,
+        quality=quality,
     )
     audit_log(
         actor=actor,
         action="office.nomination",
         target=assignment,
         node=node,
-        metadata={"office": office_type.code, "person": str(person.pk), "start": str(start_date), "status": status},
+        metadata={
+            "office": office_type.code,
+            "quality": quality,
+            "person": str(person.pk),
+            "start": str(start_date),
+            "status": status,
+        },
         ip=ip,
     )
     _invalidate(person.pk)
@@ -203,6 +233,33 @@ def assignment_terminate(
         ip=ip,
     )
     _invalidate(assignment.person_id)
+    return assignment
+
+
+@transaction.atomic
+def assignment_quality_set(
+    *, actor: Any, assignment: OfficeAssignment, quality: str, ip: str | None = None
+) -> OfficeAssignment:
+    """Change la qualité d'une nomination en cours (ex. l'administrateur paroissial devient curé)."""
+    appointing_authority_check(actor=actor, office_type=assignment.office_type, node=assignment.node)
+    if assignment.status not in OPEN_STATUSES:
+        raise ApplicationError("Cette nomination n'est plus en cours.", code="assignment_closed")
+    if not quality:
+        raise ApplicationError("Indiquez la qualité.", {"quality": "obligatoire"}, code="invalid_quality")
+    previous = assignment.quality
+    assignment.quality = quality_resolve(office_type=assignment.office_type, quality=quality)
+    assignment.save(update_fields=["quality", "updated_at"])
+    audit_log(
+        actor=actor,
+        action="office.qualite",
+        target=assignment,
+        node=assignment.node,
+        metadata={"from": previous, "to": assignment.quality},
+        ip=ip,
+    )
+    # Le titre fait partie des droits en cache (/me/capacites/) ; les capacités, elles, ne changent pas.
+    authz.invalidate_user(assignment.person_id)
+    transaction.on_commit(partial(authz.invalidate_user, assignment.person_id))
     return assignment
 
 
