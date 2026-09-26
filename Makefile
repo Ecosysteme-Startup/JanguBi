@@ -155,8 +155,8 @@ init-data:
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source bible_fr
 	@echo "3. Execution du script conditionnel pgvector..."
 	docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < init/postgresql/pgvector_conditional.sql
-	@echo "4. Creation et configuration du bucket MinIO..."
-	docker compose exec minio sh -c "mc alias set local $(AWS_S3_ENDPOINT_URL) $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD) && mc mb local/rosary-audio || true && mc anonymous set public local/rosary-audio"
+	@echo "4. Creation des buckets MinIO (audio du Rosaire public, fichiers prives)..."
+	docker compose exec minio sh -c "mc alias set local $(AWS_S3_ENDPOINT_URL) $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD) && mc mb local/rosary-audio || true && mc anonymous set public local/rosary-audio && mc mb --ignore-existing local/$(AWS_STORAGE_BUCKET_NAME)"
 	@echo "5. Importation des donnees du Rosaire..."
 	docker compose exec django python manage.py seed_rosary
 	@echo "6. Importation de la liturgie du jour (AELF)..."

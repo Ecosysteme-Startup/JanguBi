@@ -108,7 +108,9 @@ def test_link_opens_the_file_and_is_audited(world):
     assert response.status_code == 200
     assert b"".join(response.streaming_content) == b"%PDF-1.4 test"
     assert response["Cache-Control"] == "private, no-store"
-    assert AuditEvent.objects.filter(action="acte.piece_consultee", target_id=str(r.pk), actor=world.secretaire).exists()
+    assert AuditEvent.objects.filter(
+        action="acte.piece_consultee", target_id=str(r.pk), actor=world.secretaire
+    ).exists()
 
 
 def _link(world, r, user):
@@ -190,7 +192,9 @@ def test_notes_carry_the_author_name_and_stay_hidden_from_the_requester(world):
     fidele_list = client_for(world.fidele).get("/api/v1/documents/requests/")
     fidele_notes = client_for(world.fidele).get(f"/api/v1/staff/documents/{r.pk}/notes/")
 
-    assert [(n["author_name"], n["content"]) for n in notes] == [("Augustin Ndiaye", "Mention de confirmation recopiée.")]
+    assert [(n["author_name"], n["content"]) for n in notes] == [
+        ("Augustin Ndiaye", "Mention de confirmation recopiée.")
+    ]
     assert "Mention de confirmation" not in str(fidele_detail.data) + str(fidele_list.data)
     assert fidele_notes.status_code == 403
 
@@ -217,7 +221,9 @@ def test_assign_to_a_team_member_is_audited_and_notified(world, django_capture_o
 def test_unassign(world):
     r = submit(world)
     document_request_assign(request_obj=r, actor=world.cure, assignee=world.secretaire)
-    response = client_for(world.cure).post(f"/api/v1/staff/documents/{r.pk}/assign/", {"assignee_id": None}, format="json")
+    response = client_for(world.cure).post(
+        f"/api/v1/staff/documents/{r.pk}/assign/", {"assignee_id": None}, format="json"
+    )
     assert response.status_code == 200 and response.data["assigned_to_id"] is None
 
 
@@ -234,9 +240,13 @@ def test_assign_outside_the_queue_is_refused(world):
     r = submit(world)
     with pytest.raises(PermissionDeniedError):
         document_request_assign(request_obj=r, actor=world.cure_st, assignee=world.cure_st)
-    api = client_for(world.cure_st).post(f"/api/v1/staff/documents/{r.pk}/assign/", {"assignee_id": None}, format="json")
+    api = client_for(world.cure_st).post(
+        f"/api/v1/staff/documents/{r.pk}/assign/", {"assignee_id": None}, format="json"
+    )
     assert api.status_code == 404
-    assert client_for(world.fidele).post(f"/api/v1/staff/documents/{r.pk}/assign/", {}, format="json").status_code == 403
+    assert (
+        client_for(world.fidele).post(f"/api/v1/staff/documents/{r.pk}/assign/", {}, format="json").status_code == 403
+    )
     assert APIClient().post(f"/api/v1/staff/documents/{r.pk}/assign/", {}, format="json").status_code == 401
 
 
@@ -245,7 +255,9 @@ def test_assign_validation_and_closed_requests(world):
     staff = client_for(world.secretaire)
     assert staff.post(f"/api/v1/staff/documents/{r.pk}/assign/", {}, format="json").status_code == 400
     unknown = staff.post(
-        f"/api/v1/staff/documents/{r.pk}/assign/", {"assignee_id": "00000000-0000-0000-0000-000000000000"}, format="json"
+        f"/api/v1/staff/documents/{r.pk}/assign/",
+        {"assignee_id": "00000000-0000-0000-0000-000000000000"},
+        format="json",
     )
     assert unknown.status_code == 404
     document_request_process(request_obj=r, actor=world.secretaire, action="start_verification")
@@ -360,7 +372,18 @@ def test_indicative_date_is_never_in_the_past_and_disappears_once_ready(world):
     with freeze_time("2026-09-01 10:00:00"):
         r = submit(world)
     with freeze_time("2026-09-25 10:00:00"):
-        assert client_for(world.fidele).get(f"/api/v1/documents/requests/{r.pk}/").data["estimated_ready_on"] == datetime.date(2026, 9, 25)
+        assert client_for(world.fidele).get(f"/api/v1/documents/requests/{r.pk}/").data[
+            "estimated_ready_on"
+        ] == datetime.date(2026, 9, 25)
         document_request_process(request_obj=r, actor=world.secretaire, action="start_verification")
         document_request_process(request_obj=r, actor=world.secretaire, action="mark_ready")
         assert client_for(world.fidele).get(f"/api/v1/documents/requests/{r.pk}/").data["estimated_ready_on"] is None
+
+
+def test_email_plain_text_has_no_html_tags():
+    from apps.documents.services import html_to_text
+
+    text = html_to_text("<p>Bonjour Awa,</p><p>La paroisse a besoin d&#x27;un complément.<br>Merci.</p>")
+
+    assert "<" not in text and ">" not in text
+    assert text == "Bonjour Awa,\n\nLa paroisse a besoin d'un complément.\nMerci."

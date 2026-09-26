@@ -61,7 +61,9 @@ def world(tree):
 
 
 def submit(world, **overrides):
-    return document_request_create(requester=world.fidele, target_node=world.saint_dominique, data={**FORM, **overrides})
+    return document_request_create(
+        requester=world.fidele, target_node=world.saint_dominique, data={**FORM, **overrides}
+    )
 
 
 def process(world, request_obj, action, **kwargs):
@@ -124,7 +126,12 @@ def test_full_cycle_until_collection(world, django_capture_on_commit_callbacks):
     r.refresh_from_db()
     assert r.status == S.COLLECTED and r.closed_at is not None
     assert list(r.status_logs.order_by("created_at").values_list("to_status", flat=True)) == [
-        S.SUBMITTED, S.UNDER_VERIFICATION, S.INFO_REQUESTED, S.UNDER_VERIFICATION, S.READY_FOR_PICKUP, S.COLLECTED,
+        S.SUBMITTED,
+        S.UNDER_VERIFICATION,
+        S.INFO_REQUESTED,
+        S.UNDER_VERIFICATION,
+        S.READY_FOR_PICKUP,
+        S.COLLECTED,
     ]
     # Notification bilatérale : le fidèle à chaque action de la paroisse (pas pour son propre
     # complément), la paroisse au dépôt et au complément.
@@ -217,7 +224,9 @@ def test_dean_supervises_without_names(world):
 def test_register_refs_and_notes_are_never_shown_to_the_requester(world):
     r = submit(world)
     document_request_register_ref_set(
-        request_obj=r, actor=world.secretaire, data={"register_volume": "B-12", "register_page": "34", "register_number": "567"}
+        request_obj=r,
+        actor=world.secretaire,
+        data={"register_volume": "B-12", "register_page": "34", "register_number": "567"},
     )
     document_request_add_internal_note(request_obj=r, author=world.secretaire, content="Vérifier la mention marginale.")
 

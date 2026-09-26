@@ -33,7 +33,9 @@ class RequestCreateInputSerializer(serializers.Serializer):
     sacrament_approximate_date = serializers.CharField(max_length=20)
     sacrament_location = serializers.CharField(max_length=200)
     additional_info = serializers.CharField(required=False, allow_blank=True, default="")
-    document_details = serializers.DictField(child=serializers.CharField(allow_blank=True), required=False, default=dict)
+    document_details = serializers.DictField(
+        child=serializers.CharField(allow_blank=True), required=False, default=dict
+    )
     pickup_mode = serializers.ChoiceField(
         choices=DocumentRequest.PickupMode.choices, default=DocumentRequest.PickupMode.SECRETARIAT
     )
@@ -49,9 +51,14 @@ class SupplementInputSerializer(serializers.Serializer):
 
 class TransitionInputSerializer(serializers.Serializer):
     message = serializers.CharField(
-        required=False, allow_blank=True, default="", help_text="Motif (rejet), complément attendu, ou message de retrait"
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Motif (rejet), complément attendu, ou message de retrait",
     )
-    pickup_place_id = serializers.IntegerField(required=False, allow_null=True, help_text="mark-ready : lieu de retrait")
+    pickup_place_id = serializers.IntegerField(
+        required=False, allow_null=True, help_text="mark-ready : lieu de retrait"
+    )
     pickup_hours = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
 
 

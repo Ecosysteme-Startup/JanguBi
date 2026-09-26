@@ -113,9 +113,9 @@ def request_get_for_processor(*, user: Any, request_id: Any) -> DocumentRequest:
             .prefetch_related(
                 Prefetch(
                     "status_logs",
-                    queryset=DocumentRequestStatusLog.objects.select_related("changed_by", "changed_by__profile").order_by(
-                        "created_at"
-                    ),
+                    queryset=DocumentRequestStatusLog.objects.select_related(
+                        "changed_by", "changed_by__profile"
+                    ).order_by("created_at"),
                 ),
                 Prefetch(
                     "attachments",
@@ -136,7 +136,11 @@ def status_counts(*, queryset: QuerySet[DocumentRequest]) -> dict[str, Any]:
 
 
 def internal_notes(*, request_obj: DocumentRequest) -> QuerySet[InternalNote]:
-    return InternalNote.objects.filter(request=request_obj).select_related("author", "author__profile").order_by("created_at")
+    return (
+        InternalNote.objects.filter(request=request_obj)
+        .select_related("author", "author__profile")
+        .order_by("created_at")
+    )
 
 
 def status_logs(*, request_obj: DocumentRequest) -> QuerySet[DocumentRequestStatusLog]:

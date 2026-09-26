@@ -210,6 +210,8 @@ def test_api_requires_capability_on_the_node(world):
 
 
 def test_api_unknown_node_is_404(world):
-    response = client_for(world.secretaire).get("/api/v1/staff/documents/nodes/00000000-0000-0000-0000-000000000000/type-delays/")
+    response = client_for(world.secretaire).get(
+        "/api/v1/staff/documents/nodes/00000000-0000-0000-0000-000000000000/type-delays/"
+    )
 
     assert response.status_code == 404
