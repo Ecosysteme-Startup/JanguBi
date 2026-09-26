@@ -89,6 +89,12 @@ class Article(BaseModel):
         related_name="article_covers",
         verbose_name=_("Image de couverture"),
     )
+    # Texte alternatif de la bannière (RGAA / WCAG 1.1.1) : requis quand une bannière est
+    # présente, sauf si elle est déclarée décorative (alt vide).
+    cover_image_alt = models.CharField(
+        _("texte alternatif de la bannière"), max_length=250, blank=True, default="", db_default=""
+    )
+    cover_image_decorative = models.BooleanField(_("bannière décorative"), default=False, db_default=False)
 
     category = models.ForeignKey(
         ArticleCategory,

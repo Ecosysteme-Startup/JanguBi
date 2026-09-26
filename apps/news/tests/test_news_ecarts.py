@@ -92,6 +92,7 @@ def test_cover_image_is_attached_and_exposed(world):
             "content": "…",
             "category_id": world.category.pk,
             "cover_image_id": cover.pk,
+            "cover_image_alt": "Le parvis de l'église un dimanche matin",
         },
         format="json",
     )
@@ -101,6 +102,8 @@ def test_cover_image_is_attached_and_exposed(world):
     assert created.status_code == 201
     assert created.data["cover_image_id"] == cover.pk and "parvis" in created.data["cover_image_url"]
     assert public.data["cover_image_url"].split("?")[0] == created.data["cover_image_url"].split("?")[0]
+    assert created.data["cover_image_alt"] == public.data["cover_image_alt"] == "Le parvis de l'église un dimanche matin"
+    assert public.data["cover_image_decorative"] is False
 
 
 def test_cover_must_be_a_finished_image_of_mine(world):
@@ -119,17 +122,90 @@ def test_cover_must_be_a_finished_image_of_mine(world):
 
 
 def test_cover_can_be_replaced_kept_or_removed(world):
-    article = draft(world, cover_image_id=image(world.secretaire).pk)
+    article = draft(world, cover_image_id=image(world.secretaire).pk, cover_image_alt="Le parvis")
     cure = person("cure@sd.sn")
     nominate(cure, "cure", world.saint_dominique)
 
     # Un collègue renvoie la bannière existante telle quelle : pas de refus.
     kept = article_update(article=article, editor=cure, data={"cover_image_id": article.cover_image_id, "title": "T"})
     replaced = article_update(article=kept, editor=cure, data={"cover_image_id": image(cure).pk})
+    alt_after_replace = replaced.cover_image_alt
     removed = article_update(article=replaced, editor=cure, data={"cover_image_id": None})
 
     assert kept.title == "T"
+    assert alt_after_replace == "Le parvis"
     assert removed.cover_image is None
+    assert removed.cover_image_alt == ""
+
+
+# --- Texte alternatif de la bannière ----------------------------------------------------------------
+
+
+def test_cover_without_alt_is_refused_unless_decorative(world):
+    with pytest.raises(ApplicationError) as missing:
+        draft(world, cover_image_id=image(world.secretaire).pk)
+    with pytest.raises(ApplicationError) as blank:
+        draft(world, cover_image_id=image(world.secretaire).pk, cover_image_alt="   ")
+    decorative = draft(
+        world, cover_image_id=image(world.secretaire).pk, cover_image_alt="ignoré", cover_image_decorative=True
+    )
+
+    assert missing.value.code == blank.value.code == "cover_alt_required"
+    assert decorative.cover_image_decorative is True
+    assert decorative.cover_image_alt == ""
+
+
+def test_alt_is_ignored_without_cover(world):
+    article = draft(world, cover_image_alt="Rien à décrire", cover_image_decorative=True)
+
+    assert article.cover_image_alt == ""
+    assert article.cover_image_decorative is False
+
+
+def test_update_checks_final_cover_alt_state(world):
+    article = draft(world, cover_image_id=image(world.secretaire).pk, cover_image_alt="  Le parvis  ")
+
+    with pytest.raises(ApplicationError) as cleared:
+        article_update(article=article, editor=world.secretaire, data={"cover_image_alt": ""})
+    article.refresh_from_db()
+    decorative = article_update(article=article, editor=world.secretaire, data={"cover_image_decorative": True})
+    alt_when_decorative = decorative.cover_image_alt
+    described = article_update(
+        article=decorative,
+        editor=world.secretaire,
+        data={"cover_image_decorative": False, "cover_image_alt": "La chorale"},
+    )
+
+    assert cleared.value.code == "cover_alt_required"
+    assert alt_when_decorative == ""
+    assert described.cover_image_alt == "La chorale" and described.cover_image_decorative is False
+
+
+def test_api_refuses_cover_without_alt(world):
+    response = client_for(world.secretaire).post(
+        "/api/v1/staff/news/",
+        {
+            "node_id": str(world.saint_dominique.pk),
+            "title": "Quête",
+            "content": "…",
+            "category_id": world.category.pk,
+            "cover_image_id": image(world.secretaire).pk,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert Article.objects.count() == 0
+
+
+def test_public_list_exposes_cover_alt(world):
+    article = draft(world, cover_image_id=image(world.secretaire).pk, cover_image_alt="Le parvis")
+    article_publish(article=article, editor=world.secretaire)
+
+    listed = APIClient().get("/api/v1/news/", {"node": str(world.saint_dominique.pk)})
+
+    [item] = listed.data["results"]
+    assert item["cover_image_alt"] == "Le parvis" and item["cover_image_decorative"] is False
 
 
 # --- Lieu modifiable ------------------------------------------------------------------------------
