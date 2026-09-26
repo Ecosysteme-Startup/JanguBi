@@ -1,6 +1,8 @@
-from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
+from django.http import FileResponse
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, inline_serializer
 from rest_framework import serializers, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,11 +15,14 @@ from apps.documents import selectors, services
 from apps.documents.constants import allowed_reasons_for
 from apps.documents.models import DocumentRequest
 from apps.documents.serializers import (
+    AssignInputSerializer,
+    AssigneeOutputSerializer,
     CountsOutputSerializer,
     NodeQuerySerializer,
     NoteInputSerializer,
     NoteOutputSerializer,
     ProcessorOutputSerializer,
+    ProcessorStatusLogSerializer,
     QueueFilterSerializer,
     QueueItemSerializer,
     RegisterRefInputSerializer,
@@ -25,12 +30,12 @@ from apps.documents.serializers import (
     RequesterFilterSerializer,
     RequesterOutputSerializer,
     StatsOutputSerializer,
-    StatusLogSerializer,
     SupplementInputSerializer,
     TransitionInputSerializer,
 )
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
+from apps.users.models import BaseUser
 
 TAG = ["documents"]
 _PAGINATION = [
@@ -194,7 +199,7 @@ class ProcessorDetailApi(_ProcessorApi):
     @extend_schema(tags=TAG, summary="Détail d'une demande de ma file", responses=ProcessorOutputSerializer)
     def get(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
-        return Response(ProcessorOutputSerializer(obj, context={"with_history": True}).data)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True, "request": request}).data)
 
 
 _ACTIONS = {
@@ -230,7 +235,7 @@ class ProcessorTransitionApi(_ProcessorApi):
             pickup_hours=data["pickup_hours"],
         )
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
-        return Response(ProcessorOutputSerializer(obj, context={"with_history": True}).data)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True, "request": request}).data)
 
 
 class RegisterRefApi(_ProcessorApi):
@@ -240,7 +245,8 @@ class RegisterRefApi(_ProcessorApi):
         serializer = RegisterRefInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         services.document_request_register_ref_set(request_obj=obj, actor=request.user, data=serializer.validated_data)
-        return Response(ProcessorOutputSerializer(selectors.request_get_for_processor(user=request.user, request_id=request_id)).data)
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True, "request": request}).data)
 
 
 class NotesApi(_ProcessorApi):
@@ -259,8 +265,86 @@ class NotesApi(_ProcessorApi):
 
 
 class LogsApi(_ProcessorApi):
-    @extend_schema(tags=TAG, summary="Journal des statuts", responses=StatusLogSerializer(many=True))
+    @extend_schema(tags=TAG, summary="Journal des statuts (avec l'auteur)", responses=ProcessorStatusLogSerializer(many=True))
     def get(self, request: Request, request_id: str) -> Response:
         obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
-        return Response(StatusLogSerializer(selectors.status_logs(request_obj=obj), many=True).data)
+        return Response(ProcessorStatusLogSerializer(selectors.status_logs(request_obj=obj), many=True).data)
 
+
+
+class AssignApi(_ProcessorApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_assign",
+        summary="Confier la demande à une personne de l'équipe (ou la remettre « à assigner »)",
+        request=AssignInputSerializer,
+        responses=ProcessorOutputSerializer,
+    )
+    def post(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        serializer = AssignInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        assignee_id = serializer.validated_data["assignee_id"]
+        assignee = None
+        if assignee_id is not None:
+            assignee = BaseUser.objects.filter(pk=assignee_id).first()
+            if assignee is None:
+                raise NotFoundError("Personne introuvable.", {"assignee_id": str(assignee_id)})
+        services.document_request_assign(request_obj=obj, actor=request.user, assignee=assignee)
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(ProcessorOutputSerializer(obj, context={"with_history": True, "request": request}).data)
+
+
+class AssigneesApi(_ProcessorApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_assignees",
+        summary="Personnes de l'équipe à qui confier la demande (actes.traiter sur la paroisse)",
+        responses=AssigneeOutputSerializer(many=True),
+    )
+    def get(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        return Response(AssigneeOutputSerializer(selectors.assignees_for(request_obj=obj), many=True).data)
+
+
+# Types affichables dans le navigateur ; tout autre type est téléchargé, jamais interprété.
+_INLINE_TYPES = frozenset({"application/pdf", "image/jpeg", "image/png", "image/webp"})
+
+
+class AttachmentContentApi(V1ApiMixin, APIView):
+    """Ouverture d'une pièce jointe par son lien de consultation (onglet du navigateur, sans
+    en-tête d'authentification) : le jeton signé tient lieu d'accès, et le service revérifie
+    que la personne qu'il désigne traite toujours les actes de la paroisse."""
+
+    authentication_classes: list = []
+    permission_classes: PermissionClassesType = (AllowAny,)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_attachment_content",
+        summary="Consulter une pièce jointe du fidèle (lien à durée limitée)",
+        parameters=[OpenApiParameter("token", str, required=True, description="Jeton du lien de consultation")],
+        responses={(200, "application/octet-stream"): OpenApiResponse(OpenApiTypes.BINARY), 403: OpenApiResponse()},
+        auth=[],
+    )
+    def get(self, request: Request, request_id: str, attachment_id: int) -> FileResponse:
+        attachment = services.document_attachment_open(
+            request_id=request_id, attachment_id=attachment_id, token=request.query_params.get("token", "")
+        )
+        file_obj = attachment.file
+        if not file_obj.file:
+            raise NotFoundError("Fichier indisponible.", {"attachment_id": attachment_id})
+        inline = file_obj.file_type in _INLINE_TYPES
+        response = FileResponse(
+            file_obj.file.open("rb"),
+            as_attachment=not inline,
+            filename=file_obj.original_file_name,
+            content_type=file_obj.file_type if inline else "application/octet-stream",
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        if file_obj.file_type != "application/pdf":
+            # Pas pour le PDF : le lecteur intégré de Chromium refuse un document « sandbox ».
+            response["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; sandbox"
+        response["Cache-Control"] = "private, no-store"
+        response["Referrer-Policy"] = "no-referrer"
+        return response

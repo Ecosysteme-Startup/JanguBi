@@ -11,6 +11,8 @@ import secrets
 from functools import partial
 from typing import Any
 
+from django.conf import settings
+from django.core import signing
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -360,6 +362,105 @@ def document_request_add_internal_note(*, request_obj: DocumentRequest, author: 
     return InternalNote.objects.create(request=request_obj, author=author, content=content)
 
 
+def _is_processor_of(*, user: Any, node: Node) -> bool:
+    """Titulaire (actif) d'``actes.traiter`` sur ``node``, héritage compris."""
+    from apps.hierarchy.selectors_offices import capability_holders
+
+    return bool(getattr(user, "is_active", False)) and capability_holders(node=node, capability="actes.traiter").filter(
+        pk=user.pk
+    ).exists()
+
+
+@transaction.atomic
+def document_request_assign(*, request_obj: DocumentRequest, actor: Any, assignee: Any | None) -> DocumentRequest:
+    """Confie la demande à une personne de l'équipe (ou la remet « à assigner », ``assignee=None``).
+
+    L'assigné doit lui-même traiter les actes de la paroisse du sacrement. L'assignation n'est pas
+    une étape de la démarche : elle ne touche ni au statut ni aux délais (``updated_at``)."""
+    processor_check(user=actor, request_obj=request_obj)
+    request_obj = _lock(request_obj)
+    if request_obj.status in CLOSING_STATUSES:
+        raise ApplicationError("Cette demande est close.", code="request_closed")
+    if assignee is not None and not _is_processor_of(user=assignee, node=request_obj.target_node):
+        raise ApplicationError(
+            "Cette personne ne traite pas les demandes d'actes de cette paroisse.", code="assignee_not_processor"
+        )
+    previous = request_obj.assigned_to_id
+    request_obj.assigned_to = assignee
+    request_obj.save(update_fields=["assigned_to"])
+    audit_log(
+        actor=actor,
+        action="acte.assignation",
+        target=request_obj,
+        node=request_obj.target_node,
+        metadata={
+            "from": str(previous) if previous else None,
+            "to": str(assignee.pk) if assignee is not None else None,
+        },
+    )
+    if assignee is not None and assignee.pk != actor.pk:
+        transaction.on_commit(partial(_notify_assignee, request_obj, assignee.pk))
+    return request_obj
+
+
+def _notify_assignee(request_obj: DocumentRequest, assignee_id: Any) -> None:
+    from apps.messaging.services_notifications import people_notify
+
+    people_notify(
+        user_ids=[assignee_id],
+        topic="annonces",
+        event_type="documents.assigned",
+        payload={"request_id": str(request_obj.pk), "reference": request_obj.reference},
+    )
+
+
+# --- Consultation des pièces du fidèle -----------------------------------------------------
+
+_ATTACHMENT_SALT = "documents.attachment.v1"
+
+
+def attachment_access_sign(*, attachment: DocumentRequestAttachment, user: Any) -> str:
+    """Jeton de consultation : signé pour UNE personne et UNE pièce, valable
+    ``DOCUMENTS_ATTACHMENT_URL_TTL`` secondes (vérifié à l'ouverture)."""
+    return signing.dumps({"a": str(attachment.pk), "u": str(user.pk)}, salt=_ATTACHMENT_SALT, compress=True)
+
+
+@transaction.atomic
+def document_attachment_open(*, request_id: Any, attachment_id: Any, token: str) -> DocumentRequestAttachment:
+    """Ouvre une pièce jointe à partir d'un jeton de consultation.
+
+    Le jeton ne suffit pas : la personne qu'il désigne doit TOUJOURS traiter les actes de la
+    paroisse du sacrement au moment de l'ouverture (une nomination levée entre-temps coupe
+    l'accès). Chaque consultation est journalisée, sans le contenu."""
+    from apps.users.models import BaseUser
+
+    forbidden = PermissionDeniedError("Lien de consultation invalide ou expiré.", code="attachment_link_invalid")
+    try:
+        payload = signing.loads(token, salt=_ATTACHMENT_SALT, max_age=settings.DOCUMENTS_ATTACHMENT_URL_TTL)
+    except signing.BadSignature as exc:  # SignatureExpired en hérite
+        raise forbidden from exc
+    if payload.get("a") != str(attachment_id):
+        raise forbidden
+    attachment = (
+        DocumentRequestAttachment.objects.select_related("file", "request", "request__target_node")
+        .filter(pk=attachment_id, request_id=request_id)
+        .first()
+    )
+    user = BaseUser.objects.filter(pk=payload.get("u")).first()
+    if attachment is None or user is None:
+        raise forbidden
+    if not _is_processor_of(user=user, node=attachment.request.target_node):
+        raise forbidden
+    audit_log(
+        actor=user,
+        action="acte.piece_consultee",
+        target=attachment.request,
+        node=attachment.request.target_node,
+        metadata={"piece": str(attachment.pk)},
+    )
+    return attachment
+
+
 # --- SLA, relances, purge (EF-ACT-08, -09) -------------------------------------------------
 
 
@@ -370,8 +471,15 @@ class SlaResolver:
     de chemin : pas de requête par demande dans une file ou un tableau de bord."""
 
     def __init__(self) -> None:
-        rows = DocumentSlaSetting.objects.select_related("node").only(
-            "node__path", "escalate_days", "requester_reminder_days", "pickup_reminder_days"
+        rows = list(
+            DocumentSlaSetting.objects.select_related("node").only(
+                "node__path", "escalate_days", "requester_reminder_days", "pickup_reminder_days", "indicative_days"
+            )
+        )
+        self._indicative = sorted(
+            ((s.node.path, s.indicative_days) for s in rows if s.indicative_days),
+            key=lambda item: len(item[0]),
+            reverse=True,
         )
         self._by_path = sorted(
             (
@@ -395,6 +503,14 @@ class SlaResolver:
                 if path.startswith(prefix):
                     return dict(values)
         return dict(DEFAULT_SLA)
+
+    def indicative_days_for_path(self, path: str | None) -> int:
+        """Délai annoncé au fidèle : réglage renseigné le plus proche, sinon le défaut."""
+        if path:
+            for prefix, days in self._indicative:
+                if path.startswith(prefix):
+                    return int(days)
+        return int(settings.DOCUMENTS_DEFAULT_INDICATIVE_DAYS)
 
 
 def sla_for_node(node: Node | None) -> dict[str, int]:
