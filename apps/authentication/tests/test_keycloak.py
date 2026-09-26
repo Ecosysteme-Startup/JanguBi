@@ -225,6 +225,61 @@ def test_unverified_email_never_takes_over_an_account(keys):
     assert get_user_model().objects.get(email="cible@test.sn").keycloak_sub is None
 
 
+def _lost_race(monkeypatch, winner):
+    """Simule deux premières requêtes simultanées : la première lecture par ``sub`` ne voit
+    rien, puis la requête concurrente a créé le compte (``winner``) avant la nôtre."""
+    calls = {"n": 0}
+
+    def by_sub(_user_model, _sub):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else winner
+
+    monkeypatch.setattr(keycloak, "_person_by_sub", by_sub)
+
+
+def test_concurrent_first_requests_do_not_fail_on_email_check(keys, monkeypatch):
+    sub = str(uuid.uuid4())
+    winner = BaseUserFactory.create(email="course@test.sn", keycloak_sub=sub)
+    _lost_race(monkeypatch, winner)
+
+    identity = keycloak.KeycloakIdentity(
+        sub=sub,
+        email="course@test.sn",
+        email_verified=True,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(),
+        amr=frozenset(),
+        acr="",
+        claims={},
+    )
+
+    assert keycloak.person_from_identity(identity) == winner
+
+
+def test_concurrent_first_requests_do_not_fail_on_model_validation(keys, monkeypatch):
+    sub = str(uuid.uuid4())
+    # Le gagnant a déjà été créé ; l'e-mail du jeton est encore libre, donc la création est
+    # tentée et ``full_clean`` refuse le ``sub`` en double (ValidationError, pas IntegrityError).
+    winner = BaseUserFactory.create(email="autre@test.sn", keycloak_sub=sub)
+    _lost_race(monkeypatch, winner)
+
+    identity = keycloak.KeycloakIdentity(
+        sub=sub,
+        email="nouveau@test.sn",
+        email_verified=False,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(),
+        amr=frozenset(),
+        acr="",
+        claims={},
+    )
+
+    assert keycloak.person_from_identity(identity) == winner
+    assert not get_user_model().objects.filter(email="nouveau@test.sn").exists()
+
+
 def test_inactive_account_is_refused(keys):
     sub = str(uuid.uuid4())
     BaseUserFactory.create(email="off@test.sn", keycloak_sub=sub, is_active=False)

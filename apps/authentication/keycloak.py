@@ -13,6 +13,7 @@ import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DatabaseError, IntegrityError, transaction
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
@@ -143,12 +144,16 @@ def token_validate(token: str) -> KeycloakIdentity:
 # --- Provisioning (EF-AUTH-02) -----------------------------------------------------------
 
 
+def _person_by_sub(user_model: Any, sub: str) -> Any:
+    return user_model.objects.filter(keycloak_sub=sub).first()
+
+
 @transaction.atomic
 def person_from_identity(identity: KeycloakIdentity) -> Any:
     """Personne liée au ``sub`` ; à défaut, compte existant de même e-mail **vérifié**
     (comptes migrés) ; sinon création d'un fidèle. Idempotent."""
     User = get_user_model()
-    person = User.objects.filter(keycloak_sub=identity.sub).first()
+    person = _person_by_sub(User, identity.sub)
     if person is not None:
         return person
     if identity.email and identity.email_verified:
@@ -163,6 +168,11 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
     if not identity.email:
         raise KeycloakTokenError("Le jeton ne contient pas d'adresse e-mail.", code="email_missing")
     if User.objects.filter(email__iexact=identity.email).exists():
+        # Première connexion : les requêtes simultanées du front arrivent ensemble et l'une
+        # d'elles a pu créer le compte entre-temps. C'est le même ``sub`` : on le renvoie.
+        concurrent = _person_by_sub(User, identity.sub)
+        if concurrent is not None:
+            return concurrent
         # Compte existant mais e-mail non vérifié côté Keycloak (ou déjà lié ailleurs) :
         # jamais de rattachement, sinon prise de compte par simple inscription.
         raise KeycloakTokenError("Un compte existe déjà avec cette adresse.", code="email_conflict")
@@ -176,10 +186,11 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
                 is_verified=identity.email_verified,
                 keycloak_sub=identity.sub,
             )
-    except IntegrityError as exc:
-        # Course entre deux premières requêtes simultanées, ou e-mail déjà pris par un
-        # compte non vérifié : on relit par sub, sinon on refuse (pas de prise de compte).
-        person = User.objects.filter(keycloak_sub=identity.sub).first()
+    except (IntegrityError, DjangoValidationError) as exc:
+        # Course entre deux premières requêtes simultanées (``full_clean`` lève une
+        # ValidationError avant la contrainte en base), ou e-mail déjà pris par un compte non
+        # vérifié : on relit par sub, sinon on refuse (pas de prise de compte).
+        person = _person_by_sub(User, identity.sub)
         if person is None:
             raise KeycloakTokenError("Un compte existe déjà avec cette adresse.", code="email_conflict") from exc
         return person
