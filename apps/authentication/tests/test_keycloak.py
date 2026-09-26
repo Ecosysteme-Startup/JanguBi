@@ -1,6 +1,7 @@
 """Authentification Keycloak sans Keycloak : clé RSA et JWKS locaux (EF-AUTH-01 à -06)."""
 
 import base64
+import datetime
 import hashlib
 import json
 import time
@@ -135,6 +136,40 @@ def test_phone_from_token_never_overwrites_a_saved_phone(keys):
 
     assert str(Profile.objects.get(user=existing).phone) == "+221781112233"
     assert str(Profile.objects.get(user=empty).phone) == "+221774123658"
+
+
+def test_birthdate_from_registration_fills_the_new_profile(keys):
+    """Attribut Keycloak « birthdate » (claim OIDC birthdate, AAAA-MM-JJ) saisi à l'inscription → Profile.date_of_birth."""
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="naissance@test.sn", birthdate="1992-03-12")).get(ME).status_code == 200
+
+    profile = get_user_model().objects.get(keycloak_sub=sub).profile
+    assert profile.date_of_birth == datetime.date(1992, 3, 12)
+
+
+@pytest.mark.parametrize("raw", ["", "12/03/1992", "1992-02-30", "1899-12-31", "2999-01-01", "pas une date"])
+def test_invalid_or_implausible_birthdate_is_ignored(keys, raw):
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="sans-date@test.sn", birthdate=raw)).get(ME).status_code == 200
+
+    assert get_user_model().objects.get(keycloak_sub=sub).profile.date_of_birth is None
+
+
+def test_birthdate_from_token_never_overwrites_a_saved_birthdate(keys):
+    from apps.users.models import Profile
+
+    existing = BaseUserFactory.create(email="migre-date@test.sn")
+    Profile.objects.update_or_create(user=existing, defaults={"date_of_birth": datetime.date(1980, 1, 1)})
+    empty = BaseUserFactory.create(email="migre-sans-date@test.sn")
+    Profile.objects.update_or_create(user=empty, defaults={"date_of_birth": None})
+
+    api(keys.token(email="migre-date@test.sn", birthdate="1992-03-12")).get(ME)
+    api(keys.token(email="migre-sans-date@test.sn", birthdate="1992-03-12")).get(ME)
+
+    assert Profile.objects.get(user=existing).date_of_birth == datetime.date(1980, 1, 1)
+    assert Profile.objects.get(user=empty).date_of_birth == datetime.date(1992, 3, 12)
 
 
 @pytest.mark.parametrize(
