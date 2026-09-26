@@ -194,7 +194,16 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [env("REDIS_URL", default="redis://redis:6379/0")],
+            # Délai de socket explicite, supérieur à l'attente bloquante de channels_redis (5 s) :
+            # avec redis-py 8, le délai par défaut coupait chaque WebSocket au bout de 5 s
+            # (« Timeout reading from redis », fermeture 1011) — plus aucun temps réel.
+            "hosts": [
+                {
+                    "address": env("REDIS_URL", default="redis://redis:6379/0"),
+                    "socket_timeout": 15,
+                    "socket_connect_timeout": 5,
+                }
+            ],
             "capacity": 1500,
             "expiry": 10,
         },
