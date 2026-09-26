@@ -1891,6 +1891,70 @@ paths:
               schema:
                 $ref: '#/components/schemas/PlaceOutput'
           description: ''
+  /api/v1/hierarchy/nodes/{node_id}/settings/:
+    get:
+      operationId: v1_hierarchy_nodes_settings_retrieve
+      description: |-
+        Paramètres « vie paroissiale » (secrétariat, accueil, actes) : le secrétariat les tient
+        avec ``horaires.gerer`` ; nom, code, statut et rattachement restent sous ``structure.gerer``
+        (PATCH du nœud). La lecture est réservée aux mêmes capacités : le public ne voit que ce que
+        la paroisse publie (fiche publique).
+      summary: Paramètres du secrétariat d'un nœud (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeSettingsOutput'
+          description: ''
+    patch:
+      operationId: v1_hierarchy_nodes_settings_partial_update
+      description: |-
+        Paramètres « vie paroissiale » (secrétariat, accueil, actes) : le secrétariat les tient
+        avec ``horaires.gerer`` ; nom, code, statut et rattachement restent sous ``structure.gerer``
+        (PATCH du nœud). La lecture est réservée aux mêmes capacités : le public ne voit que ce que
+        la paroisse publie (fiche publique).
+      summary: Modifier les paramètres du secrétariat (horaires.gerer ou structure.gerer)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNodeSettingsUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeSettingsOutput'
+          description: ''
   /api/v1/hierarchy/office-types/:
     get:
       operationId: v1_hierarchy_office_types_list
@@ -3933,7 +3997,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedNodeOutputList'
+                $ref: '#/components/schemas/PaginatedPublicNodeOutputList'
           description: ''
   /api/v1/public/nodes/{node_id}/week/:
     get:
@@ -3998,7 +4062,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NodeOutput'
+                $ref: '#/components/schemas/PublicNodeDetailOutput'
           description: ''
   /api/v1/rosary/community/:
     get:
@@ -7127,6 +7191,55 @@ components:
       - id
       - name
       - type
+    NodeSettingsOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        phone:
+          type: string
+          title: Téléphone du secrétariat
+          maxLength: 30
+        email:
+          type: string
+          format: email
+          title: E-mail du secrétariat
+          maxLength: 254
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+        secretariat_public:
+          type: boolean
+          title: Secrétariat publié
+          description: Téléphone, e-mail et horaires d'accueil affichés sur la fiche
+            publique.
+        acts_delay_days:
+          type: integer
+          maximum: 32767
+          minimum: 0
+          nullable: true
+          title: Délai indicatif des actes (jours ouvrés)
+        acts_welcome_message:
+          type: string
+          title: Message d'accueil des demandes d'actes
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - office_hours
+      - updated_at
     NodeStatusEnum:
       enum:
       - en_fondation
@@ -7347,6 +7460,20 @@ components:
       required:
       - id
       - office_type
+    OfficeHoursItem:
+      type: object
+      properties:
+        days:
+          type: string
+          description: Jours concernés, ex. « Lun. – ven. »
+          maxLength: 40
+        hours:
+          type: string
+          description: Heures, ex. « 9 h-12 h · 15 h 30-18 h » ou « Fermé »
+          maxLength: 120
+      required:
+      - days
+      - hours
     OfficeTypeOutput:
       type: object
       properties:
@@ -7655,6 +7782,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedPublicNodeOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicNodeOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedQueueItemList:
       type: object
       properties:
@@ -7890,6 +8043,42 @@ components:
         phone:
           type: string
           nullable: true
+    PatchedNodeSettingsUpdateInput:
+      type: object
+      description: 'Champs « vie paroissiale » : modifiables avec ``horaires.gerer``
+        (ou ``structure.gerer``).'
+      properties:
+        address:
+          type: string
+          maxLength: 300
+        city:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          maxLength: 30
+          pattern: ^\+?[0-9 ().-]{6,30}$
+        email:
+          type: string
+          format: email
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+          maxItems: 7
+        secretariat_public:
+          type: boolean
+          description: Afficher téléphone, e-mail et horaires d'accueil sur la fiche
+            publique
+        acts_delay_days:
+          type: integer
+          maximum: 90
+          minimum: 1
+          nullable: true
+          description: Jours ouvrés
+        acts_welcome_message:
+          type: string
+          maxLength: 1000
     PatchedNodeUpdateInput:
       type: object
       properties:
@@ -8447,6 +8636,271 @@ components:
       - status_label
       - target_node
       - updated_at
+    PublicActsInfo:
+      type: object
+      properties:
+        delay_days:
+          type: integer
+          nullable: true
+        welcome_message:
+          type: string
+      required:
+      - delay_days
+      - welcome_message
+    PublicClergy:
+      type: object
+      properties:
+        name:
+          type: string
+        office:
+          type: string
+          description: Libellé de l'office (Curé, Vicaire paroissial…)
+      required:
+      - name
+      - office
+    PublicNodeDetailOutput:
+      type: object
+      description: 'Fiche publique : ajoute le secrétariat (s''il est publié), le
+        clergé et l''accueil des demandes d''actes.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NodeTypeRef'
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        code:
+          type: string
+          maxLength: 64
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NodeStatusEnum'
+          title: Statut
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Latitude
+        lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Longitude
+        erected_at:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'érection
+        is_active_on_platform:
+          type: boolean
+          title: Active sur Jàngu Bi
+        located_in_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        depth:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        parent_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Identifiant du parent (null pour une racine).
+        has_children:
+          type: boolean
+          readOnly: true
+        parent_name:
+          type: string
+          nullable: true
+          readOnly: true
+        deanery_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Doyenné (null s'il n'y en a pas)
+        diocese_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Diocèse (null s'il n'y en a pas)
+        sunday_masses:
+          type: array
+          items:
+            type: string
+            format: time
+          readOnly: true
+          description: Heures des messes du prochain dimanche (aujourd'hui si c'est
+            dimanche), exceptions comprises
+        secretariat:
+          allOf:
+          - $ref: '#/components/schemas/PublicSecretariat'
+          nullable: true
+          readOnly: true
+          description: null tant que la paroisse ne l'a pas publié
+        clergy:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicClergy'
+          readOnly: true
+          description: Clercs titulaires d'un office actif sur ce nœud
+        acts:
+          allOf:
+          - $ref: '#/components/schemas/PublicActsInfo'
+          readOnly: true
+      required:
+      - acts
+      - clergy
+      - code
+      - deanery_name
+      - depth
+      - diocese_name
+      - has_children
+      - id
+      - located_in_id
+      - name
+      - parent_id
+      - parent_name
+      - secretariat
+      - sunday_masses
+      - type
+    PublicNodeOutput:
+      type: object
+      description: |-
+        Nœud de l'annuaire public : juridiction et messes du dimanche.
+
+        Contexte attendu (calculé en lot, pas de N+1) : ``lineage`` {chemin: nœud ancêtre},
+        ``sunday_masses`` {id du nœud: [heures]}.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        type:
+          allOf:
+          - $ref: '#/components/schemas/NodeTypeRef'
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        code:
+          type: string
+          maxLength: 64
+        status:
+          allOf:
+          - $ref: '#/components/schemas/NodeStatusEnum'
+          title: Statut
+        address:
+          type: string
+          title: Adresse
+        city:
+          type: string
+          title: Ville
+          maxLength: 100
+        lat:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Latitude
+        lng:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+          title: Longitude
+        erected_at:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'érection
+        is_active_on_platform:
+          type: boolean
+          title: Active sur Jàngu Bi
+        located_in_id:
+          type: string
+          format: uuid
+          readOnly: true
+          nullable: true
+        depth:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        parent_id:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Identifiant du parent (null pour une racine).
+        has_children:
+          type: boolean
+          readOnly: true
+        parent_name:
+          type: string
+          nullable: true
+          readOnly: true
+        deanery_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Doyenné (null s'il n'y en a pas)
+        diocese_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Diocèse (null s'il n'y en a pas)
+        sunday_masses:
+          type: array
+          items:
+            type: string
+            format: time
+          readOnly: true
+          description: Heures des messes du prochain dimanche (aujourd'hui si c'est
+            dimanche), exceptions comprises
+      required:
+      - code
+      - deanery_name
+      - depth
+      - diocese_name
+      - has_children
+      - id
+      - located_in_id
+      - name
+      - parent_id
+      - parent_name
+      - sunday_masses
+      - type
+    PublicSecretariat:
+      type: object
+      properties:
+        phone:
+          type: string
+        email:
+          type: string
+        office_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfficeHoursItem'
+      required:
+      - email
+      - office_hours
+      - phone
     PushDeviceInput:
       type: object
       properties:
