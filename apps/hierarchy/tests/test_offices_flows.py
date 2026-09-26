@@ -248,6 +248,57 @@ def test_audit_api_is_scoped_to_audit_voir(world):
     assert client_for(person()).get("/api/v1/audit/").status_code == 403
 
 
+def test_audit_api_node_filter_covers_the_subtree_and_exposes_actor_and_truncated_ip(world):
+    """``audit.voir`` sur le diocèse : filtre ``node`` = ce nœud et son sous-arbre ; IP tronquée."""
+    from apps.users.tests.factories import ProfileFactory
+
+    ProfileFactory(user=world.cure, first_name="Jean", last_name="Sarr")
+    ProfileFactory(user=world.chancelier, first_name="Awa", last_name="Diop")
+    new = person()
+    client_for(world.cure).post(
+        "/api/v1/hierarchy/assignments/",
+        {"person_id": str(new.pk), "office": "catechiste", "node_id": str(world.saint_dominique.pk)},
+        format="json",
+        REMOTE_ADDR="10.0.0.1",
+        HTTP_X_FORWARDED_FOR="203.0.113.77",
+    )
+    thies_admin = person()
+    nominate(thies_admin, "chancelier", world.thies)
+
+    dakar = client_for(world.chancelier).get("/api/v1/audit/", {"node": str(world.dakar.pk)})
+    parish = client_for(world.chancelier).get("/api/v1/audit/", {"node": str(world.saint_dominique.pk)})
+    sibling = client_for(world.chancelier).get("/api/v1/audit/", {"node": str(world.sainte_therese.pk)})
+    foreign = client_for(thies_admin).get("/api/v1/audit/", {"node": str(world.dakar.pk)})
+
+    assert dakar.status_code == 200
+    [event] = dakar.data["results"]
+    assert event["action"] == "office.nomination"
+    assert event["actor_name"] == "Jean Sarr"
+    assert event["ip"] == "203.0.113.0"
+    assert parish.data["count"] == 1
+    assert sibling.data["count"] == 0
+    assert foreign.data["count"] == 0
+
+
+def test_audit_api_platform_sees_everything_and_system_events_have_no_actor(world):
+    from apps.hierarchy.audit import audit_log
+
+    audit_log(actor=None, action="office.expiration", target=world.thies_parish, node=world.thies_parish)
+    audit_log(actor=world.cure, action="conformite.consentement", target=world.cure)
+
+    response = client_for(SuperAdminFactory.create()).get("/api/v1/audit/")
+
+    rows = {e["action"]: e for e in response.data["results"]}
+    assert set(rows) == {"office.expiration", "conformite.consentement"}
+    assert rows["office.expiration"]["actor_name"] is None
+    assert rows["office.expiration"]["ip"] is None
+    assert rows["conformite.consentement"]["actor_name"] == "cure@sd.sn"
+
+
+def test_audit_api_requires_authentication(world):
+    assert APIClient().get("/api/v1/audit/").status_code in (401, 403)
+
+
 def test_capability_override_api_is_platform_only(world):
     payload = {"diocese_node_id": str(world.thies.pk), "office": "cure", "capability": "actes.traiter"}
     assert client_for(world.chancelier).post("/api/v1/hierarchy/capability-overrides/", payload, format="json").status_code == 403

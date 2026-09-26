@@ -381,10 +381,22 @@ class CapabilityOverrideSerializer(serializers.Serializer):
 class AuditEventOutputSerializer(serializers.ModelSerializer):
     actor_id = serializers.UUIDField(read_only=True, allow_null=True)
     node_id = serializers.UUIDField(read_only=True, allow_null=True)
+    actor_name = serializers.SerializerMethodField(help_text="Prénom et nom de l'acteur ; null pour une action du système")
+    ip = serializers.IPAddressField(
+        read_only=True, allow_null=True, help_text="Adresse du client, tronquée (IPv4 /24, IPv6 /48) ; null hors requête"
+    )
 
     class Meta:
         model = AuditEvent
-        fields = ["id", "at", "actor_id", "action", "target_type", "target_id", "node_id", "metadata"]
+        fields = ["id", "at", "actor_id", "actor_name", "action", "target_type", "target_id", "node_id", "metadata", "ip"]
+
+    def get_actor_name(self, obj: AuditEvent) -> str | None:
+        actor = obj.actor
+        if actor is None:
+            return None
+        profile = getattr(actor, "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
+        return name or actor.email
 
 
 class AuditFilterSerializer(serializers.Serializer):

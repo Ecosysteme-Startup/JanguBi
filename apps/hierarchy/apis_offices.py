@@ -12,6 +12,7 @@ from apps.api.mixins import ApiAuthMixin, PermissionClassesType
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
 from apps.core.exceptions import ApplicationError, NotFoundError
+from apps.core.request_context import client_ip
 from apps.hierarchy import authz, selectors, selectors_offices, services_offices
 from apps.hierarchy.authz import HasCapability
 from apps.hierarchy.imports import assignments_import_csv
@@ -46,7 +47,7 @@ _PAGINATION = [
 
 
 def _ip(request: Request) -> str | None:
-    return request.META.get("REMOTE_ADDR")
+    return client_ip(request.META)
 
 
 class _StaffMfa(BasePermission):

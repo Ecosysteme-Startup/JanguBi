@@ -43,6 +43,8 @@ class KeycloakIdentity:
     amr: frozenset[str]
     acr: str
     claims: dict[str, Any] = field(repr=False, compare=False, hash=False)
+    # Attribut de profil Keycloak facultatif « phone » (claim OIDC ``phone_number``), saisi à l'inscription.
+    phone_number: str = field(default="", repr=False)
 
     @property
     def mfa(self) -> bool:
@@ -134,6 +136,7 @@ def token_validate(token: str) -> KeycloakIdentity:
         amr=frozenset(claims.get("amr", []) or []),
         acr=str(claims.get("acr", "")),
         claims=claims,
+        phone_number=str(claims.get("phone_number") or ""),
     )
 
 
@@ -153,6 +156,7 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
         if person is not None:
             person.keycloak_sub = identity.sub
             person.save(update_fields=["keycloak_sub", "updated_at"])
+            _profile_ensure(person, identity)
             return person
     if not identity.email:
         raise KeycloakTokenError("Le jeton ne contient pas d'adresse e-mail.", code="email_missing")
@@ -181,13 +185,35 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
     return person
 
 
+def phone_from_claim(raw: str) -> str | None:
+    """Numéro saisi à l'inscription (« 77 412 36 58 », « +221 77… ») au format E.164 du
+    ``Profile.phone`` ; ``None`` s'il est absent ou invalide (jamais bloquant)."""
+    import phonenumbers
+
+    if not raw or not raw.strip():
+        return None
+    try:
+        number = phonenumbers.parse(raw, "SN")
+    except phonenumbers.NumberParseException:
+        return None
+    if not phonenumbers.is_valid_number(number):
+        return None
+    return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
+
+
 def _profile_ensure(person: Any, identity: KeycloakIdentity) -> None:
+    """Profil créé depuis le jeton. Le téléphone du jeton ne remplit qu'un champ vide :
+    une valeur déjà saisie dans l'application n'est jamais écrasée."""
     from apps.users.models import Profile
 
-    Profile.objects.get_or_create(
+    phone = phone_from_claim(identity.phone_number)
+    profile, created = Profile.objects.get_or_create(
         user=person,
-        defaults={"first_name": identity.given_name[:50], "last_name": identity.family_name[:50]},
+        defaults={"first_name": identity.given_name[:50], "last_name": identity.family_name[:50], "phone": phone},
     )
+    if not created and phone and not profile.phone:
+        profile.phone = phone
+        profile.save(update_fields=["phone", "updated_at"])
 
 
 def user_attach_identity(user: Any, identity: KeycloakIdentity) -> Any:

@@ -141,6 +141,26 @@ def test_api_priests_lists_only_reachable(world):
     assert str(world.secretaire.pk) not in ids
 
 
+def test_api_priests_expose_the_office_of_the_principal_assignment(world):
+    """Écart F9 : office (curé, vicaire, aumônier) ; la paroisse suivie passe avant l'aumônerie."""
+    from apps.hierarchy.tests.factories import make_node
+
+    aumonerie = make_node("aumonerie", "Aumônerie des étudiants", world.dakar, code="T-AUM")
+    cure = priest("cure@sd.sn")
+    nominate(cure, "cure", world.saint_dominique)
+    aumonier = priest("aumonier@dakar.sn")
+    nominate(aumonier, "aumonier", aumonerie)
+    nominate(world.pere, "aumonier", aumonerie, start_date=datetime.date(2019, 1, 1))
+    world.adulte.paroisse_suivie = world.saint_dominique
+    world.adulte.save(update_fields=["paroisse_suivie"])
+
+    rows = {row["user_id"]: row for row in client_for(world.adulte).get("/api/v1/messaging/priests/").data}
+
+    assert rows[str(cure.pk)]["office"] == {"code": "cure", "label": "Curé / administrateur paroissial"}
+    assert rows[str(world.pere.pk)]["office"]["code"] == "vicaire_paroissial"
+    assert rows[str(aumonier.pk)]["office"]["code"] == "aumonier"
+
+
 # --- Bandeau et confidentialité (EF-PRE-05, -06 ; RG-09) ------------------------------------
 
 

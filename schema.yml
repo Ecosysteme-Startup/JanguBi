@@ -280,8 +280,10 @@ paths:
   /api/v1/bible/books/{book_id}/chapters/{chapter_number}/verses/:
     get:
       operationId: v1_bible_books_chapters_verses_list
-      description: Returns list of verses for a specific chapter.
-      summary: List verses for a specific chapter
+      description: |-
+        Versets d'un chapitre. Une page couvre un chapitre entier (le plus long, Ps 119, a
+        176 versets) : ``limit`` vaut 200 par défaut et au plus.
+      summary: Versets d'un chapitre (le chapitre entier en une requête)
       parameters:
       - in: path
         name: book_id
@@ -302,7 +304,7 @@ paths:
         name: limit
         schema:
           type: integer
-        description: Number of results to return per page.
+        description: 'Versets par page : 200 par défaut et au plus (un chapitre entier).'
       - in: query
         name: offset
         schema:
@@ -328,9 +330,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/VerseOutput'
+                $ref: '#/components/schemas/PaginatedVerseOutputList'
           description: ''
   /api/v1/bible/homilenotes/:
     get:
@@ -5683,6 +5683,11 @@ components:
           format: uuid
           readOnly: true
           nullable: true
+        actor_name:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Prénom et nom de l'acteur ; null pour une action du système
         action:
           type: string
           maxLength: 80
@@ -5698,11 +5703,19 @@ components:
           readOnly: true
           nullable: true
         metadata: {}
+        ip:
+          type: string
+          readOnly: true
+          nullable: true
+          description: Adresse du client, tronquée (IPv4 /24, IPv6 /48) ; null hors
+            requête
       required:
       - action
       - actor_id
+      - actor_name
       - at
       - id
+      - ip
       - node_id
       - target_id
       - target_type
@@ -6883,6 +6896,9 @@ components:
         meditation_source:
           type: string
           maxLength: 255
+        fruit:
+          type: string
+          maxLength: 255
         audio_file:
           type: string
           format: uri
@@ -7678,6 +7694,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedVerseOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerseOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     ParoisseSuivieInput:
       type: object
       properties:
@@ -8153,6 +8195,19 @@ components:
           type: boolean
       required:
       - received
+    PriestOfficeOutput:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Code de l'office (cure, vicaire_paroissial, aumonier…)
+          pattern: ^[-a-zA-Z0-9_]+$
+        label:
+          type: string
+          description: 'Libellé de l''office : Curé, Vicaire paroissial…'
+      required:
+      - code
+      - label
     ProcessorOutput:
       type: object
       description: 'Vue de la paroisse : identité complète, registre, lieu de retrait.'
@@ -8393,10 +8448,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/Availability'
           nullable: true
+        office:
+          allOf:
+          - $ref: '#/components/schemas/PriestOfficeOutput'
+          nullable: true
+          description: Office de la nomination active principale (paroisse suivie
+            d'abord)
       required:
       - availability
       - full_name
       - nodes
+      - office
       - user_id
     ReactInput:
       type: object
@@ -8761,7 +8823,7 @@ components:
           readOnly: true
         weekday:
           allOf:
-          - $ref: '#/components/schemas/RosaryDayWeekdayEnum'
+          - $ref: '#/components/schemas/WeekdayEnum'
           minimum: -2147483648
           maximum: 2147483647
         weekday_display:
@@ -8776,24 +8838,6 @@ components:
       - id
       - weekday
       - weekday_display
-    RosaryDayWeekdayEnum:
-      enum:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
-      - 5
-      - 6
-      type: integer
-      description: |-
-        * `0` - Monday
-        * `1` - Tuesday
-        * `2` - Wednesday
-        * `3` - Thursday
-        * `4` - Friday
-        * `5` - Saturday
-        * `6` - Sunday
     RuleCreateInput:
       type: object
       properties:
@@ -9335,15 +9379,15 @@ components:
       - OTHER
       type: string
       description: |-
-        * `SIGN_OF_CROSS` - Sign of Cross
-        * `CREED` - Apostles Creed
-        * `OUR_FATHER` - Our Father
-        * `HAIL_MARY` - Hail Mary
-        * `GLORY_BE` - Glory Be
-        * `FATIMA` - Fatima Prayer
-        * `HOLY_QUEEN` - Hail Holy Queen
-        * `FINAL_PRAYER` - Final Prayer
-        * `OTHER` - Other
+        * `SIGN_OF_CROSS` - Signe de la croix
+        * `CREED` - Je crois en Dieu
+        * `OUR_FATHER` - Notre Père
+        * `HAIL_MARY` - Je vous salue Marie
+        * `GLORY_BE` - Gloire au Père
+        * `FATIMA` - Prière de Fatima
+        * `HOLY_QUEEN` - Salve Regina
+        * `FINAL_PRAYER` - Prière finale
+        * `OTHER` - Autre
     VerificationDecisionInput:
       type: object
       properties:
