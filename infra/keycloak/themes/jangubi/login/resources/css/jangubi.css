@@ -153,7 +153,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--jb-primary); w
 
 /* Étapes (DS-Composants §05) */
 .jb-stepper { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.jb-stepper li { padding-top: 12px; border-top: 2px solid var(--jb-line); font-size: 15px; color: var(--jb-ink-2); }
+.jb-stepper li { min-width: 0; padding-top: 12px; border-top: 2px solid var(--jb-line); font-size: 15px; color: var(--jb-ink-2); overflow-wrap: anywhere; hyphens: auto; } /* A11Y-15 : « Consentements » débordait à 320 px */
 .jb-stepper li span { display: block; margin-bottom: 4px; font-size: 12px; color: var(--jb-ink-3); font-variant-numeric: tabular-nums; }
 .jb-stepper li.is-current { border-top-color: var(--jb-line-strong); color: var(--jb-ink); }
 .jb-stepper li.is-current span { color: var(--jb-ink); }
@@ -259,7 +259,7 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--jb-primary); w
 
 .jb-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; max-width: 440px; margin: 0 auto; font-size: 12px; color: var(--jb-ink-3); font-variant-numeric: tabular-nums; }
 .jb-layout-register .jb-footer { max-width: 640px; }
-.jb-footer a { color: var(--jb-ink-3); }
+.jb-footer a { color: var(--jb-ink-3); display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; } /* A11Y-13 : cibles de 44 px (26×15 avant) */
 .jb-secure { display: inline-flex; align-items: center; gap: 8px; }
 
 /* Base de Keycloak (pages non réécrites) : on neutralise la grille PatternFly */
