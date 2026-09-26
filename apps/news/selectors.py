@@ -6,7 +6,7 @@ from typing import Any
 from django.db.models import Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery, Value
 from django.db.models.functions import Coalesce
 
-from apps.core.exceptions import NotFoundError
+from apps.core.exceptions import NotFoundError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 from apps.hierarchy.selectors import node_ancestors
@@ -113,6 +113,10 @@ def article_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) 
         qs = qs.filter(status=status)
     if content_type := filters.get("type"):
         qs = qs.filter(content_type=content_type)
+    if place_id := filters.get("place"):
+        qs = qs.filter(scope_place_id=place_id)
+    if query := (filters.get("q") or "").strip():
+        qs = qs.filter(Q(title__icontains=query) | Q(content__icontains=query) | Q(excerpt__icontains=query))
     return qs.order_by("-created_at")
 
 
@@ -126,3 +130,31 @@ def article_get_for_staff(*, user: Any, article_id: Any) -> Article:
 
 def article_reads_count(*, article: Article) -> int:
     return ArticleRead.objects.filter(article=article).count()
+
+
+def next_sunday(*, today: datetime.date) -> datetime.date:
+    """Le dimanche à venir (aujourd'hui si l'on est dimanche)."""
+    return today + datetime.timedelta(days=(6 - today.weekday()) % 7)
+
+
+def sunday_sheet(*, user: Any, node: Node, sunday: datetime.date) -> dict[str, Any]:
+    """Feuille d'annonces lue à la fin des messes d'un dimanche (EF-PAROI-02).
+
+    Annonces du dimanche du nœud et de son sous-arbre (publiées ou programmées : la feuille
+    s'imprime souvent la veille), suivies de celles, publiées, des nœuds parents (diocèse…).
+    Réservée à qui peut publier sur le nœud (elle contient des annonces non encore publiées)."""
+    if not authz.peut(user, "annonces.publier", node):
+        raise PermissionDeniedError(
+            "Vous ne pouvez pas éditer la feuille d'annonces de ce nœud.", code="publish_forbidden"
+        )
+    base = (
+        Article.objects.filter(is_sunday_notice=True, sunday_date=sunday)
+        .select_related("scope_node", "scope_place", "category", "author", "author__profile")
+        .order_by("scope_node__depth", "scope_place__name", "published_at", "created_at")
+    )
+    own = base.filter(
+        scope_node__path__startswith=node.path,
+        status__in=(Article.Status.PUBLISHED, Article.Status.SCHEDULED),
+    )
+    ancestors = base.filter(scope_node__in=node_ancestors(node=node), status=Article.Status.PUBLISHED)
+    return {"node": node, "sunday": sunday, "items": list(own) + list(ancestors)}

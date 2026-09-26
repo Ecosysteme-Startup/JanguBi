@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -26,6 +27,8 @@ from apps.news.serializers import (
     ReadOutputSerializer,
     StaffArticleFilterSerializer,
     StaffArticleOutputSerializer,
+    SundaySheetFilterSerializer,
+    SundaySheetOutputSerializer,
 )
 
 TAG = ["news"]
@@ -100,11 +103,15 @@ class ArticleListApi(_PublicApi):
 class ArticleDetailApi(_PublicApi):
     @extend_schema(tags=TAG, summary="Détail d'un article publié", responses=ArticleOutputSerializer)
     def get(self, request: Request, article_id: str) -> Response:
-        return Response(ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data)
+        return Response(
+            ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data
+        )
 
 
 class ArticleReadApi(_AuthedApi):
-    @extend_schema(tags=TAG, summary="Marquer comme lu (une lecture par personne)", request=None, responses=ReadOutputSerializer)
+    @extend_schema(
+        tags=TAG, summary="Marquer comme lu (une lecture par personne)", request=None, responses=ReadOutputSerializer
+    )
     def post(self, request: Request, article_id: str) -> Response:
         article = selectors.article_get_published(article_id=article_id)
         return Response({"first_read": services.article_mark_read(article=article, user=request.user)})
@@ -122,7 +129,9 @@ class ArticleReactionApi(_AuthedApi):
         serializer.is_valid(raise_exception=True)
         article = selectors.article_get_published(article_id=article_id)
         services.article_reaction_set(article=article, user=request.user, **serializer.validated_data)
-        return Response(ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data)
+        return Response(
+            ArticleOutputSerializer(selectors.article_get_published(article_id=article_id, viewer=request.user)).data
+        )
 
 
 class MeFeedApi(_AuthedApi):
@@ -187,7 +196,9 @@ class StaffArticleListCreateApi(_StaffApi):
         serializer.is_valid(raise_exception=True)
         article = services.article_create(author=request.user, **_resolve_scope(serializer.validated_data))
         return Response(
-            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article.pk)).data,
+            StaffArticleOutputSerializer(
+                selectors.article_get_for_staff(user=request.user, article_id=article.pk)
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -195,10 +206,15 @@ class StaffArticleListCreateApi(_StaffApi):
 class StaffArticleDetailApi(_StaffApi):
     @extend_schema(tags=TAG, summary="Détail d'un contenu (tous statuts)", responses=StaffArticleOutputSerializer)
     def get(self, request: Request, article_id: str) -> Response:
-        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
 
     @extend_schema(
-        tags=TAG, summary="Modifier un contenu", request=ArticleUpdateInputSerializer, responses=StaffArticleOutputSerializer
+        tags=TAG,
+        summary="Modifier un contenu",
+        request=ArticleUpdateInputSerializer,
+        responses=StaffArticleOutputSerializer,
     )
     def patch(self, request: Request, article_id: str) -> Response:
         article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
@@ -207,12 +223,19 @@ class StaffArticleDetailApi(_StaffApi):
         data = dict(serializer.validated_data)
         if "category_id" in data:
             data["category"] = selectors.category_get(category_id=data.pop("category_id"))
+        if "place_id" in data:
+            place_id = data.pop("place_id")
+            data["place"] = hierarchy_selectors.place_get(place_id=place_id) if place_id else None
         services.article_update(article=article, editor=request.user, data=data)
-        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
 
     @extend_schema(tags=TAG, summary="Supprimer un brouillon ou un contenu retiré", responses={204: None})
     def delete(self, request: Request, article_id: str) -> Response:
-        services.article_delete(article=selectors.article_get_for_staff(user=request.user, article_id=article_id), editor=request.user)
+        services.article_delete(
+            article=selectors.article_get_for_staff(user=request.user, article_id=article_id), editor=request.user
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -227,13 +250,22 @@ class StaffArticlePublishApi(_StaffApi):
         serializer = ArticlePublishInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
-        services.article_publish(article=article, editor=request.user, publish_at=serializer.validated_data.get("publish_at"))
-        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
+        services.article_publish(
+            article=article,
+            editor=request.user,
+            publish_at=serializer.validated_data.get("publish_at"),
+            notify=serializer.validated_data.get("notify"),
+        )
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
 
 
 class StaffArticleUnpublishApi(_StaffApi):
     @extend_schema(
-        tags=TAG, summary="Retirer un contenu publié ou programmé", request=ArticleUnpublishInputSerializer,
+        tags=TAG,
+        summary="Retirer un contenu publié ou programmé",
+        request=ArticleUnpublishInputSerializer,
         responses=StaffArticleOutputSerializer,
     )
     def post(self, request: Request, article_id: str) -> Response:
@@ -241,4 +273,26 @@ class StaffArticleUnpublishApi(_StaffApi):
         serializer.is_valid(raise_exception=True)
         article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
         services.article_unpublish(article=article, editor=request.user, reason=serializer.validated_data["reason"])
-        return Response(StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data)
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
+
+
+class StaffSundaySheetApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_news_sunday_sheet",
+        summary="Feuille d'annonces d'un dimanche (à imprimer) : annonces du nœud et des nœuds parents",
+        parameters=[SundaySheetFilterSerializer],
+        responses=SundaySheetOutputSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = SundaySheetFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        data = filters.validated_data
+        sheet = selectors.sunday_sheet(
+            user=request.user,
+            node=hierarchy_selectors.node_get(node_id=data["node"]),
+            sunday=data.get("date") or selectors.next_sunday(today=timezone.localdate()),
+        )
+        return Response(SundaySheetOutputSerializer(sheet).data)

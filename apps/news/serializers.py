@@ -100,6 +100,8 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
     category = CategoryOutputSerializer(read_only=True)
     author_name = serializers.SerializerMethodField()
     scope = serializers.SerializerMethodField()
+    cover_image_id = serializers.IntegerField(read_only=True, allow_null=True)
+    cover_image_url = serializers.SerializerMethodField()
     reads_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
@@ -122,6 +124,9 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
             "published_at",
             "unpublished_at",
             "unpublish_reason",
+            "cover_image_id",
+            "cover_image_url",
+            "notify_followers",
             "reads_count",
             "created_at",
             "updated_at",
@@ -129,6 +134,26 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
 
     get_author_name = ArticleOutputSerializer.get_author_name
     get_scope = ArticleOutputSerializer.get_scope
+    get_cover_image_url = ArticleOutputSerializer.get_cover_image_url
+
+
+class SundaySheetItemOutputSerializer(serializers.ModelSerializer):
+    """Une annonce de la feuille : le texte à lire, sa portée et son état."""
+
+    scope = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Article
+        fields = ["id", "title", "excerpt", "content", "content_format", "scope", "status"]
+
+    get_scope = ArticleOutputSerializer.get_scope
+
+
+class SundaySheetOutputSerializer(serializers.Serializer):
+    node_id = serializers.UUIDField(source="node.pk")
+    node_name = serializers.CharField(source="node.name")
+    sunday = serializers.DateField()
+    items = SundaySheetItemOutputSerializer(many=True)
 
 
 # --- Entrées -------------------------------------------------------------------------------
@@ -145,6 +170,18 @@ class StaffArticleFilterSerializer(serializers.Serializer):
     node = serializers.UUIDField(required=False)
     status = serializers.ChoiceField(choices=Article.Status.choices, required=False)
     type = serializers.ChoiceField(choices=V1_TYPES, required=False)
+    place = serializers.IntegerField(required=False, help_text="Lieu de culte de l'annonce")
+    q = serializers.CharField(required=False, max_length=100, help_text="Recherche dans le titre, le chapô et le texte")
+
+
+class SundaySheetFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Nœud (paroisse) de la feuille")
+    date = serializers.DateField(required=False, help_text="Dimanche concerné (défaut : le dimanche à venir)")
+
+    def validate_date(self, value: Any) -> Any:
+        if value is not None and value.weekday() != 6:
+            raise serializers.ValidationError("La date doit être un dimanche.")
+        return value
 
 
 class ArticleCreateInputSerializer(serializers.Serializer):
@@ -158,6 +195,10 @@ class ArticleCreateInputSerializer(serializers.Serializer):
     category_id = serializers.IntegerField()
     is_sunday_notice = serializers.BooleanField(default=False)
     sunday_date = serializers.DateField(required=False, allow_null=True)
+    cover_image_id = serializers.IntegerField(
+        required=False, allow_null=True, help_text="Bannière : fichier image téléversé via /files/upload/"
+    )
+    notify_followers = serializers.BooleanField(default=True, help_text="Notifier les fidèles à la publication")
 
 
 class ArticleUpdateInputSerializer(serializers.Serializer):
@@ -169,10 +210,19 @@ class ArticleUpdateInputSerializer(serializers.Serializer):
     category_id = serializers.IntegerField(required=False)
     is_sunday_notice = serializers.BooleanField(required=False)
     sunday_date = serializers.DateField(required=False, allow_null=True)
+    place_id = serializers.IntegerField(
+        required=False, allow_null=True, help_text="Lieu de culte (vide : tout le nœud)"
+    )
+    cover_image_id = serializers.IntegerField(required=False, allow_null=True, help_text="Bannière (vide : la retirer)")
+    notify_followers = serializers.BooleanField(required=False)
 
 
 class ArticlePublishInputSerializer(serializers.Serializer):
     publish_at = serializers.DateTimeField(required=False, allow_null=True, help_text="Futur : publication programmée")
+    notify = serializers.BooleanField(
+        required=False,
+        help_text="Notifier les fidèles (préférences et plage de silence respectées) ; absent : choix enregistré",
+    )
 
 
 class ArticleUnpublishInputSerializer(serializers.Serializer):

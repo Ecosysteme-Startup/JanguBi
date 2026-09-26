@@ -49,6 +49,8 @@ class Event(BaseModel):
     )
     reminder_sent_at = models.DateTimeField(_("rappel envoyé le"), null=True, blank=True)
     max_participants = models.PositiveIntegerField(null=True, blank=True)
+    # Au-delà, plus d'inscription ni de modification (vide : jusqu'à la fin de l'événement).
+    registration_closes_at = models.DateTimeField(_("clôture des inscriptions"), null=True, blank=True)
 
     # Annulation DOUCE : un événement supprimé garde ses inscriptions (des fidèles
     # s'y sont engagés et sont prévenus par email) et sort simplement des feeds.
@@ -94,6 +96,11 @@ class EventRegistration(BaseModel):
         related_name="event_registrations",
     )
     registered_at = models.DateTimeField(auto_now_add=True)
+    # Places réservées par cette inscription (la personne et ceux qui l'accompagnent) :
+    # la jauge compte les places, pas les inscriptions.
+    seats = models.PositiveSmallIntegerField(_("nombre de personnes"), default=1, db_default=1)
+    # Lue par les organisateurs uniquement.
+    note = models.CharField(_("remarque"), max_length=300, blank=True, default="", db_default="")
 
     class Meta:
         unique_together = [["event", "user"]]
