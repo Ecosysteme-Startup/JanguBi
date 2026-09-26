@@ -73,6 +73,9 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # (un `.env` local en `FILE_UPLOAD_STORAGE=s3` faisait joindre MinIO pendant les tests).
 import tempfile  # noqa: E402
 
+from apps.files.enums import FileUploadStorage  # noqa: E402
+
+FILE_UPLOAD_STORAGE = FileUploadStorage.LOCAL
 MEDIA_ROOT = tempfile.mkdtemp(prefix="jangubi-test-media-")
 MEDIA_URL = "/media/"
 STORAGES = {
