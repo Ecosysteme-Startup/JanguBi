@@ -21,6 +21,7 @@ urlpatterns = [
     path("import/places/", apis.PlaceImportApi.as_view(), name="import-places"),
     # Offices et nominations (L2)
     path("office-types/", apis_offices.OfficeTypeListApi.as_view(), name="office-type-list"),
+    path("persons/", apis_offices.PersonSearchApi.as_view(), name="person-search"),
     path("assignments/", apis_offices.AssignmentListCreateApi.as_view(), name="assignment-list"),
     path("assignments/import/", apis_offices.AssignmentImportApi.as_view(), name="assignment-import"),
     path("assignments/<int:assignment_id>/", apis_offices.AssignmentDetailApi.as_view(), name="assignment-detail"),

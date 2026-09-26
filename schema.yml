@@ -1252,8 +1252,8 @@ paths:
     get:
       operationId: hierarchy_assignments_list
       description: À placer en premier dans les bases des vues V1.
-      summary: Nominations visibles (celles des nœuds où j'ai offices.nommer, et les
-        miennes)
+      summary: 'Nominations visibles : celles des nœuds où j''ai offices.nommer, en
+        lecture celles des nœuds où j''ai tableau_bord.voir, et les miennes'
       parameters:
       - in: query
         name: limit
@@ -1909,6 +1909,41 @@ paths:
                 items:
                   $ref: '#/components/schemas/OfficeTypeOutput'
           description: ''
+  /api/v1/hierarchy/persons/:
+    get:
+      operationId: hierarchy_persons_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Rechercher la personne à nommer (offices.nommer ; e-mail masqué)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+          minLength: 2
+        description: Nom, prénom ou e-mail (2 caractères au moins)
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPersonSearchOutputList'
+          description: ''
   /api/v1/hierarchy/places/{place_id}/:
     get:
       operationId: v1_hierarchy_places_retrieve
@@ -2144,7 +2179,7 @@ paths:
     get:
       operationId: v1_hierarchy_verifications_retrieve
       description: À placer en premier dans les bases des vues V1.
-      summary: Déclarations d'état de vie à vérifier (personnes.verifier)
+      summary: Déclarations d'état de vie à vérifier ou en attente de complément (personnes.verifier)
       parameters:
       - in: query
         name: limit
@@ -2156,6 +2191,19 @@ paths:
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: statut
+        schema:
+          enum:
+          - declare
+          - complement
+          type: string
+          minLength: 1
+        description: |-
+          « declare » : à vérifier ; « complement » : en attente du complément demandé
+
+          * `declare` - declare
+          * `complement` - complement
       tags:
       - hierarchy
       security:
@@ -2171,7 +2219,8 @@ paths:
     post:
       operationId: v1_hierarchy_verifications_decision_create
       description: À placer en premier dans les bases des vues V1.
-      summary: Vérifier ou rejeter une déclaration (personnes.verifier sur l'incardination)
+      summary: Vérifier, rejeter ou demander un complément (personnes.verifier sur
+        l'incardination)
       parameters:
       - in: path
         name: person_id
@@ -2619,8 +2668,8 @@ paths:
     post:
       operationId: v1_me_declaration_create
       description: À placer en premier dans les bases des vues V1.
-      summary: Déclarer mon état de vie (reste « déclaré » jusqu'à vérification ;
-        aucun effet sur les droits)
+      summary: Déclarer ou compléter mon état de vie (reste « déclaré » jusqu'à vérification
+        ; aucun effet sur les droits). Les justificatifs s'ajoutent aux précédents.
       tags:
       - me
       requestBody:
@@ -6184,10 +6233,35 @@ components:
       enum:
       - verifie
       - rejete
+      - complement
       type: string
       description: |-
         * `verifie` - verifie
         * `rejete` - rejete
+        * `complement` - complement
+    DeclarationAttachmentOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        file_name:
+          type: string
+        file_type:
+          type: string
+        url:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Lien de téléchargement (présigné en stockage S3)
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - created_at
+      - file_name
+      - file_type
+      - id
+      - url
     DeclarationInput:
       type: object
       properties:
@@ -6205,6 +6279,13 @@ components:
           type: string
           format: uuid
           nullable: true
+        attachment_file_ids:
+          type: array
+          items:
+            type: integer
+          description: Justificatifs à ajouter (celebret, lettre d'obédience…), envoyés
+            d'abord via /files/upload/
+          maxItems: 5
       required:
       - etat_de_vie
     DegreOrdreEnum:
@@ -7522,6 +7603,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedPersonSearchOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PersonSearchOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedPersonStatusOutputList:
       type: object
       properties:
@@ -7862,6 +7969,38 @@ components:
       - email
       - full_name
       - id
+    PersonSearchOutput:
+      type: object
+      description: Juste ce qu'il faut pour choisir la personne à nommer (jamais l'e-mail
+        en clair).
+      properties:
+        id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+          readOnly: true
+        email_masked:
+          type: string
+          readOnly: true
+        etat_de_vie:
+          type: string
+        degre_ordre:
+          type: string
+        statut_verification:
+          $ref: '#/components/schemas/StatutVerificationEnum'
+        incardination_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+      required:
+      - degre_ordre
+      - email_masked
+      - etat_de_vie
+      - full_name
+      - id
+      - incardination_node
+      - statut_verification
     PersonStatusOutput:
       type: object
       properties:
@@ -7871,14 +8010,24 @@ components:
         email:
           type: string
           format: email
+        full_name:
+          type: string
+          readOnly: true
+          description: Prénom et nom ; vide s'ils ne sont pas renseignés
         etat_de_vie:
           type: string
         degre_ordre:
           type: string
         statut_verification:
-          type: string
+          $ref: '#/components/schemas/StatutVerificationEnum'
         verification_note:
           type: string
+          description: Motif du refus ou du complément demandé
+        declared_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date de la dernière déclaration
         incardination_node:
           allOf:
           - $ref: '#/components/schemas/NodeRef'
@@ -7887,10 +8036,18 @@ components:
           allOf:
           - $ref: '#/components/schemas/NodeRef'
           nullable: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeclarationAttachmentOutput'
+          readOnly: true
       required:
+      - attachments
+      - declared_at
       - degre_ordre
       - email
       - etat_de_vie
+      - full_name
       - id
       - incardination_node
       - institut_node
@@ -9250,6 +9407,18 @@ components:
           format: date-time
       required:
       - to_status
+    StatutVerificationEnum:
+      enum:
+      - declare
+      - verifie
+      - rejete
+      - complement
+      type: string
+      description: |-
+        * `declare` - Déclaré
+        * `verifie` - Vérifié
+        * `rejete` - Rejeté
+        * `complement` - Complément demandé
     SupplementInput:
       type: object
       properties:
@@ -9352,6 +9521,7 @@ components:
         note:
           type: string
           default: ''
+          description: Motif, obligatoire pour « complement » ; transmis à la personne
           maxLength: 255
       required:
       - decision

@@ -2,12 +2,23 @@ from datetime import date
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q, QuerySet
+from django.db.models import F, Prefetch, Q, QuerySet
 
 from apps.core.exceptions import NotFoundError
 from apps.hierarchy import authz
 from apps.hierarchy.enums import EtatDeVie, StatutVerification
-from apps.hierarchy.models import AuditEvent, CapabilityOverride, Node, OfficeAssignment, OfficeType
+from apps.hierarchy.models import (
+    AuditEvent,
+    CapabilityOverride,
+    DeclarationAttachment,
+    Node,
+    OfficeAssignment,
+    OfficeType,
+)
+
+# Déclarations « en file » : à vérifier, ou en attente du complément demandé à la personne.
+VERIFICATION_QUEUE_STATUSES = (StatutVerification.DECLARE, StatutVerification.COMPLEMENT)
+PERSON_SEARCH_MIN_LENGTH = 2
 
 
 def office_type_list() -> QuerySet[OfficeType]:
@@ -22,9 +33,10 @@ def office_type_get_by_code(*, code: str) -> OfficeType:
 
 
 def assignment_list(*, actor: Any, filters: dict[str, Any] | None = None) -> QuerySet[OfficeAssignment]:
-    """Nominations visibles par ``actor`` : celles des nœuds où il a ``offices.nommer``, plus les siennes."""
+    """Nominations visibles par ``actor`` : celles des nœuds où il a ``offices.nommer`` ou
+    ``tableau_bord.voir`` (l'équipe, en lecture seule), plus les siennes."""
     filters = filters or {}
-    allowed = authz.noeuds_autorises(actor, "offices.nommer")
+    allowed = authz.noeuds_autorises(actor, "offices.nommer") | authz.noeuds_autorises(actor, "tableau_bord.voir")
     qs = OfficeAssignment.objects.filter(Q(node__in=allowed) | Q(person=actor)).select_related(
         "person", "office_type", "node", "node__type", "appointed_by"
     )
@@ -54,9 +66,31 @@ def assignment_get(*, assignment_id: int) -> OfficeAssignment:
 def person_get(*, person_id: Any) -> Any:
     User = get_user_model()
     try:
-        return User.objects.select_related("incardination_node", "institut_node", "paroisse_suivie").get(pk=person_id)
+        return (
+            User.objects.select_related("profile", "incardination_node", "institut_node", "paroisse_suivie")
+            .prefetch_related(declaration_attachments_prefetch())
+            .get(pk=person_id)
+        )
     except (User.DoesNotExist, ValueError) as exc:
         raise NotFoundError("Personne introuvable.", {"person_id": str(person_id)}) from exc
+
+
+def person_search(*, q: str) -> QuerySet[Any]:
+    """Comptes actifs dont le prénom, le nom ou l'e-mail contient chacun des mots de ``q``
+    (choix de la personne à nommer). L'appelant a ``offices.nommer`` ; la pagination et la
+    longueur minimale de ``q`` bornent l'énumération."""
+    User = get_user_model()
+    terms = [t for t in q.split() if t]
+    if not terms or len(q.strip()) < PERSON_SEARCH_MIN_LENGTH:
+        return User.objects.none()
+    qs = User.objects.filter(is_active=True)
+    for term in terms[:5]:
+        qs = qs.filter(
+            Q(profile__first_name__icontains=term) | Q(profile__last_name__icontains=term) | Q(email__icontains=term)
+        )
+    return qs.select_related("profile", "incardination_node__type").order_by(
+        "profile__last_name", "profile__first_name", "email"
+    )
 
 
 def person_get_by_email(*, email: str) -> Any:
@@ -71,17 +105,25 @@ def verification_queue(*, actor: Any) -> QuerySet[Any]:
     """Déclarations en attente que ``actor`` peut vérifier (EF-PER-02)."""
     User = get_user_model()
     qs = (
-        User.objects.filter(statut_verification=StatutVerification.DECLARE)
+        User.objects.filter(statut_verification__in=VERIFICATION_QUEUE_STATUSES)
         .exclude(etat_de_vie=EtatDeVie.LAIC)
         .exclude(pk=actor.pk)
+        .select_related("profile", "incardination_node__type", "institut_node__type")
+        .prefetch_related(declaration_attachments_prefetch())
+        .order_by(F("declared_at").asc(nulls_last=True), "email")
     )
     if authz.peut(actor, "personnes.verifier", None):
-        return qs.select_related("incardination_node", "institut_node").order_by("email")
+        return qs
     allowed = authz.noeuds_autorises(actor, "personnes.verifier")
-    return (
-        qs.filter(Q(incardination_node__in=allowed) | Q(institut_node__in=allowed))
-        .select_related("incardination_node", "institut_node")
-        .order_by("email")
+    return qs.filter(Q(incardination_node__in=allowed) | Q(institut_node__in=allowed))
+
+
+def declaration_attachments_prefetch() -> Prefetch:
+    """Justificatifs dont l'envoi est terminé (un fichier n'est valide qu'avec ``upload_finished_at``)."""
+    return Prefetch(
+        "declaration_attachments",
+        queryset=DeclarationAttachment.objects.filter(file__upload_finished_at__isnull=False).select_related("file"),
+        to_attr="declaration_files",
     )
 
 
