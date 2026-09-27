@@ -8,6 +8,7 @@ urlpatterns = [
     path("fonds/<uuid:fund_id>/publier/", apis.FundPublishApi.as_view(), name="fund-publish"),
     path("fonds/<uuid:fund_id>/clore/", apis.FundCloseApi.as_view(), name="fund-close"),
     path("fonds/<uuid:fund_id>/nouvelles/", apis.FundNewsApi.as_view(), name="fund-news"),
+    path("analyse/", apis.AnalysisApi.as_view(), name="analysis"),
     path("synthese/", apis.SummaryApi.as_view(), name="summary"),
     path("operations/", apis.OperationsApi.as_view(), name="operations"),
     path("operations/<uuid:donation_id>/rembourser/", apis.RefundApi.as_view(), name="refund"),

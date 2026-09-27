@@ -187,6 +187,8 @@ CAPABILITIES: list[CapabilitySpec] = [
     {"code": "dons.voir_donateurs", "label": "Voir le nom des donateurs non anonymes", "domain": "dons"},
     {"code": "dons.exporter", "label": "Export comptable et rapprochement", "domain": "dons"},
     {"code": "dons.definir_quete_imperee", "label": "Définir une quête impérée et suivre ses agrégats", "domain": "dons"},
+    # V2 : agrégats au-dessus de la paroisse (arrondis au millier, aucun nom, ordre alphabétique).
+    {"code": "dons.voir_agregats", "label": "Voir les agrégats des dons des paroisses (arrondis, sans nom)", "domain": "dons"},
 ]
 
 # Capacités « dons » par office (ADR-017). Séparées pour que la migration de données
@@ -203,8 +205,8 @@ DONS_OFFICE_CAPABILITIES: dict[str, list[str]] = {
     "cure_in_solidum": DONS_PAROISSE_CAPABILITIES,
     "econome_paroissial": DONS_PAROISSE_CAPABILITIES,
     "secretaire_paroissial": ["dons.voir_fonds", "dons.saisir_quete"],
-    "eveque_diocesain": ["dons.definir_quete_imperee"],
-    "econome_diocesain": ["dons.definir_quete_imperee"],
+    "eveque_diocesain": ["dons.definir_quete_imperee", "dons.voir_agregats"],
+    "econome_diocesain": ["dons.definir_quete_imperee", "dons.voir_agregats"],
 }
 
 # L'évêque n'a des dons que la définition des quêtes impérées (ADR-017) : ni les noms des
@@ -213,7 +215,7 @@ _ALL_BUT_PLATFORM_AND_MESSAGING = [
     c["code"]
     for c in CAPABILITIES
     if c["code"] not in {"plateforme.admin", "messagerie.recevoir_fideles"} and c["domain"] != "dons"
-] + ["dons.definir_quete_imperee"]
+] + ["dons.definir_quete_imperee", "dons.voir_agregats"]
 _CURE_CAPABILITIES = [
     "horaires.gerer",
     "offices.nommer",
@@ -234,7 +236,7 @@ OFFICES: list[OfficeSpec] = [
     {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir"]},
     {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir"]},
     {"code": "delegue_numerique_diocesain", "label": "Délégué diocésain au numérique", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "horaires.gerer", "tableau_bord.voir"]},
-    {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "dons.definir_quete_imperee"]},
+    {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "dons.definir_quete_imperee", "dons.voir_agregats"]},
     {"code": "doyen", "label": "Doyen", "node_types": ["doyenne"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser"]},
     {"code": "cure", "label": "Curé / administrateur paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": _CURE_CAPABILITIES, "qualities": CURE_QUALITIES},
     # Curés « in solidum » (c. 517) : l'exception à la cardinalité du curé (EF-PER-05).

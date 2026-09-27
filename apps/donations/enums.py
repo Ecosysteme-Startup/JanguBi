@@ -6,6 +6,8 @@ from django.utils.translation import gettext_lazy as _
 # Types de nœuds qui collectent (les dons vont toujours à une paroisse ; H1 : le diocèse encaisse).
 PARISH_TYPES: frozenset[str] = frozenset({"paroisse", "quasi_paroisse"})
 DIOCESE_TYPES: frozenset[str] = frozenset({"diocese"})
+# Nœuds dont on lit les agrégats (``dons.voir_agregats``) : au-dessus de la paroisse.
+AGGREGATE_TYPES: frozenset[str] = frozenset({"diocese", "doyenne"})
 
 
 class FundKind(models.TextChoices):

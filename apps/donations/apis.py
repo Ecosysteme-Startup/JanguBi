@@ -20,7 +20,7 @@ from apps.api.pagination import LimitOffsetPagination, get_paginated_response, p
 from apps.api.v1 import V1ApiMixin, error_body
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.core.exceptions import ApplicationError, NotFoundError
-from apps.donations import access, exports, selectors, services, services_tresorerie
+from apps.donations import access, exports, selectors, selectors_analyse, services, services_tresorerie
 from apps.donations.enums import DonationStatus
 from apps.donations.providers import known_provider
 from apps.donations.serializers import (
@@ -67,6 +67,7 @@ from apps.donations.serializers import (
     amounts_payload,
     authorization_payload,
 )
+from apps.donations.serializers_analyse import AnalyseQuerySerializer, AnalyseSerializer
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasAnyCapability, HasCapability
 
@@ -597,6 +598,41 @@ class RemittanceContestApi(V1ApiMixin, ApiAuthMixin, APIView):
             remittance=selectors.remittance_get(remittance_id=remittance_id), actor=request.user, **data
         )
         return Response(RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data)
+
+
+class AnalysisApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """Tableaux de bord : paroisse (nomination locale, exact) ou diocèse / doyenné (agrégats arrondis)."""
+
+    permission_classes = (IsAuthenticated, HasAnyCapability("dons.voir_fonds", "dons.voir_agregats"))
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_analysis",
+        summary="Analyse des dons : synthèse, tendance, à traiter (contrat : docs/API-DONS-ANALYSE.md)",
+        description=(
+            "niveau=paroisse : `dons.voir_fonds` par une nomination sur la paroisse même, montants exacts. "
+            "niveau=diocese : `dons.voir_agregats` sur le diocèse ou le doyenné, montants arrondis au millier. "
+            "Aucun nom de donateur ; paroisses en ordre alphabétique ; aucun tri par montant ; « à traiter » "
+            "trié par échéance croissante."
+        ),
+        parameters=[AnalyseQuerySerializer],
+        responses=AnalyseSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(AnalyseQuerySerializer, request)
+        node = hierarchy_selectors.node_get(node_id=filters["noeud"])
+        level = filters["niveau"]
+        if level == "paroisse":
+            access.require_parish_level(request.user, "dons.voir_fonds", node)
+        else:
+            access.require_aggregates(request.user, node)
+            if filters["periode"] == "semaine":
+                raise ApplicationError(
+                    "Au-dessus de la paroisse, la période minimale est le mois.", code="period_not_allowed"
+                )
+        period = selectors_analyse.period_parse(filters["periode"], filters["date"] or None)
+        data = selectors_analyse.donations_analysis(node=node, level=level, period=period)
+        return Response(AnalyseSerializer(data).data)
 
 
 class ExportApi(V1ApiMixin, ApiAuthMixin, APIView):
