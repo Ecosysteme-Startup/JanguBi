@@ -28,18 +28,18 @@ L'entrée est ajoutée **partout**, y compris aux 45 écrans existants et à leu
 ## 2. Données de référence
 
 - **Fidèle** : Marie-Thérèse Diouf, jeudi 24 septembre 2026. **Paroisse, diocèse, plateforme** : lundi 28 septembre 2026 (lendemain des quêtes du dimanche 27).
-- **Autorisation** : « Collecte autorisée par l'Archevêché de Dakar, décision du 1er septembre 2026 (réf. ARCH-DAK-2026-041). »
+- **Autorisation** : « Collecte autorisée par l'Archevêché de Dakar, décision du 1er juin 2026 (réf. ARCH-DAK-2026-041). »
 - **Fonds ouverts à Saint-Dominique** :
   | Fonds | Type | Destination | Période | Objectif |
   |---|---|---|---|---|
   | Quête du dimanche 27 septembre | quête dominicale | paroisse | 26 sept. → 4 oct. | — |
   | Quête impérée pour le Grand Séminaire de Brin | quête impérée | curie | 27 sept. → 4 oct. | — |
-  | Toiture de la chapelle de la Cité universitaire | campagne | paroisse | 1er sept. → 31 déc. | 4 500 000 FCFA ; réuni 1 186 400 FCFA (26 %), 57 dons |
+  | Toiture de la chapelle de la Cité universitaire | campagne | paroisse | 1er juin → 31 déc. | 4 500 000 FCFA ; réuni 1 186 400 FCFA (26 %), 57 dons |
   | Contribution annuelle 2026 | contribution annuelle | paroisse | 1er janv. → 31 déc. | — |
 - **Montants suggérés** : 1 000 · 2 000 · 5 000 · 10 000 FCFA + montant libre ; frais estimés 2 % (100 FCFA pour 5 000).
 - **Moyens acceptés** (sur la page de l'agrégateur) : Wave, Orange Money, Free Money, carte bancaire.
 - **Numérotation** (sur le modèle d'un reçu de paiement) : **référence du don** en chiffres aléatoires groupés par quatre, attribuée à la création et transmise à l'agrégateur (ex. `4817-2093-6651`) ; **numéro de reçu** comptable, sans trou, attribué seulement à la confirmation : code de la paroisse, année, compteur (ex. `SD-2026-00147`).
-- **Quêtes en espèces du dimanche 27** : samedi 18 h 30 (messe anticipée) 64 150 ; 7 h 30 142 350 ; 9 h 30 (étudiants) 96 725 ; 11 h 30 231 900 ; 18 h 30 118 400 FCFA. Compteurs : Pierre Ndour et Thérèse Ndione, Joseph Mendy et Cécile Coly.
+- **Quêtes en espèces du dimanche 27** (affectées à la quête impérée de Brin, à toutes les messes) : samedi 18 h 30 (messe anticipée) 64 150 ; 7 h 30 142 350 ; 9 h 30 (étudiants) 96 725 ; 11 h 30 231 900 ; 18 h 30 118 400 FCFA. Compteurs : Pierre Ndour et Thérèse Ndione, Joseph Mendy et Cécile Coly.
 - **Synthèse de septembre (paroisse)** : 1 214 830 FCFA affectés, dont en ligne 356 330 (47 dons) et espèces 858 500 ; frais 7 120 ; 3 paiements en attente ; 1 saisie à valider.
 - **Économe paroissiale** : Mme Cécile Coly (office « Économe paroissial ») ; curé : Abbé Augustin Ndiaye ; secrétaire : Mme Germaine Faye.
 - **Diocèse** : économe diocésain M. Albert Senghor ; Saint-Dominique seule paroisse où la collecte est ouverte, 4 paroisses en préparation.
