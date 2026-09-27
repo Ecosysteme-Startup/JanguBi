@@ -25,6 +25,13 @@ def test_seed_demo_is_idempotent_and_reversible():
     assert Article.objects.filter(author=cure).count() == 3
     assert DocumentRequest.objects.filter(target_node=parish).count() == 1
     assert ConfessionSlot.objects.exists()
+    # Dons (ADR-017) : collecte active, trois fonds paroissiaux et la quête impérée de Brin.
+    from apps.donations.models import Fund
+
+    assert parish.donation_activation.enabled
+    assert Fund.objects.filter(node=parish, parent__isnull=True).count() == 3
+    assert Fund.objects.get(node=parish, kind="quete_imperee").destination == "curie"
 
     call_command("seed_demo", "--reset")
     assert not BaseUser.objects.filter(email__endswith="@demo.jangubi.sn").exists()
+    assert not Fund.objects.exists()
