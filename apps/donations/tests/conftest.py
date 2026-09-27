@@ -64,7 +64,8 @@ def world(tree):
     nominate(w.econome_dio, "econome_diocesain", w.dakar)
     nominate(w.doyen, "doyen", tree.doyenne)
     DonationActivation.objects.create(
-        node=w.sd, enabled=True, authorization_ref="ARCH-DAK-2026-041", authorization_date=TODAY, allocation_key="SD01"
+        node=w.sd, enabled=True, authorization_ref="ARCH-DAK-2026-041", authorization_date=TODAY, allocation_key="SD01",
+        receipt_prefix="SD",
     )
     return w
 

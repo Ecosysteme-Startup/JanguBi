@@ -48,6 +48,7 @@ from apps.donations.models import (
     PaymentWebhookEvent,
     Payout,
     PayoutLine,
+    ReceiptSequence,
 )
 from apps.donations.providers import get_provider
 from apps.donations.providers.base import (
@@ -98,8 +99,25 @@ def _check_amount(amount: Any) -> int:
 
 
 def _new_reference() -> str:
-    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-    return "JB-" + "".join(secrets.choice(alphabet) for _ in range(8))
+    """Référence lisible au téléphone, qui ne révèle rien : « 4817-2093-6651 »."""
+    digits = str(secrets.randbelow(9 * 10**11) + 10**11)
+    return f"{digits[:4]}-{digits[4:8]}-{digits[8:]}"
+
+
+def _receipt_prefix(node: Node) -> str:
+    activation = DonationActivation.objects.filter(node=node).only("receipt_prefix").first()
+    if activation and activation.receipt_prefix:
+        return activation.receipt_prefix.upper()
+    return "".join(ch for ch in node.code.upper() if ch.isalnum())[:8] or "JB"
+
+
+def _receipt_number_next(*, node: Node, year: int) -> str:
+    """Numéro suivant de la série de la paroisse (verrou sur le compteur : série sans trou)."""
+    sequence, _ = ReceiptSequence.objects.get_or_create(node=node, year=year)
+    sequence = ReceiptSequence.objects.select_for_update().get(pk=sequence.pk)
+    sequence.last_number += 1
+    sequence.save(update_fields=["last_number"])
+    return f"{_receipt_prefix(node)}-{year}-{sequence.last_number:05d}"
 
 
 # --- Activation (H4) ------------------------------------------------------------------------
@@ -115,6 +133,7 @@ def activation_set(
     authorization_date: datetime.date | None = None,
     authorization_text: str = "",
     allocation_key: str = "",
+    receipt_prefix: str = "",
 ) -> DonationActivation:
     """Ouvre ou ferme la collecte d'une paroisse. Réservé à la plateforme, sur autorisation écrite."""
     if not authz.peut(actor, "plateforme.admin", None):
@@ -134,6 +153,7 @@ def activation_set(
             "authorization_date": authorization_date,
             "authorization_text": authorization_text,
             "allocation_key": allocation_key,
+            "receipt_prefix": receipt_prefix.upper(),
         },
     )
     audit_log(actor=actor, action="dons.activation", target=activation, node=node, metadata={"enabled": enabled})
@@ -449,8 +469,27 @@ def donation_transition(
     if to == DonationStatus.CONFIRME:
         locked.confirmed_at = now
         fields.append("confirmed_at")
+        if locked.channel == DonationChannel.EN_LIGNE and not locked.receipt_number:
+            fund_node = Fund.objects.select_related("node").get(pk=locked.fund_id).node
+            locked.receipt_number = _receipt_number_next(node=fund_node, year=timezone.localdate().year)
+            fields.append("receipt_number")
     locked.save(update_fields=fields)
     return locked
+
+
+def _campaign_close_if_reached(*, fund_id: Any) -> None:
+    """La collecte d'une campagne se ferme dès que l'objectif est atteint (décision du 27/09/2026)."""
+    fund = Fund.objects.select_for_update().get(pk=fund_id)
+    if fund.kind != FundKind.CAMPAGNE or not fund.goal_amount or fund.status != FundStatus.OUVERT:
+        return
+    raised = sum(
+        Donation.objects.filter(fund=fund, status=DonationStatus.CONFIRME).values_list("net_amount", flat=True)
+    )
+    if raised >= fund.goal_amount:
+        fund.status = FundStatus.CLOS
+        fund.closed_at = timezone.now()
+        fund.save(update_fields=["status", "closed_at", "updated_at"])
+        audit_log(actor=None, action="dons.campagne_objectif_atteint", target=fund, node=fund.node)
 
 
 @transaction.atomic
@@ -484,6 +523,7 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
         donation = donation_transition(donation=donation, to=DonationStatus.CONFIRME, source=source)
         attempt.status = AttemptStatus.REUSSI
         attempt.save(update_fields=["status", "updated_at"])
+        _campaign_close_if_reached(fund_id=donation.fund_id)
         _receipt_email_queue(donation)
         return "confirme"
 
@@ -514,7 +554,7 @@ def _receipt_email_queue(donation: Donation) -> None:
 
     amount = f"{donation.amount:,}".replace(",", " ")
     text = (
-        f"Merci pour votre don.\n\nRéférence : {donation.reference}\nFonds : {donation.fund.title}\n"
+        f"Merci pour votre don.\n\nReçu n° {donation.receipt_number}\nRéférence : {donation.reference}\nFonds : {donation.fund.title}\n"
         f"Paroisse : {donation.fund.node.name}\nMontant du don : {amount} FCFA\n\n"
         "Ce reçu simple atteste votre don ; ce n'est pas un reçu fiscal."
     )

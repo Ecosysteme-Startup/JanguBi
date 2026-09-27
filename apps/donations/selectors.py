@@ -297,6 +297,7 @@ def export_rows(
     return [
         {
             "date": timezone.localtime(d.confirmed_at).date().isoformat() if d.confirmed_at else "",
+            "recu": d.receipt_number or "",
             "reference": d.reference,
             "fonds": d.fund.title,
             "type": d.fund.get_kind_display(),

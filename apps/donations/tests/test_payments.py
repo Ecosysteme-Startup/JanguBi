@@ -2,6 +2,7 @@
 
 import datetime
 import logging
+import re
 
 import pytest
 from django.core import mail
@@ -55,7 +56,8 @@ def test_checkout_creates_a_pending_donation_with_a_payment_url(fund, world):
     assert created and donation.status == S.EN_ATTENTE
     assert donation.donor == world.fidele and donation.charged_amount == 5100 and donation.net_amount == 5000
     assert attempt.checkout_url.startswith("https://paiement.exemple.test/checkout/")
-    assert attempt.external_ref and donation.reference.startswith("JB-")
+    assert attempt.external_ref and re.fullmatch(r"\d{4}-\d{4}-\d{4}", donation.reference)
+    assert donation.receipt_number is None  # attribué à la confirmation seulement
     assert list(donation.status_changes.values_list("from_status", "to_status")) == [(S.INITIE, S.EN_ATTENTE)]
 
 
@@ -275,3 +277,39 @@ def test_public_checkout_is_rate_limited(fund):
     assert client.post("/api/v1/dons/checkout/", body, format="json").status_code == 201
     assert client.post("/api/v1/dons/checkout/", body, format="json").status_code == 429
 
+
+
+# --- Numérotation des reçus et clôture des campagnes (décisions du 27/09/2026) --------------
+
+
+def test_receipt_numbers_are_sequential_per_parish_without_gaps(fund, world, django_capture_on_commit_callbacks):
+    failed = give(fund)
+    first, second = give(fund, amount=2000), give(fund, amount=3000)
+    with django_capture_on_commit_callbacks(execute=True):
+        pay(failed, status="failed")
+        pay(second)
+        pay(first)
+    for d in (failed, first, second):
+        d.refresh_from_db()
+    year = timezone.localdate().year
+    assert failed.receipt_number is None
+    assert (second.receipt_number, first.receipt_number) == (f"SD-{year}-00001", f"SD-{year}-00002")
+    services.donation_refund(donation=first, actor=world.econome)
+    first.refresh_from_db()
+    assert first.receipt_number == f"SD-{year}-00002"  # un remboursement ne libère pas le numéro
+
+
+def test_campaign_closes_when_goal_is_reached(world, django_capture_on_commit_callbacks):
+    campaign = open_fund(world, kind="campagne", title="Toiture", goal_amount=9_000)
+    first = give(campaign, amount=5000, fees_covered=True)
+    with django_capture_on_commit_callbacks(execute=True):
+        pay(first)
+    campaign.refresh_from_db()
+    assert campaign.status == "ouvert"
+    second = give(campaign, amount=5000, fees_covered=True)
+    with django_capture_on_commit_callbacks(execute=True):
+        pay(second)
+    campaign.refresh_from_db()
+    assert campaign.status == "clos" and campaign.closed_at
+    with pytest.raises(ApplicationError):
+        give(campaign)

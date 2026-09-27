@@ -44,6 +44,8 @@ class DonationActivation(BaseModel):
     )
     # H1 : l'archidiocèse est titulaire du compte ; la clé d'affectation identifie la paroisse chez l'agrégateur.
     allocation_key = models.CharField(_("clé d'affectation"), max_length=64, blank=True, default="")
+    # Préfixe des numéros de reçu de la paroisse (« SD » → SD-2026-00147).
+    receipt_prefix = models.CharField(_("préfixe des reçus"), max_length=8, blank=True, default="")
 
     class Meta:
         verbose_name = _("activation des dons")
@@ -178,11 +180,27 @@ class Payout(BaseModel):
         ]
 
 
+class ReceiptSequence(models.Model):
+    """Compteur des reçus d'une paroisse pour une année : série continue, sans trou."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="+")
+    year = models.PositiveSmallIntegerField()
+    last_number = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        verbose_name = _("série de reçus")
+        verbose_name_plural = _("séries de reçus")
+        constraints = [models.UniqueConstraint(fields=["node", "year"], name="dons_receipt_sequence_unique")]
+
+
 class Donation(BaseModel):
     """Un don. Le fonds est immuable (c. 1267 §3) ; les montants sont des entiers en FCFA."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Référence aléatoire (« 4817-2093-6651 »), attribuée à la création et transmise à l'agrégateur.
     reference = models.CharField(max_length=20, unique=True)
+    # Numéro de reçu comptable (« SD-2026-00147 »), attribué à la seule confirmation d'un don en ligne.
+    receipt_number = models.CharField(max_length=30, unique=True, null=True, blank=True)
     fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="donations")
     amount = models.PositiveIntegerField(_("don (FCFA)"))
     fees_covered = models.BooleanField(_("frais couverts par le donateur"), default=False)

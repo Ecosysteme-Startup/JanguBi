@@ -216,6 +216,7 @@ class Command(BaseCommand):
                 "authorization_date": datetime.date(2026, 9, 1),
                 "authorization_text": "Collecte autorisée par l'Archevêché de Dakar (démonstration).",
                 "allocation_key": "DEMO-SD",
+                "receipt_prefix": "SD",
             },
         )
         cure = people["cure"]

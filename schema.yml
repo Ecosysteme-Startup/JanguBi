@@ -6742,6 +6742,10 @@ components:
           type: string
           title: Clé d'affectation
           maxLength: 64
+        receipt_prefix:
+          type: string
+          title: Préfixe des reçus
+          maxLength: 8
         updated_at:
           type: string
           format: date-time
@@ -6773,6 +6777,11 @@ components:
           type: string
           default: ''
           maxLength: 64
+        receipt_prefix:
+          type: string
+          default: ''
+          description: Ex. « SD » → SD-2026-00147
+          pattern: ^[A-Za-z0-9]{0,8}$
       required:
       - enabled
       - node
@@ -8075,6 +8084,10 @@ components:
         reference:
           type: string
           maxLength: 20
+        receipt_number:
+          type: string
+          nullable: true
+          maxLength: 30
         status:
           $ref: '#/components/schemas/DonationStatusEnum'
         fund:
@@ -9078,6 +9091,10 @@ components:
         reference:
           type: string
           maxLength: 20
+        receipt_number:
+          type: string
+          nullable: true
+          maxLength: 30
         fund:
           $ref: '#/components/schemas/FundBrief'
         parish:
@@ -9693,6 +9710,10 @@ components:
         reference:
           type: string
           maxLength: 20
+        receipt_number:
+          type: string
+          nullable: true
+          maxLength: 30
         fund:
           $ref: '#/components/schemas/FundBrief'
         amount:

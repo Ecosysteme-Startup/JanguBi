@@ -20,7 +20,7 @@ from apps.donations.tests.conftest import pay
 
 KEYS = {"PAYDUNYA_MASTER_KEY": "master", "PAYDUNYA_PRIVATE_KEY": "private", "PAYDUNYA_TOKEN": "token"}
 REQUEST = CheckoutRequest(
-    reference="JB-TEST0001", amount=5100, description="Don", return_url="https://r", cancel_url="https://c",
+    reference="4817-2093-6651", amount=5100, description="Don", return_url="https://r", cancel_url="https://c",
     callback_url="https://cb", allocation_key="SD01",
 )  # fmt: skip
 

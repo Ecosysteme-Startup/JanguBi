@@ -32,12 +32,14 @@ L'étude dit « à adapter, pas à refaire », mais l'app `donations` et `mass_i
 ## 3. Modèle
 
 ```
-DonationActivation : node (paroisse, unique), enabled, authorization_ref, authorization_date, authorization_text, allocation_key
+DonationActivation : node (paroisse, unique), enabled, authorization_ref, authorization_date, authorization_text, allocation_key, receipt_prefix
+ReceiptSequence : node, year, last_number (verrouillée à chaque attribution : série sans trou)
 Fund       : id UUID, node FK (paroisse ou diocèse), kind, destination[paroisse|curie], title, description (usage des fonds),
              starts_on?, ends_on?, goal_amount?, status[brouillon|ouvert|clos], parent FK self? (déclinaison d'une quête impérée),
              decided_by FK person?, decided_by_office (code), authorization_ref, image FK File?, published_at?
 FundUpdate : fund FK, author FK, body, created_at                       (« nouvelles du curé » d'une campagne)
-Donation   : id UUID, reference unique « JB-XXXXXXXX », fund FK PROTECT (immuable), amount, fee_amount, fees_covered,
+Donation   : id UUID, reference unique « 4817-2093-6651 » (aléatoire), receipt_number unique « SD-2026-00147 »
+             (série continue par paroisse et par an, attribuée à la confirmation), fund FK PROTECT (immuable), amount, fee_amount, fees_covered,
              charged_amount, net_amount, anonymous, donor FK person?, donor_email?, channel[en_ligne|especes],
              payment_method[wave|orange_money|free_money|carte|especes|autre|inconnu], status, status_changed_at,
              confirmed_at?, cash_collection FK?, payout FK?
@@ -59,6 +61,8 @@ Invariants (tests) :
 - Montants entiers en FCFA, `DONATIONS_MIN_AMOUNT ≤ amount ≤ DONATIONS_MAX_AMOUNT` ; contraintes en base (`> 0`, `net ≤ charged`).
 - Une quête impérée a la destination `curie` ; sa déclinaison paroissiale a pour parent la quête diocésaine.
 - On ne donne qu'à un fonds **ouvert**, dans sa période, sur une paroisse **activée**.
+- Une campagne se **ferme d'elle-même** dès que l'objectif est atteint (décision du 27/09/2026).
+- Un remboursement garde son numéro de reçu : la série ne comporte ni trou ni réemploi.
 
 ## 4. Cycle de vie du don (SRS §8.4)
 

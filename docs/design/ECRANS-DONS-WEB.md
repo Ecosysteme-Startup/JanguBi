@@ -23,7 +23,7 @@
 | Diocèse | Tableau de bord · Structure · Nominations · Clergé · Paramètres | **Quêtes impérées**, après Clergé |
 | Plateforme | Tableau de bord · Référentiels · Comptes · Journal d'audit | **Paiements**, après Comptes |
 
-L'entrée n'apparaît que sur les **nouveaux** écrans (les 45 existants ne sont pas republiés, cf. §6).
+L'entrée est ajoutée **partout**, y compris aux 45 écrans existants et à leurs versions sombres (script). « Dons » en dernier côté fidèle (discret, jamais voisin des parcours pastoraux, c. 848 ; accès principal par le bloc « Soutenir la paroisse » de Ma paroisse, comme sur mobile) ; « Dons et quêtes » après « Agenda » côté paroisse, avec les outils de gestion.
 
 ## 2. Données de référence
 
@@ -38,7 +38,7 @@ L'entrée n'apparaît que sur les **nouveaux** écrans (les 45 existants ne sont
   | Contribution annuelle 2026 | contribution annuelle | paroisse | 1er janv. → 31 déc. | — |
 - **Montants suggérés** : 1 000 · 2 000 · 5 000 · 10 000 FCFA + montant libre ; frais estimés 2 % (100 FCFA pour 5 000).
 - **Moyens acceptés** (sur la page de l'agrégateur) : Wave, Orange Money, Free Money, carte bancaire.
-- **Références de don** : `DON-` + 8 caractères (ex. `DON-7K3M9Q2P`), distinctes des demandes d'actes `JB-2026-00…`.
+- **Numérotation** (sur le modèle d'un reçu de paiement) : **référence du don** en chiffres aléatoires groupés par quatre, attribuée à la création et transmise à l'agrégateur (ex. `4817-2093-6651`) ; **numéro de reçu** comptable, sans trou, attribué seulement à la confirmation : code de la paroisse, année, compteur (ex. `SD-2026-00147`).
 - **Quêtes en espèces du dimanche 27** : samedi 18 h 30 (messe anticipée) 64 150 ; 7 h 30 142 350 ; 9 h 30 (étudiants) 96 725 ; 11 h 30 231 900 ; 18 h 30 118 400 FCFA. Compteurs : Pierre Ndour et Thérèse Ndione, Joseph Mendy et Cécile Coly.
 - **Synthèse de septembre (paroisse)** : 1 214 830 FCFA affectés, dont en ligne 356 330 (47 dons) et espèces 858 500 ; frais 7 120 ; 3 paiements en attente ; 1 saisie à valider.
 - **Économe paroissiale** : Mme Cécile Coly (office « Économe paroissial ») ; curé : Abbé Augustin Ndiaye ; secrétaire : Mme Germaine Faye.
@@ -60,7 +60,7 @@ Chaque ligne : ID (fichier `<ID>.dc.html`) · taille indicative · contenu · é
    - Carte centrée (560) : « Vous allez être redirigé vers la page de paiement sécurisée », récapitulatif (fonds, 5 000 FCFA, frais), 3 étapes numérotées en liste simple (vous choisissez Wave, Orange Money, Free Money ou la carte ; vous validez chez l'opérateur ; vous revenez automatiquement sur Jàngu Bi), barre de progression indéterminée sobre « Ouverture de la page de paiement… », lien « La page ne s'ouvre pas ? Continuer » et « Annuler ».
    - Liens : Continuer → WEB-FID-Don-Confirmation ; Annuler → WEB-FID-Donner.
 3. **WEB-FID-Don-Confirmation** · 1440×1100
-   - Succès : icône `circle-check` okT, « Merci, votre don est confirmé. », référence DON-7K3M9Q2P, fonds, montant, moyen (Wave), date ; bouton « Télécharger le reçu » (secondaire) + « Retour à l'accueil » ; note « Reçu simple : ce n'est pas un reçu fiscal. »
+   - Succès : icône `circle-check` okT, « Merci, votre don est confirmé. », référence 4817-2093-6651, numéro de reçu SD-2026-00147, fonds, montant, moyen (Wave), date ; bouton « Télécharger le reçu » (secondaire) + « Retour à l'accueil » ; note « Reçu simple : ce n'est pas un reçu fiscal. »
    - Variante en encadré (Alert warn) sous le succès : « Paiement en attente de confirmation » : l'opérateur n'a pas encore confirmé ; ne pas refaire le paiement ; la page se met à jour ; délai habituel quelques minutes ; lien « Voir mes dons ».
    - Liens : WEB-FID-Mes-Dons, WEB-FID-Accueil.
 4. **WEB-FID-Mes-Dons** · 1440×1200
@@ -69,7 +69,7 @@ Chaque ligne : ID (fichier `<ID>.dc.html`) · taille indicative · contenu · é
    - Table-cartes (10 lignes) : date, fonds, paroisse, montant, statut (badges : Confirmé, En attente, Échoué, Remboursé), anonymat (icône `eye-off` si anonyme), action « Reçu » (désactivée sauf Confirmé, info-bulle « Disponible une fois le don confirmé »).
    - Liens : Nouveau don → WEB-FID-Donner.
 5. **WEB-FID-Campagne** · 1440×1500
-   - Emplacement photo `data-photo-slot="chapelle-cite-universitaire"` (rayon 16), titre, paroisse, période, barre d'avancement (1 186 400 / 4 500 000 FCFA, 26 %, 57 dons), « Usage des fonds » (liste : charpente, tôles, gouttières, main-d'œuvre, avec montants budgétés), « Nouvelles de la campagne » (2 messages de l'Abbé Augustin Ndiaye, datés), colonne droite : bouton « Donner à cette campagne », mention d'autorisation, « Les dons sont affectés à ce seul projet. S'il est dépassé, le surplus reste affecté à l'entretien de la chapelle, sur décision du conseil pour les affaires économiques. » (à valider).
+   - Emplacement photo `data-photo-slot="chapelle-cite-universitaire"` (rayon 16), titre, paroisse, période, barre d'avancement (1 186 400 / 4 500 000 FCFA, 26 %, 57 dons), « Usage des fonds » (liste : charpente, tôles, gouttières, main-d'œuvre, avec montants budgétés), « Nouvelles de la campagne » (2 messages de l'Abbé Augustin Ndiaye, datés), colonne droite : bouton « Donner à cette campagne », mention d'autorisation, « Les dons sont affectés à ce seul projet. La collecte se ferme dès que l'objectif est atteint. »
    - Liens : Donner → WEB-FID-Donner.
 
 ### Public (en-tête public du gabarit `tpl-web-public`)
@@ -100,7 +100,7 @@ Chaque ligne : ID (fichier `<ID>.dc.html`) · taille indicative · contenu · é
 10. **WEB-PAR-Dons-Export** · 1440×1200
     - Période (du 1er au 30 sept.), fonds (tous), format (CSV / Excel, pilules), bouton « Exporter » ; note « L'export est inscrit au journal d'audit. »
     - Rapprochement : lignes « Payé en ligne », « Frais », « Affecté en ligne », « Espèces », « Reversé (archidiocèse) », « En attente de reversement ».
-    - « Écarts signalés » : 3 lignes (paiement en attente depuis plus de 24 h DON-…, quête non validée du 20 sept., reversement PO-2026-0914 avec écart de 2 940 FCFA) avec action.
+    - « Écarts signalés » : 3 lignes (paiement en attente depuis plus de 24 h 3302-7718-0459, quête non validée du 20 sept., reversement PO-2026-0914 avec écart de 2 940 FCFA) avec action.
     - Liens : WEB-PAR-Dons.
 
 ### Diocèse et plateforme
@@ -111,7 +111,7 @@ Chaque ligne : ID (fichier `<ID>.dc.html`) · taille indicative · contenu · é
     - Suivi par paroisse (agrégats seulement) : Saint-Dominique (en ligne, espèces, nombre de dons, total) ; 4 paroisses en préparation « Collecte non ouverte sur Jàngu Bi » ; mention « Aucune donnée nominative à ce niveau. »
     - Reversements reçus : 3 lignes (référence, date, net, statut Rapproché / Écart).
 12. **WEB-PLA-Paiements** · 1440×1150 (utilisateur : Moustoifa Ben)
-    - Agrégateur « PayDunya · mode test » (à valider), dernière notification il y a 4 min.
+    - Agrégateur « PayDunya · mode test » (nom du prestataire configuré), dernière notification il y a 4 min.
     - Notifications (webhooks) sur 24 h / 7 jours : reçues, traitées, doublons, rejetées (signature), erreurs ; en liste sobre + un graphique de volume par jour.
     - Paiements en attente (3, le plus ancien depuis 26 h), reversements à rapprocher (1), écarts (1).
     - Incidents : 4 lignes (heure, type : signature invalide, montant incohérent, paiement tardif, agrégateur injoignable ; action recommandée). Aucun nom ni montant par donateur.
@@ -131,10 +131,11 @@ Chaque ligne : ID (fichier `<ID>.dc.html`) · taille indicative · contenu · é
 
 `support.js` exact, `class Component extends DCLogic`, `$preview` = taille racine, aucun hex hors tokens (tableau BRIEF-MOBILE §3), liens vers des fichiers existants, captures `shot.py` relues une à une (retours à la ligne, `&nbsp;` dans « 5 000 FCFA », « 18 h 30 », avant « : ? ! »).
 
-## 6. Points à valider
+## 6. Décisions du 27/09/2026
 
-1. Les 45 écrans existants gardent leur barre latérale sans « Dons » (sinon : republier les 90 fichiers avec l'entrée ajoutée, par script).
-2. Emplacement de l'entrée « Dons » (dernière de la barre fidèle) et libellé « Dons et quêtes » côté paroisse.
-3. Texte sur le surplus d'une campagne (WEB-FID-Campagne).
-4. Référence de don `DON-XXXXXXXX` (le backend sera aligné).
-5. Nom de l'agrégateur affiché sur WEB-PLA-Paiements (« PayDunya » ou « l'agrégateur »).
+1. Entrée « Dons » ajoutée aux 45 écrans existants et à leurs versions sombres (script).
+2. Place : dernière entrée côté fidèle, après « Agenda » côté paroisse.
+3. Campagne : la collecte se ferme dès que l'objectif est atteint (backend à aligner : clôture automatique).
+4. Numérotation : référence aléatoire `4817-2093-6651` + numéro de reçu séquentiel `SD-2026-00147` (backend à aligner).
+5. Plateforme : nom du prestataire configuré (« PayDunya · mode test »).
+6. Au passage, les écrans existants remplacent « chiffrés de bout en bout » par « Messages chiffrés, aucun administrateur n'y a accès ».

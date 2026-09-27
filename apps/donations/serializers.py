@@ -157,6 +157,9 @@ class ActivationInputSerializer(serializers.Serializer):
     authorization_date = serializers.DateField(required=False, allow_null=True, default=None)
     authorization_text = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
     allocation_key = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+    receipt_prefix = serializers.RegexField(
+        r"^[A-Za-z0-9]{0,8}$", required=False, allow_blank=True, default="", help_text="Ex. « SD » → SD-2026-00147"
+    )
 
 
 # --- Sorties --------------------------------------------------------------------------------
@@ -266,8 +269,8 @@ class DonationStatusSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Donation
-        fields = ["id", "reference", "status", "fund", "parish", "amount", "fees_covered", "charged_amount",
-                  "confirmed_at"]  # fmt: skip
+        fields = ["id", "reference", "receipt_number", "status", "fund", "parish", "amount", "fees_covered",
+                  "charged_amount", "confirmed_at"]  # fmt: skip
 
 
 class MyDonationSerializer(serializers.ModelSerializer):
@@ -277,7 +280,7 @@ class MyDonationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Donation
-        fields = ["id", "reference", "fund", "parish", "amount", "fee_amount", "fees_covered", "charged_amount",
+        fields = ["id", "reference", "receipt_number", "fund", "parish", "amount", "fee_amount", "fees_covered", "charged_amount",
                   "status", "channel", "payment_method", "anonymous", "created_at", "confirmed_at",
                   "receipt_available"]  # fmt: skip
 
@@ -351,7 +354,7 @@ class OperationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Donation
-        fields = ["id", "reference", "fund", "amount", "fee_amount", "charged_amount", "net_amount", "channel",
+        fields = ["id", "reference", "receipt_number", "fund", "amount", "fee_amount", "charged_amount", "net_amount", "channel",
                   "payment_method", "status", "created_at", "confirmed_at", "donor"]  # fmt: skip
 
     def get_donor(self, obj: Donation) -> str:
@@ -449,4 +452,4 @@ class ActivationSerializer(serializers.ModelSerializer):
     class Meta:
         model = DonationActivation
         fields = ["node", "enabled", "authorization_ref", "authorization_date", "authorization_text",
-                  "allocation_key", "updated_at"]  # fmt: skip
+                  "allocation_key", "receipt_prefix", "updated_at"]  # fmt: skip

@@ -16,6 +16,7 @@ from apps.donations.models import Donation
 
 EXPORT_COLUMNS = [
     ("date", "Date"),
+    ("recu", "Reçu"),
     ("reference", "Référence"),
     ("fonds", "Fonds"),
     ("type", "Type"),
@@ -56,6 +57,7 @@ def receipt_pdf(donation: Donation) -> bytes:
     y -= 14 * mm
     confirmed = timezone.localtime(donation.confirmed_at) if donation.confirmed_at else None
     lines = [
+        ("Reçu n°", donation.receipt_number or "—"),
         ("Référence", donation.reference),
         ("Date", confirmed.strftime("%d/%m/%Y") if confirmed else "—"),
         ("Paroisse", donation.fund.node.name),
