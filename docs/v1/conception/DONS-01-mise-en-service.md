@@ -41,4 +41,9 @@
 - **Nombre de dons d'une campagne** : la maquette affiche « 57 dons » sur la fiche publique ; `PublicFundDetail` n'expose pas ce compteur (seul `StaffFund.donations_count` le fait). À ajouter côté API si l'on veut l'afficher aux fidèles.
 - **Budget ligne à ligne d'une campagne** : les maquettes montrent un budget détaillé ; l'API n'a qu'un texte `description`. Le front le rend ligne à ligne si le texte suit le format « libellé : montant ».
 - **Répartition en ligne / espèces par dimanche** (graphique WEB-PAR-Dons) : `daily` ne donne qu'un total par jour. Ajouter `online` et `cash` à `SummaryDay` si le graphique à deux tons est voulu.
+- **Statut du don au retour** (`DonationStatus`) : ni `payment_method` ni `net_amount`. La confirmation n'affiche donc pas « Wave » ni le montant affecté quand l'onglet n'a plus la réponse du checkout.
+- **Écarts du rapprochement** (`ReconciliationIssue`) : `kind`, `reference`, `date` seulement ; ajouter le montant et le fonds rendrait la liste plus utile.
+- **Création de fonds** (`FundCreateInput`) : pas de choix de destination (paroisse / curie) ; `StaffFund` renvoie `image_url` mais pas `image_id`.
+- **Export** : pas d'option « inclure les noms » (les noms suivent la capacité `dons.voir_donateurs`) ni d'historique des exports (il est au journal d'audit).
+- **Suivi d'une quête impérée** : le serveur ne liste que les paroisses où le fonds existe ; les paroisses « collecte non ouverte » des maquettes n'apparaissent pas.
 - **Date du parcours fidèle** : les maquettes datent le don du 24 septembre sur la « Quête du dimanche 27 septembre », ouverte à partir du 26. Sans effet sur le code (le serveur refuse un fonds hors période) ; à corriger dans les maquettes si on les reprend.
