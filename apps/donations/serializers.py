@@ -7,6 +7,7 @@ from rest_framework import serializers
 from apps.donations.enums import (
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundKind,
     FundStatus,
@@ -43,6 +44,14 @@ class CheckoutInputSerializer(serializers.Serializer):
     email = serializers.EmailField(
         required=False, allow_blank=True, default="", help_text="Sans compte seulement : envoi du reçu, effacé après 90 jours"
     )
+    source = serializers.ChoiceField(  # type: ignore[assignment]  # champ nommé « source » (API)
+        choices=DonationSource.choices, required=False, default=DonationSource.INCONNU,
+        help_text="Canal d'entrée relayé par la page de don (paramètre ?src= de l'URL ouverte par l'app)",
+    )  # fmt: skip
+    place_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None,
+        help_text="Lieu de culte (paramètre ?lieu= du QR code) ; sinon le lieu du fonds",
+    )  # fmt: skip
 
 
 class MyDonationsFilterSerializer(serializers.Serializer):
@@ -69,6 +78,9 @@ class FundCreateInputSerializer(serializers.Serializer):
     goal_amount = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1)
     authorization_ref = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
     image_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    place_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None, help_text="Lieu de culte propre au fonds (campagne d'une chapelle)"
+    )
 
 
 class FundUpdateInputSerializer(serializers.Serializer):
@@ -79,6 +91,7 @@ class FundUpdateInputSerializer(serializers.Serializer):
     goal_amount = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     authorization_ref = serializers.CharField(required=False, allow_blank=True, max_length=120)
     image_id = serializers.IntegerField(required=False, allow_null=True)
+    place_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class FundNewsInputSerializer(serializers.Serializer):
@@ -177,14 +190,20 @@ class FundBriefSerializer(serializers.Serializer):
     kind = serializers.CharField()
 
 
+class PlaceBriefSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class PublicFundSerializer(serializers.ModelSerializer):
     raised = serializers.IntegerField(read_only=True, help_text="Montant affecté (dons confirmés), FCFA")
     image_url = serializers.SerializerMethodField()
+    place = PlaceBriefSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Fund
         fields = ["id", "kind", "destination", "title", "description", "starts_on", "ends_on", "goal_amount",
-                  "raised", "status", "image_url"]  # fmt: skip
+                  "raised", "status", "image_url", "place"]  # fmt: skip
 
     def get_image_url(self, obj: Fund) -> str | None:
         return obj.image.url if obj.image and obj.image.is_valid else None
@@ -351,11 +370,13 @@ class OperationSerializer(serializers.ModelSerializer):
 
     fund = FundBriefSerializer()
     donor = serializers.SerializerMethodField()
+    place = PlaceBriefSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Donation
-        fields = ["id", "reference", "receipt_number", "fund", "amount", "fee_amount", "charged_amount", "net_amount", "channel",
-                  "payment_method", "status", "created_at", "confirmed_at", "donor"]  # fmt: skip
+        fields = ["id", "reference", "receipt_number", "fund", "amount", "fee_amount", "fee_is_actual", "charged_amount",
+                  "net_amount", "channel", "source", "payment_method", "place", "status", "created_at", "confirmed_at",
+                  "value_date", "anonymous", "donor"]  # fmt: skip
 
     def get_donor(self, obj: Donation) -> str:
         return donor_label(obj, with_names=bool(self.context.get("with_names")))

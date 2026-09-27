@@ -28,6 +28,7 @@ from apps.donations.enums import (
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundDestination,
     FundKind,
@@ -66,7 +67,9 @@ from apps.hierarchy.models import Node, PlaceOfWorship
 
 logger = logging.getLogger(__name__)
 
-EDITABLE_FUND_FIELDS = ("title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image")
+EDITABLE_FUND_FIELDS = (
+    "title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image", "place",
+)
 MAX_CASH_AMOUNT = 50_000_000
 
 
@@ -183,6 +186,7 @@ def fund_create(
     goal_amount: int | None = None,
     authorization_ref: str = "",
     image: Any = None,
+    place: PlaceOfWorship | None = None,
 ) -> Fund:
     access.require_parish_level(actor, "dons.gerer_fonds", node)
     if kind == FundKind.QUETE_IMPEREE:
@@ -191,6 +195,7 @@ def fund_create(
         raise ApplicationError("Type de fonds inconnu.", code="invalid_kind")
     _check_period(starts_on, ends_on)
     _check_image(image)
+    _check_place(place, node)
     fund = Fund.objects.create(
         node=node,
         kind=kind,
@@ -204,6 +209,7 @@ def fund_create(
         decided_by_office=access.office_code_for(actor, "dons.gerer_fonds", node),
         authorization_ref=authorization_ref,
         image=image,
+        place=place,
     )
     audit_log(actor=actor, action="dons.fonds_creation", target=fund, node=node, metadata={"kind": kind})
     return fund
@@ -212,6 +218,11 @@ def fund_create(
 def _check_period(starts_on: datetime.date | None, ends_on: datetime.date | None) -> None:
     if starts_on and ends_on and ends_on < starts_on:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_period")
+
+
+def _check_place(place: PlaceOfWorship | None, node: Node) -> None:
+    if place is not None and (place.node_id != node.pk or not place.is_active):
+        raise ApplicationError("Ce lieu n'appartient pas à la paroisse.", code="place_outside")
 
 
 def _check_image(image: Any) -> None:
@@ -236,6 +247,8 @@ def fund_update(*, fund: Fund, actor: Any, **fields: Any) -> Fund:
     _check_period(fields.get("starts_on", fund.starts_on), fields.get("ends_on", fund.ends_on))
     if "image" in fields:
         _check_image(fields["image"])
+    if "place" in fields:
+        _check_place(fields["place"], fund.node)
     if "goal_amount" in fields and fund.kind != FundKind.CAMPAGNE:
         fields["goal_amount"] = None
     for name, value in fields.items():
@@ -368,13 +381,20 @@ def checkout_create(
     donor: Any = None,
     donor_email: str = "",
     idempotency_key: str = "",
+    source: str = DonationSource.INCONNU,
+    place: PlaceOfWorship | None = None,
 ) -> tuple[Donation, PaymentAttempt, bool]:
     """Crée le don (``initie``) et la session de paiement chez l'agrégateur (``en_attente``).
 
     L'appel à l'agrégateur a lieu hors transaction ; un échec passe le don en ``echoue``.
     Une même clé d'idempotence renvoie le même don (double clic, reprise réseau) ; le booléen
-    dit si le don vient d'être créé."""
+    dit si le don vient d'être créé.
+
+    ``source`` : canal d'entrée déclaré par la page de don (``?src=``) ; ``place`` : lieu de culte
+    (QR code affiché dans le lieu), sinon celui du fonds."""
     amount = _check_amount(amount)
+    if source not in DonationSource.values:
+        source = DonationSource.INCONNU
     donor = donor if getattr(donor, "is_authenticated", False) else None
     if idempotency_key:
         existing = PaymentAttempt.objects.select_related("donation").filter(idempotency_key=idempotency_key).first()
@@ -383,6 +403,7 @@ def checkout_create(
                 raise ConflictError("Cette clé d'idempotence a déjà servi pour un autre don.", code="idempotency_conflict")
             return existing.donation, existing, False
     activation = _check_fund_open(fund)
+    _check_place(place, fund.node)
     provider = get_provider()
     fee, charged, net = fees_compute(amount=amount, fees_covered=fees_covered)
     try:
@@ -399,6 +420,8 @@ def checkout_create(
                 donor=donor,
                 donor_email="" if donor else (donor_email or "").strip().lower(),
                 channel=DonationChannel.EN_LIGNE,
+                source=source,
+                place_id=place.pk if place is not None else fund.place_id,
                 status=DonationStatus.INITIE,
                 status_changed_at=timezone.now(),
             )
@@ -444,6 +467,15 @@ def checkout_create(
     return donation, attempt, True
 
 
+def donation_mark_returned(*, donation: Donation) -> Donation:
+    """Premier retour du donateur sur la page de statut (santé du lien de retour). Idempotent."""
+    if donation.returned_at is None:
+        now = timezone.now()
+        if Donation.objects.filter(pk=donation.pk, returned_at__isnull=True).update(returned_at=now):
+            donation.returned_at = now
+    return donation
+
+
 # --- Machine à états ------------------------------------------------------------------------
 
 
@@ -469,6 +501,9 @@ def donation_transition(
     if to == DonationStatus.CONFIRME:
         locked.confirmed_at = now
         fields.append("confirmed_at")
+        if locked.value_date is None:
+            locked.value_date = timezone.localdate(now)
+            fields.append("value_date")
         if locked.channel == DonationChannel.EN_LIGNE and not locked.receipt_number:
             fund_node = Fund.objects.select_related("node").get(pk=locked.fund_id).node
             locked.receipt_number = _receipt_number_next(node=fund_node, year=timezone.localdate().year)
@@ -516,7 +551,8 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
         if state.fee_amount is not None:
             donation.fee_amount = state.fee_amount
             donation.net_amount = max(donation.charged_amount - state.fee_amount, 0)
-            updates += ["fee_amount", "net_amount"]
+            donation.fee_is_actual = True
+            updates += ["fee_amount", "net_amount", "fee_is_actual"]
         donation.save(update_fields=updates)
         if donation.status == DonationStatus.INITIE:
             donation_transition(donation=donation, to=DonationStatus.EN_ATTENTE, source=source)
@@ -834,6 +870,9 @@ def cash_collection_validate(*, collection: CashCollection, actor: Any) -> CashC
         status=DonationStatus.CONFIRME,
         status_changed_at=now,
         confirmed_at=now,
+        value_date=collection.mass_date,
+        place_id=collection.place_id,
+        source=None,
         cash_collection=collection,
     )
     DonationStatusChange.objects.create(

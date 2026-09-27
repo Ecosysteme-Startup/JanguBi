@@ -100,6 +100,10 @@ def _parish(node_id: Any) -> Any:
     return node
 
 
+def _place_or_none(place_id: Any) -> Any:
+    return hierarchy_selectors.place_get(place_id=place_id) if place_id else None
+
+
 def _query(serializer_class: Any, request: Request) -> dict[str, Any]:
     serializer = serializer_class(data=request.query_params)
     serializer.is_valid(raise_exception=True)
@@ -184,6 +188,8 @@ class CheckoutApi(V1ApiMixin, APIView):
             donor=request.user,
             donor_email=data["email"],
             idempotency_key=key,
+            source=data["source"],
+            place=_place_or_none(data.get("place_id")),
         )
         payload = CheckoutOutputSerializer({"donation": donation, "attempt": attempt}).data
         return Response(payload, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -197,7 +203,8 @@ class CheckoutStatusApi(_PublicApi):
         responses=DonationStatusSerializer,
     )
     def get(self, request: Request, donation_id: str) -> Response:
-        return Response(DonationStatusSerializer(selectors.donation_public_get(donation_id=donation_id)).data)
+        donation = services.donation_mark_returned(donation=selectors.donation_public_get(donation_id=donation_id))
+        return Response(DonationStatusSerializer(donation).data)
 
 
 class WebhookApi(APIView):
@@ -310,7 +317,8 @@ class FundListCreateApi(_StaffApi):
         data = _body(FundCreateInputSerializer, request)
         node = _parish(data.pop("node"))
         image = selectors.image_get(file_id=data.pop("image_id"), user=request.user)
-        fund = services.fund_create(actor=request.user, node=node, image=image, **data)
+        place = _place_or_none(data.pop("place_id"))
+        fund = services.fund_create(actor=request.user, node=node, image=image, place=place, **data)
         return Response(StaffFundSerializer(selectors.fund_get(fund_id=fund.pk)).data, status=status.HTTP_201_CREATED)
 
 
@@ -334,6 +342,8 @@ class FundDetailApi(_StaffApi):
         data = _body(FundUpdateInputSerializer, request)
         if "image_id" in data:
             data["image"] = selectors.image_get(file_id=data.pop("image_id"), user=request.user)
+        if "place_id" in data:
+            data["place"] = _place_or_none(data.pop("place_id"))
         services.fund_update(fund=fund, actor=request.user, **data)
         return Response(StaffFundSerializer(selectors.fund_get(fund_id=fund_id)).data)
 
@@ -449,8 +459,7 @@ class CashCollectionListCreateApi(_StaffApi):
         data = _body(CashCollectionInputSerializer, request)
         node = _parish(data.pop("node"))
         fund = selectors.fund_get(fund_id=data.pop("fund_id"))
-        place_id = data.pop("place_id")
-        place = hierarchy_selectors.place_get(place_id=place_id) if place_id else None
+        place = _place_or_none(data.pop("place_id"))
         collection = services.cash_collection_create(actor=request.user, node=node, fund=fund, place=place, **data)
         return Response(CashCollectionSerializer(collection).data, status=status.HTTP_201_CREATED)
 

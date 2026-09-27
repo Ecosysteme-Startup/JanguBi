@@ -16,6 +16,7 @@ from apps.donations.enums import (
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundDestination,
     FundKind,
@@ -78,6 +79,10 @@ class Fund(BaseModel):
     decided_by_office = models.CharField(_("office qui décide"), max_length=60, blank=True, default="")
     authorization_ref = models.CharField(_("référence de l'autorisation"), max_length=120, blank=True, default="")
     image = models.ForeignKey("files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Lieu de culte propre au fonds (campagne de la chapelle) : repris sur les dons en ligne.
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     published_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
 
@@ -215,6 +220,19 @@ class Donation(BaseModel):
     donor_email = models.EmailField(blank=True, default="")
     channel = models.CharField(max_length=10, choices=DonationChannel.choices, default=DonationChannel.EN_LIGNE)
     payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.INCONNU)
+    # Canal d'entrée déclaré (en ligne) ; ``null`` pour une quête en espèces.
+    source = models.CharField(max_length=12, choices=DonationSource.choices, null=True, blank=True)
+    # Lieu de culte : QR code du lieu, lieu du fonds, ou lieu de la quête en espèces.
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # Date de fait : jour de la messe (espèces) ou date locale de confirmation (en ligne).
+    # Tous les agrégats analytiques se fondent sur elle, jamais sur ``confirmed_at``.
+    value_date = models.DateField(_("date de valeur"), null=True, blank=True)
+    # Frais réels transmis par l'agrégateur (sinon : estimation ``DONATIONS_FEE_RATE_BP``).
+    fee_is_actual = models.BooleanField(_("frais réels"), default=False)
+    # Premier retour du donateur sur la page de statut (santé du lien de retour, sans donnée personnelle).
+    returned_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=12, choices=DonationStatus.choices, default=DonationStatus.INITIE, db_index=True
     )
@@ -241,6 +259,7 @@ class Donation(BaseModel):
         indexes = [
             models.Index(fields=["fund", "status"], name="dons_donation_fund_status_idx"),
             models.Index(fields=["donor", "status"], name="dons_donation_donor_idx"),
+            models.Index(fields=["fund", "value_date"], name="dons_donation_fund_value_idx"),
         ]
 
     def __str__(self) -> str:

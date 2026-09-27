@@ -55,6 +55,17 @@ class DonationChannel(models.TextChoices):
     ESPECES = "especes", _("Espèces")
 
 
+class DonationSource(models.TextChoices):
+    """Canal d'entrée d'un don en ligne, déclaré par la page de don (``?src=``) : jamais déduit de
+    l'agent utilisateur, ni d'un identifiant d'appareil, ni de l'adresse IP. ``null`` pour les espèces."""
+
+    APP_IOS = "app_ios", _("App iOS")
+    APP_ANDROID = "app_android", _("App Android")
+    WEB = "web", _("Site")
+    QR = "qr", _("QR code")
+    INCONNU = "inconnu", _("Non précisé")
+
+
 class PaymentMethod(models.TextChoices):
     """Moyen constaté (choisi sur la page de l'agrégateur, jamais dans Jàngu Bi)."""
 

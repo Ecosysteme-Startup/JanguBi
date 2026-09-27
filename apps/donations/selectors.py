@@ -59,7 +59,7 @@ def funds_open_for_parish(*, node: Node) -> QuerySet[Fund]:
 
 def funds_with_totals(queryset: QuerySet[Fund]) -> QuerySet[Fund]:
     """Annotation ``raised`` = somme affectée (dons confirmés), ``donations_count``."""
-    return queryset.select_related("node", "image").annotate(
+    return queryset.select_related("node", "image", "place").annotate(
         raised=_sum("donations__net_amount", Q(donations__status=DonationStatus.CONFIRME)),
         donations_count=Count("donations", filter=Q(donations__status=DonationStatus.CONFIRME)),
     )
@@ -211,7 +211,7 @@ def operations_for_parish(
     qs = (
         Donation.objects.filter(fund__node=node)
         .exclude(status=DonationStatus.INITIE)
-        .select_related("fund", "donor__profile", "cash_collection")
+        .select_related("fund", "donor__profile", "cash_collection", "place")
         .order_by("-created_at")
     )
     if fund_id:
@@ -228,7 +228,7 @@ def operations_for_parish(
 
 
 def operation_get(*, donation_id: UUID | str) -> Donation:
-    donation = Donation.objects.select_related("fund__node__type", "donor__profile").filter(pk=donation_id).first()
+    donation = Donation.objects.select_related("fund__node__type", "donor__profile", "place").filter(pk=donation_id).first()
     if donation is None:
         raise NotFoundError("Opération introuvable.")
     return donation
