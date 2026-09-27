@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.conf import settings
-from django.db.models import Count, Min, Q, QuerySet, Sum
-from django.db.models.functions import Coalesce
+from django.db.models import Count, Max, Min, Q, QuerySet, Sum
+from django.db.models.functions import Coalesce, ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 
 from apps.core.exceptions import ApplicationError
@@ -34,6 +34,7 @@ from apps.donations.enums import (
     FundStatus,
     PaymentMethod,
     RemittanceStatus,
+    WebhookStatus,
 )
 from apps.donations.models import (
     CashCollection,
@@ -41,6 +42,8 @@ from apps.donations.models import (
     Donation,
     DonationActivation,
     Fund,
+    PaymentWebhookEvent,
+    Payout,
 )
 from apps.hierarchy.models import Node, PlaceOfWorship
 
@@ -644,4 +647,185 @@ def donations_analysis(*, node: Node, level: str, period: Period) -> dict[str, A
         "paiements": _paiements(node, period) if level == "paroisse" else None,
         "campagnes": _campagnes(node, period, today) if level == "paroisse" else None,
         "notes": _notes(scope, period, level),
+    }
+
+
+# --- Plateforme : activité sans aucun montant -----------------------------------------------
+
+
+def _percentile(values: list[float], q: float) -> int | None:
+    """Rang le plus proche (``q`` entre 0 et 1), arrondi à l'entier."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(math.ceil(q * len(ordered)), 1)
+    return round(ordered[rank - 1])
+
+
+def _status_counts(qs: QuerySet[Donation]) -> dict[str, int]:
+    return qs.aggregate(
+        lances=Count("id"),
+        confirmes=Count("id", filter=Q(status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE])),
+        en_attente=Count("id", filter=Q(status__in=PENDING)),
+        echoues=Count("id", filter=Q(status=DonationStatus.ECHOUE)),
+        expires=Count("id", filter=Q(status=DonationStatus.EXPIRE)),
+    )
+
+
+def platform_activity(*, period: Period) -> dict[str, Any]:
+    """Santé des paiements pour Numerisen : nombres, taux et délais seulement — **aucun montant**,
+    même agrégé (décision du 27/09/2026). Par moyen, par source et par paroisse (ordre alphabétique)."""
+    now = timezone.now()
+    launched = Donation.objects.filter(
+        channel=DonationChannel.EN_LIGNE, created_at__date__gte=period.start, created_at__date__lte=period.end
+    )
+    counts = _status_counts(launched)
+    counts["rembourses"] = launched.filter(status=DonationStatus.REMBOURSE).count()
+    oldest = Donation.objects.filter(channel=DonationChannel.EN_LIGNE, status__in=PENDING).aggregate(
+        d=Min("created_at")
+    )["d"]
+    paiements = {
+        **counts,
+        "taux_confirmation": _pct(counts["confirmes"], counts["lances"]),
+        "taux_echec": _pct(counts["echoues"] + counts["expires"], counts["lances"]),
+        "plus_ancien_en_attente": oldest,
+    }
+
+    confirmed = Donation.objects.filter(
+        channel=DonationChannel.EN_LIGNE, confirmed_at__date__gte=period.start, confirmed_at__date__lte=period.end
+    )
+    waits = [
+        (c - a).total_seconds() for a, c in confirmed.values_list("created_at", "confirmed_at") if c and a and c >= a
+    ]
+    paid = Donation.objects.filter(
+        payout__isnull=False, payout__paid_at__date__gte=period.start, payout__paid_at__date__lte=period.end
+    ).values_list("confirmed_at", "payout__paid_at")
+    payout_days = [(p - c).total_seconds() / 86_400 for c, p in paid if c and p and p >= c]
+    delais = {
+        "confirmation_mediane_s": _percentile(waits, 0.5),
+        "confirmation_p95_s": _percentile(waits, 0.95),
+        "reversement_moyen_jours": round(statistics.mean(payout_days)) if payout_days else None,
+        "reversement_median_jours": _percentile(payout_days, 0.5),
+        "echantillon_confirmation": len(waits),
+    }
+
+    by_day = {
+        row["day"]: row
+        for row in launched.annotate(day=TruncDate("created_at")).values("day").annotate(
+            n=Count("id"),
+            ok=Count("id", filter=Q(status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE])),
+            wait=Count("id", filter=Q(status__in=PENDING)),
+            ko=Count("id", filter=Q(status=DonationStatus.ECHOUE)),
+            exp=Count("id", filter=Q(status=DonationStatus.EXPIRE)),
+        )
+    }
+    par_jour = []
+    day = period.start
+    while day <= min(period.end, timezone.localdate(now)):
+        row = by_day.get(day, {})
+        par_jour.append({"date": day, "lances": row.get("n", 0), "confirmes": row.get("ok", 0),
+                         "en_attente": row.get("wait", 0), "echoues": row.get("ko", 0),
+                         "expires": row.get("exp", 0)})  # fmt: skip
+        day += datetime.timedelta(days=1)
+
+    methods = {
+        row["payment_method"]: row
+        for row in launched.values("payment_method").annotate(
+            ok=Count("id", filter=Q(status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE])),
+            ko=Count("id", filter=Q(status__in=[DonationStatus.ECHOUE, DonationStatus.EXPIRE])),
+        )
+    }
+    par_moyen = [
+        {"moyen": m, "libelle": PaymentMethod(m).label, "confirmes": methods.get(m, {}).get("ok", 0),
+         "echecs": methods.get(m, {}).get("ko", 0),
+         "taux_echec": _pct(methods.get(m, {}).get("ko", 0), methods.get(m, {}).get("ok", 0) + methods.get(m, {}).get("ko", 0))}
+        for m in METHOD_ORDER
+        if m in ALWAYS_SHOWN_METHODS or m in methods
+    ]  # fmt: skip
+
+    sources = {row["source"]: row for row in launched.values("source").annotate(
+        n=Count("id"),
+        ok=Count("id", filter=Q(status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE])),
+        back=Count("id", filter=Q(returned_at__isnull=False)),
+    )}  # fmt: skip
+    par_source = [
+        {"source": src, "libelle": DonationSource(src).label, "lances": sources.get(src, {}).get("n", 0),
+         "confirmes": sources.get(src, {}).get("ok", 0),
+         "taux_confirmation": _pct(sources.get(src, {}).get("ok", 0), sources.get(src, {}).get("n", 0)),
+         "retours": sources.get(src, {}).get("back", 0),
+         "taux_retour": _pct(sources.get(src, {}).get("back", 0), sources.get(src, {}).get("n", 0))}
+        for src in SOURCE_ORDER
+        if src in ALWAYS_SHOWN_SOURCES or src in sources
+    ]  # fmt: skip
+
+    par_paroisse = []
+    for activation in DonationActivation.objects.select_related("node"):
+        parish = activation.node
+        c = _status_counts(launched.filter(fund__node=parish))
+        last = Donation.objects.filter(fund__node=parish, channel=DonationChannel.EN_LIGNE,
+                                       status=DonationStatus.CONFIRME).aggregate(d=Max("confirmed_at"))["d"]  # fmt: skip
+        par_paroisse.append({
+            "id": parish.pk, "nom": parish.name, "collecte_ouverte": activation.enabled, **c,
+            "taux_confirmation": _pct(c["confirmes"], c["lances"]), "derniere_confirmation": last,
+            "quetes_saisies": CashCollection.objects.filter(
+                node=parish, mass_date__gte=period.start, mass_date__lte=period.end
+            ).count(),
+        })  # fmt: skip
+    par_paroisse.sort(key=lambda row: _alpha_key(str(row["nom"])))
+
+    events = PaymentWebhookEvent.objects.filter(
+        received_at__date__gte=period.start, received_at__date__lte=period.end
+    )
+    ev = events.aggregate(
+        recues=Count("id"),
+        traitees=Count("id", filter=Q(status=WebhookStatus.TRAITE)),
+        doublons=Count("id", filter=Q(status=WebhookStatus.DOUBLON)),
+        rejetees=Count("id", filter=Q(status=WebhookStatus.REJETE)),
+        erreurs=Count("id", filter=Q(status=WebhookStatus.ERREUR)),
+        en_cours=Count("id", filter=Q(status=WebhookStatus.RECU)),
+    )
+    notifications = {**ev, "derniere_recue": PaymentWebhookEvent.objects.aggregate(d=Max("received_at"))["d"]}
+
+    charge = [
+        {"jour_semaine": row["dow"], "heure": row["hour"], "nombre": row["n"]}
+        for row in launched.annotate(dow=ExtractIsoWeekDay("created_at"), hour=ExtractHour("created_at"))
+        .values("dow", "hour")
+        .annotate(n=Count("id"))
+        .order_by("dow", "hour")
+    ]
+
+    return {
+        "periode": {"type": period.kind, "code": period.code, "debut": period.start, "fin": period.end,
+                    "libelle": period.label},  # fmt: skip
+        "genere_le": now,
+        "paiements": paiements,
+        "delais": delais,
+        "par_jour": par_jour,
+        "par_moyen": par_moyen,
+        "par_source": par_source,
+        "par_paroisse": par_paroisse,
+        "notifications": notifications,
+        "charge": charge,
+        "incidents": _platform_incidents(events),
+        "reversements": {
+            "a_rapprocher": Payout.objects.filter(status="recu").count(),
+            "en_ecart": Payout.objects.filter(status="ecart").count(),
+        },
+    }
+
+
+def _platform_incidents(events: QuerySet[PaymentWebhookEvent]) -> dict[str, Any]:
+    """Incidents techniques, sans montant : notifications en erreur ou rejetées."""
+    failed = events.filter(status__in=[WebhookStatus.ERREUR, WebhookStatus.REJETE])
+    by_type: dict[str, int] = {}
+    for code in failed.values_list("error_code", flat=True):
+        by_type[code or "inconnu"] = by_type.get(code or "inconnu", 0) + 1
+    return {
+        "ouverts": failed.count(),
+        "par_type": by_type,
+        "liste": [
+            {"type": e.error_code or e.status, "reference": e.external_ref, "paroisse": None, "detecte_le": e.received_at,
+             "statut": "ouvert"}
+            for e in failed.order_by("-received_at")[:20]
+        ],  # fmt: skip
     }

@@ -67,7 +67,12 @@ from apps.donations.serializers import (
     amounts_payload,
     authorization_payload,
 )
-from apps.donations.serializers_analyse import AnalyseQuerySerializer, AnalyseSerializer
+from apps.donations.serializers_analyse import (
+    ActiviteQuerySerializer,
+    ActiviteSerializer,
+    AnalyseQuerySerializer,
+    AnalyseSerializer,
+)
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasAnyCapability, HasCapability
 
@@ -784,6 +789,20 @@ class HealthApi(_PlatformApi):
     )
     def get(self, request: Request) -> Response:
         return Response(HealthSerializer(selectors.platform_health()).data)
+
+
+class ActivityApi(_PlatformApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="platform_dons_activity",
+        summary="Activité des paiements : nombres, taux, délais, incidents — aucun montant (docs/API-DONS-ANALYSE.md)",
+        parameters=[ActiviteQuerySerializer],
+        responses=ActiviteSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(ActiviteQuerySerializer, request)
+        period = selectors_analyse.period_parse(filters["periode"], filters["date"] or None)
+        return Response(ActiviteSerializer(selectors_analyse.platform_activity(period=period)).data)
 
 
 class ActivationApi(_PlatformApi):

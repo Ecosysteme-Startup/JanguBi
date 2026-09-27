@@ -279,3 +279,122 @@ class AnalyseSerializer(serializers.Serializer):
     paiements = PaiementsSerializer(allow_null=True, help_text="Paroisse seulement")
     campagnes = CampagneSerializer(many=True, allow_null=True, help_text="Paroisse seulement")
     notes = serializers.ListField(child=serializers.CharField())
+
+
+# --- Plateforme : GET platform/dons/activite/ (aucun montant) --------------------------------
+
+
+class ActiviteQuerySerializer(serializers.Serializer):
+    periode = serializers.ChoiceField(choices=PERIODS, default="mois")
+    date = serializers.CharField(required=False, allow_blank=True, default="", help_text="Comme pour l'analyse")
+
+
+class ActivitePaiementsSerializer(serializers.Serializer):
+    lances = serializers.IntegerField(help_text="Dons en ligne créés sur la période")
+    confirmes = serializers.IntegerField()
+    en_attente = serializers.IntegerField()
+    echoues = serializers.IntegerField()
+    expires = serializers.IntegerField()
+    rembourses = serializers.IntegerField()
+    taux_confirmation = serializers.IntegerField(allow_null=True)
+    taux_echec = serializers.IntegerField(allow_null=True, help_text="(échoués + expirés) / lancés")
+    plus_ancien_en_attente = serializers.DateTimeField(allow_null=True, help_text="Toutes périodes confondues")
+
+
+class ActiviteDelaisSerializer(serializers.Serializer):
+    confirmation_mediane_s = serializers.IntegerField(allow_null=True)
+    confirmation_p95_s = serializers.IntegerField(allow_null=True)
+    reversement_moyen_jours = serializers.IntegerField(allow_null=True)
+    reversement_median_jours = serializers.IntegerField(allow_null=True)
+    echantillon_confirmation = serializers.IntegerField()
+
+
+class ActiviteJourSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    lances = serializers.IntegerField()
+    confirmes = serializers.IntegerField()
+    en_attente = serializers.IntegerField()
+    echoues = serializers.IntegerField()
+    expires = serializers.IntegerField()
+
+
+class ActiviteMoyenSerializer(serializers.Serializer):
+    moyen = serializers.ChoiceField(choices=PaymentMethod.choices)
+    libelle = serializers.CharField()
+    confirmes = serializers.IntegerField()
+    echecs = serializers.IntegerField(help_text="Le moyen n'est souvent connu qu'à la confirmation")
+    taux_echec = serializers.IntegerField(allow_null=True)
+
+
+class ActiviteSourceSerializer(serializers.Serializer):
+    source = serializers.ChoiceField(choices=DonationSource.choices)  # type: ignore[assignment]  # clé « source »
+    libelle = serializers.CharField()
+    lances = serializers.IntegerField()
+    confirmes = serializers.IntegerField()
+    taux_confirmation = serializers.IntegerField(allow_null=True)
+    retours = serializers.IntegerField(help_text="Parcours revenus sur la page de statut (lien de retour)")
+    taux_retour = serializers.IntegerField(allow_null=True)
+
+
+class ActiviteParoisseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    nom = serializers.CharField()
+    collecte_ouverte = serializers.BooleanField()
+    lances = serializers.IntegerField()
+    confirmes = serializers.IntegerField()
+    en_attente = serializers.IntegerField()
+    echoues = serializers.IntegerField()
+    expires = serializers.IntegerField()
+    taux_confirmation = serializers.IntegerField(allow_null=True)
+    derniere_confirmation = serializers.DateTimeField(allow_null=True)
+    quetes_saisies = serializers.IntegerField()
+
+
+class ActiviteNotificationsSerializer(serializers.Serializer):
+    recues = serializers.IntegerField()
+    traitees = serializers.IntegerField()
+    doublons = serializers.IntegerField()
+    rejetees = serializers.IntegerField()
+    erreurs = serializers.IntegerField()
+    en_cours = serializers.IntegerField()
+    derniere_recue = serializers.DateTimeField(allow_null=True)
+
+
+class ActiviteChargeSerializer(serializers.Serializer):
+    jour_semaine = serializers.IntegerField(help_text="1 = lundi … 7 = dimanche")
+    heure = serializers.IntegerField(help_text="0 à 23, heure de Dakar")
+    nombre = serializers.IntegerField()
+
+
+class ActiviteIncidentSerializer(serializers.Serializer):
+    type = serializers.CharField(help_text="late_payment, amount_mismatch, invalid_signature, unknown_reference…")
+    reference = serializers.CharField(help_text="Référence du paiement, jamais de montant")
+    paroisse = serializers.CharField(allow_null=True)
+    detecte_le = serializers.DateTimeField()
+    statut = serializers.CharField()
+
+
+class ActiviteIncidentsSerializer(serializers.Serializer):
+    ouverts = serializers.IntegerField()
+    par_type = serializers.DictField(child=serializers.IntegerField())
+    liste = ActiviteIncidentSerializer(many=True, help_text="Vingt plus récents")
+
+
+class ActiviteReversementsSerializer(serializers.Serializer):
+    a_rapprocher = serializers.IntegerField()
+    en_ecart = serializers.IntegerField()
+
+
+class ActiviteSerializer(serializers.Serializer):
+    periode = PeriodeSerializer()
+    genere_le = serializers.DateTimeField()
+    paiements = ActivitePaiementsSerializer()
+    delais = ActiviteDelaisSerializer()
+    par_jour = ActiviteJourSerializer(many=True)
+    par_moyen = ActiviteMoyenSerializer(many=True)
+    par_source = ActiviteSourceSerializer(many=True)
+    par_paroisse = ActiviteParoisseSerializer(many=True, help_text="Paroisses engagées, ordre alphabétique")
+    notifications = ActiviteNotificationsSerializer()
+    charge = ActiviteChargeSerializer(many=True, help_text="Carte jour × heure des paiements lancés (cases non nulles)")
+    incidents = ActiviteIncidentsSerializer()
+    reversements = ActiviteReversementsSerializer()

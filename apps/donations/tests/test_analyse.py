@@ -5,26 +5,16 @@ Jeu de référence : spec ECRANS-TABLEAU-DE-BORD-DONS §2 (Saint-Dominique, sept
 import datetime
 
 import pytest
-from freezegun import freeze_time
 
 from apps.core.exceptions import ApplicationError
-from apps.donations import apis, selectors_analyse
+from apps.donations import selectors_analyse
 from apps.donations.enums import DonationChannel, DonationStatus, FundDestination, FundKind, FundStatus
 from apps.donations.models import Donation, DonationActivation, Fund
-from apps.donations.tests import dataset_septembre
 from apps.donations.tests.conftest import client_for, named
 from apps.hierarchy.tests.factories import make_node
 
 pytestmark = pytest.mark.django_db
 URL = "/api/v1/staff/dons/analyse/"
-
-
-@pytest.fixture
-def sept(world):
-    # Modules HTTP importés avant le gel du temps : sinon DRF garde l'horloge figée (quotas).
-    assert apis.AnalysisApi is not None
-    with freeze_time("2026-09-27 20:00:00"):
-        yield dataset_septembre.build(world)
 
 
 def analyse(user, node, niveau="paroisse", **params):
