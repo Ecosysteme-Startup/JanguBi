@@ -141,6 +141,1192 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/audio/albums/:
+    get:
+      operationId: audio_albums_list
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Albums visibles (messes, homélies, retraites…)
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          enum:
+          - album
+          - messe
+          - homelies
+          - retraite
+          type: string
+          minLength: 1
+        description: |-
+          * `album` - Album
+          * `messe` - Messe enregistrée
+          * `homelies` - Série d'homélies
+          * `retraite` - Retraite
+      - in: query
+        name: source
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioAlbum'
+          description: ''
+    post:
+      operationId: audio_albums_create
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Créer un album (brouillon)
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/albums/{album_id}/:
+    get:
+      operationId: audio_albums_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Page d'album et ses pistes
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioAlbumDetail'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+    patch:
+      operationId: audio_albums_update
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Modifier un album (la visibilité s'applique à ses pistes)
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/albums/{album_id}/publier/:
+    post:
+      operationId: audio_albums_publish
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Publier l'album et ses pistes prêtes
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/bibliotheque/:
+    get:
+      operationId: audio_library
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Ma bibliothèque : pistes aimées, mes playlists, écoutes en cours'
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioLibrary'
+          description: ''
+  /api/v1/audio/evenements/:
+    post:
+      operationId: audio_events_create
+      description: 'Compte facultatif : un jeton valide ouvre les contenus « paroisse
+        » et « privé » autorisés.'
+      summary: Événements d'écoute par lot (100 au plus), idempotents par client_event_id
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioEventsInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioEventsInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioEventsInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioEventsResult'
+          description: ''
+  /api/v1/audio/lecture/etat/:
+    get:
+      operationId: audio_playback_state_get
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Dernière écoute (« Reprendre sur cet appareil »)
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaybackState'
+          description: ''
+        '204':
+          description: Aucune écoute
+    put:
+      operationId: audio_playback_state_put
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Position courante (toutes les 15 s, à la pause, à la fermeture) ; dernière
+        écriture gagnante
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioPlaybackStateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioPlaybackStateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioPlaybackStateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaybackStateWriteOutput'
+          description: ''
+  /api/v1/audio/moderation/signalements/:
+    get:
+      operationId: audio_reports_list
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Signalements ouverts (audio.moderer)
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioReport'
+          description: ''
+  /api/v1/audio/moderation/signalements/{report_id}/traiter/:
+    post:
+      operationId: audio_reports_handle
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Traiter un signalement : retirer ou classer sans suite'
+      parameters:
+      - in: path
+        name: report_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioReportDecisionInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioReportDecisionInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioReportDecisionInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioReport'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/pistes/{track_id}/:
+    get:
+      operationId: audio_tracks_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Fiche d'une piste
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioTrack'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+    patch:
+      operationId: audio_tracks_update
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Métadonnées d'une piste (staff de la source)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioTrackUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioTrackUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioTrackUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/pistes/{track_id}/depublier/:
+    post:
+      operationId: audio_tracks_unpublish
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Dépublier une piste
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+  /api/v1/audio/pistes/{track_id}/ensuite/:
+    get:
+      operationId: audio_tracks_next
+      description: 'Compte facultatif : un jeton valide ouvre les contenus « paroisse
+        » et « privé » autorisés.'
+      summary: À écouter ensuite (voisins précalculés, filtrés par droits)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioTrack'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+  /api/v1/audio/pistes/{track_id}/lecture/:
+    post:
+      operationId: audio_tracks_playback
+      description: 'Compte facultatif : un jeton valide ouvre les contenus « paroisse
+        » et « privé » autorisés.'
+      summary: 'Lecture : droit d''écoute, URL signée du master.m3u8, position de
+        reprise, forme d''onde'
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlayback'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+        '409':
+          description: Piste pas encore prête
+  /api/v1/audio/pistes/{track_id}/like/:
+    put:
+      operationId: audio_tracks_like
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Aimer une piste
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioLikeOutput'
+          description: ''
+    delete:
+      operationId: audio_tracks_unlike
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Ne plus aimer une piste
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/audio/pistes/{track_id}/publier/:
+    post:
+      operationId: audio_tracks_publish
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Publier une piste prête
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+        '409':
+          description: Encodage pas terminé
+  /api/v1/audio/pistes/{track_id}/reencoder/:
+    post:
+      operationId: audio_tracks_reencode
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Réencoder depuis le fichier source (nouvelle version)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+  /api/v1/audio/pistes/{track_id}/signaler/:
+    post:
+      operationId: audio_tracks_report
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Signaler une piste (droits d'auteur, contenu inapproprié, son)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioReport'
+          description: ''
+  /api/v1/audio/playlists/:
+    get:
+      operationId: audio_playlists_list
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Mes playlists
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioPlaylist'
+          description: ''
+    post:
+      operationId: audio_playlists_create
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Créer une playlist (personnelle, ou éditoriale avec source_id)
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaylist'
+          description: ''
+  /api/v1/audio/playlists/{playlist_id}/:
+    get:
+      operationId: audio_playlists_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Playlist et ses pistes (filtrées par droits)
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaylistDetail'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+    patch:
+      operationId: audio_playlists_update
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Modifier une playlist
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioPlaylistUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioPlaylistUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioPlaylistUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaylist'
+          description: ''
+    delete:
+      operationId: audio_playlists_delete
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Supprimer une playlist
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/audio/playlists/{playlist_id}/ordre/:
+    put:
+      operationId: audio_playlists_reorder
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Réordonner (liste complète des pistes)
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistOrderInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistOrderInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistOrderInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaylistDetail'
+          description: ''
+  /api/v1/audio/playlists/{playlist_id}/pistes/:
+    post:
+      operationId: audio_playlists_add_track
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Ajouter une piste à la fin
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistAddInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistAddInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioPlaylistAddInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioPlaylist'
+          description: ''
+  /api/v1/audio/playlists/{playlist_id}/pistes/{track_id}/:
+    delete:
+      operationId: audio_playlists_remove_track
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Retirer une piste
+      parameters:
+      - in: path
+        name: playlist_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/audio/pour-vous/:
+    get:
+      operationId: audio_for_you
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Pour vous : recommandations précalculées, avec leur explication'
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioForYou'
+          description: ''
+  /api/v1/audio/recherche/:
+    get:
+      operationId: audio_search
+      description: 'Compte facultatif : un jeton valide ouvre les contenus « paroisse
+        » et « privé » autorisés.'
+      summary: Recherche (plein texte français sans accents + fautes de frappe), pagination
+        par curseur
+      parameters:
+      - in: query
+        name: cursor
+        schema:
+          type: string
+          default: ''
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          maximum: 50
+          minimum: 1
+          default: 20
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 200
+          minLength: 1
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioSearchOutput'
+          description: ''
+  /api/v1/audio/reglages/:
+    get:
+      operationId: audio_settings_get
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Réglages de la sonothèque
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioListenerSettings'
+          description: ''
+    put:
+      operationId: audio_settings_put
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Activer ou désactiver les recommandations personnalisées
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioListenerSettings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioListenerSettings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioListenerSettings'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioListenerSettings'
+          description: ''
+  /api/v1/audio/sources/:
+    get:
+      operationId: audio_sources_list
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Sources (paroisses, chorales, mouvements), par ordre alphabétique
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          enum:
+          - paroisse
+          - chorale
+          - mouvement
+          type: string
+          minLength: 1
+        description: |-
+          * `paroisse` - Paroisse
+          * `chorale` - Chorale
+          * `mouvement` - Mouvement
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioSource'
+          description: ''
+    post:
+      operationId: audio_sources_create
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Créer une source (audio.publier sur le nœud)
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioSourceCreateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioSourceCreateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioSourceCreateInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioSource'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/sources/{source_id}/:
+    get:
+      operationId: audio_sources_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Page d''une source : albums, playlists, nouveautés, les plus écoutés
+        de la source'
+      parameters:
+      - in: path
+        name: source_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioSourceDetail'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+    patch:
+      operationId: audio_sources_update
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Modifier une source
+      parameters:
+      - in: path
+        name: source_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioSourceUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioSourceUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioSourceUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioSource'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/pistes/:
+    get:
+      operationId: audio_staff_tracks
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Toutes les pistes d'une source, avec l'état de l'encodage
+      parameters:
+      - in: query
+        name: source
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: status
+        schema:
+          enum:
+          - brouillon
+          - en_file
+          - encodage
+          - pret
+          - echec
+          type: string
+          minLength: 1
+        description: |-
+          * `brouillon` - Brouillon (upload en cours)
+          * `en_file` - En file d'encodage
+          * `encodage` - Encodage en cours
+          * `pret` - Prêt
+          * `echec` - Échec de l'encodage
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/sources/:
+    get:
+      operationId: audio_staff_sources
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Sources où je peux publier
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioSource'
+          description: ''
+  /api/v1/audio/uploads/:
+    post:
+      operationId: audio_uploads_create
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Démarrer un envoi : POST présigné vers audio-raw/ (500 Mo, mp3/m4a/aac/wav/flac/ogg/opus)'
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioUploadInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioUploadInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioUploadInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioUploadOutput'
+          description: ''
+        '400':
+          description: Droits non confirmés, format ou taille
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/uploads/{track_id}/:
+    get:
+      operationId: audio_uploads_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: État d'un envoi (brouillon, en_file, encodage, pret, echec + motif)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
+  /api/v1/audio/uploads/{track_id}/local/:
+    post:
+      operationId: audio_uploads_local
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Envoi du fichier en développement (stockage local, sans S3)
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioLocalUploadInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+  /api/v1/audio/uploads/{track_id}/terminer/:
+    post:
+      operationId: audio_uploads_finish
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Fin de l''envoi : la piste passe « en_file » et part à l''encodage
+        (file media)'
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffTrack'
+          description: ''
+        '400':
+          description: Fichier absent ou trop gros
   /api/v1/audit/:
     get:
       operationId: audit_events_list
@@ -7214,6 +8400,974 @@ components:
           type: boolean
       required:
       - attended
+    AudioAlbum:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        source:
+          $ref: '#/components/schemas/AudioSourceRef'
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumKindEnum'
+          title: Type
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          title: Visibilité
+        cover_url:
+          type: string
+          nullable: true
+          readOnly: true
+        recorded_on:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'enregistrement
+        liturgical_season:
+          title: Temps liturgique
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publié le
+      required:
+      - cover_url
+      - id
+      - source
+      - title
+    AudioAlbumDetail:
+      type: object
+      properties:
+        album:
+          $ref: '#/components/schemas/AudioAlbum'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+      required:
+      - album
+      - tracks
+    AudioAlbumInput:
+      type: object
+      properties:
+        source_id:
+          type: string
+          format: uuid
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumKindEnum'
+          default: album
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          default: prive
+        recorded_on:
+          type: string
+          format: date
+          nullable: true
+        liturgical_season:
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+      required:
+      - source_id
+      - title
+    AudioAlbumKindEnum:
+      enum:
+      - album
+      - messe
+      - homelies
+      - retraite
+      type: string
+      description: |-
+        * `album` - Album
+        * `messe` - Messe enregistrée
+        * `homelies` - Série d'homélies
+        * `retraite` - Retraite
+    AudioAlbumRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumKindEnum'
+          title: Type
+      required:
+      - id
+      - title
+    AudioEventInput:
+      type: object
+      properties:
+        client_event_id:
+          type: string
+          format: uuid
+        track_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/AudioPlayEventKindEnum'
+        occurred_at:
+          type: string
+          format: date-time
+        position_seconds:
+          type: number
+          format: double
+          minimum: 0
+          default: 0.0
+        device_id:
+          type: string
+          default: ''
+          maxLength: 100
+      required:
+      - client_event_id
+      - kind
+      - occurred_at
+      - track_id
+    AudioEventsInput:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioEventInput'
+      required:
+      - events
+    AudioEventsResult:
+      type: object
+      properties:
+        recus:
+          type: integer
+        enregistres:
+          type: integer
+        doublons:
+          type: integer
+        rejetes:
+          type: integer
+      required:
+      - doublons
+      - enregistres
+      - recus
+      - rejetes
+    AudioForYou:
+      type: object
+      properties:
+        personnalise:
+          type: boolean
+        demarrage_a_froid:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioRecommendation'
+      required:
+      - demarrage_a_froid
+      - personnalise
+      - results
+    AudioLanguageEnum:
+      enum:
+      - fr
+      - wo
+      - la
+      - srr
+      - dyo
+      - en
+      - autre
+      type: string
+      description: |-
+        * `fr` - Français
+        * `wo` - Wolof
+        * `la` - Latin
+        * `srr` - Sérère
+        * `dyo` - Diola
+        * `en` - Anglais
+        * `autre` - Autre
+    AudioLibrary:
+      type: object
+      properties:
+        likes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+        playlists:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioPlaylist'
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioRecent'
+      required:
+      - likes
+      - playlists
+      - recent
+    AudioLikeOutput:
+      type: object
+      properties:
+        liked:
+          type: boolean
+      required:
+      - liked
+    AudioListenerSettings:
+      type: object
+      properties:
+        recommendations_enabled:
+          type: boolean
+      required:
+      - recommendations_enabled
+    AudioLiturgicalSeasonEnum:
+      enum:
+      - avent
+      - noel
+      - careme
+      - triduum
+      - paques
+      - ordinaire
+      type: string
+      description: |-
+        * `avent` - Temps de l'Avent
+        * `noel` - Temps de Noël
+        * `careme` - Temps du Carême
+        * `triduum` - Triduum pascal
+        * `paques` - Temps pascal
+        * `ordinaire` - Temps ordinaire
+    AudioLocalUploadInput:
+      type: object
+      properties:
+        file:
+          type: string
+          format: uri
+      required:
+      - file
+    AudioNodeRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
+    AudioPlayEventKindEnum:
+      enum:
+      - start
+      - progress
+      - complete
+      - skip
+      - like
+      type: string
+      description: |-
+        * `start` - Début d'écoute
+        * `progress` - Progression
+        * `complete` - Écoute complète
+        * `skip` - Passée
+        * `like` - Aimée
+    AudioPlayback:
+      type: object
+      properties:
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        stream:
+          $ref: '#/components/schemas/AudioStream'
+        resume:
+          allOf:
+          - $ref: '#/components/schemas/AudioResume'
+          nullable: true
+        waveform:
+          type: array
+          items:
+            type: number
+            format: double
+          description: 200 pics entre 0 et 1
+      required:
+      - resume
+      - stream
+      - track
+      - waveform
+    AudioPlaybackState:
+      type: object
+      properties:
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        position_seconds:
+          type: number
+          format: double
+        device_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - device_id
+      - position_seconds
+      - track
+      - updated_at
+    AudioPlaybackStateInput:
+      type: object
+      properties:
+        track_id:
+          type: string
+          format: uuid
+        position_seconds:
+          type: number
+          format: double
+          minimum: 0
+        device_id:
+          type: string
+          maxLength: 100
+        client_updated_at:
+          type: string
+          format: date-time
+          description: Horodatage de l'appareil (borné par le serveur)
+      required:
+      - client_updated_at
+      - device_id
+      - position_seconds
+      - track_id
+    AudioPlaybackStateWriteOutput:
+      type: object
+      properties:
+        applied:
+          type: boolean
+          description: Faux si un autre appareil a écrit plus récemment
+        state:
+          $ref: '#/components/schemas/AudioPlaybackState'
+      required:
+      - applied
+      - state
+    AudioPlaylist:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          title: Visibilité
+        is_editorial:
+          type: boolean
+          readOnly: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/AudioSourceRef'
+          nullable: true
+        track_count:
+          type: integer
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - is_editorial
+      - source
+      - title
+      - track_count
+      - updated_at
+    AudioPlaylistAddInput:
+      type: object
+      properties:
+        track_id:
+          type: string
+          format: uuid
+      required:
+      - track_id
+    AudioPlaylistDetail:
+      type: object
+      properties:
+        playlist:
+          $ref: '#/components/schemas/AudioPlaylist'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+      required:
+      - playlist
+      - tracks
+    AudioPlaylistInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          default: prive
+        source_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Playlist éditoriale de la source
+      required:
+      - title
+    AudioPlaylistOrderInput:
+      type: object
+      properties:
+        track_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 1000
+      required:
+      - track_ids
+    AudioRecent:
+      type: object
+      properties:
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        position_seconds:
+          type: number
+          format: double
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - position_seconds
+      - track
+      - updated_at
+    AudioRecommendation:
+      type: object
+      properties:
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        reason:
+          type: string
+          description: Explication lisible, ex. « Parce que vous avez écouté … »
+      required:
+      - reason
+      - track
+    AudioReport:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        motif:
+          $ref: '#/components/schemas/AudioReportReasonEnum'
+        comment:
+          type: string
+        status:
+          $ref: '#/components/schemas/AudioReportStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+        handled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - id
+      - motif
+      - track
+    AudioReportDecisionEnum:
+      enum:
+      - retire
+      - rejete
+      type: string
+      description: |-
+        * `retire` - Contenu retiré
+        * `rejete` - Sans suite
+    AudioReportDecisionInput:
+      type: object
+      properties:
+        resolution:
+          $ref: '#/components/schemas/AudioReportDecisionEnum'
+      required:
+      - resolution
+    AudioReportInput:
+      type: object
+      properties:
+        motif:
+          $ref: '#/components/schemas/AudioReportReasonEnum'
+        comment:
+          type: string
+          default: ''
+          maxLength: 2000
+      required:
+      - motif
+    AudioReportReasonEnum:
+      enum:
+      - droits
+      - inapproprie
+      - qualite
+      - autre
+      type: string
+      description: |-
+        * `droits` - Droits d'auteur
+        * `inapproprie` - Contenu inapproprié
+        * `qualite` - Problème de son
+        * `autre` - Autre
+    AudioReportStatusEnum:
+      enum:
+      - ouvert
+      - retire
+      - rejete
+      type: string
+      description: |-
+        * `ouvert` - Ouvert
+        * `retire` - Contenu retiré
+        * `rejete` - Sans suite
+    AudioResume:
+      type: object
+      properties:
+        position_seconds:
+          type: number
+          format: double
+        device_id:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - device_id
+      - position_seconds
+      - updated_at
+    AudioSearchOutput:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+        next_cursor:
+          type: string
+          nullable: true
+      required:
+      - next_cursor
+      - results
+    AudioSource:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioSourceKindEnum'
+          title: Type
+        description:
+          type: string
+          title: Présentation
+        node:
+          $ref: '#/components/schemas/AudioNodeRef'
+        cover_url:
+          type: string
+          nullable: true
+          readOnly: true
+        is_active:
+          type: boolean
+          title: Active
+      required:
+      - cover_url
+      - id
+      - name
+      - node
+    AudioSourceCreateInput:
+      type: object
+      properties:
+        node_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/AudioSourceKindEnum'
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          default: ''
+      required:
+      - kind
+      - name
+      - node_id
+    AudioSourceDetail:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/AudioSource'
+        albums:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioAlbum'
+        playlists:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioPlaylist'
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+          description: Dernières publications de la source
+        most_played:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+          description: Les plus écoutés, à l'intérieur de cette source seulement
+      required:
+      - albums
+      - most_played
+      - playlists
+      - recent
+      - source
+    AudioSourceKindEnum:
+      enum:
+      - paroisse
+      - chorale
+      - mouvement
+      type: string
+      description: |-
+        * `paroisse` - Paroisse
+        * `chorale` - Chorale
+        * `mouvement` - Mouvement
+    AudioSourceRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          title: Nom
+          maxLength: 200
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioSourceKindEnum'
+          title: Type
+      required:
+      - id
+      - name
+    AudioStaffTrack:
+      type: object
+      description: 'Piste vue par le staff de la source : état de l''encodage, visibilités,
+        version.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 250
+        performers:
+          type: array
+          items:
+            type: string
+            maxLength: 150
+          title: Interprètes
+        composer:
+          type: string
+          title: Compositeur
+          maxLength: 200
+        language:
+          allOf:
+          - $ref: '#/components/schemas/AudioLanguageEnum'
+          title: Langue
+        liturgical_season:
+          title: Temps liturgique
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 60
+          title: Mots-clés
+        description:
+          type: string
+        duration_seconds:
+          type: number
+          format: double
+          nullable: true
+          title: Durée (s)
+        source:
+          $ref: '#/components/schemas/AudioSourceRef'
+        album:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumRef'
+          nullable: true
+        position:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Position dans l'album
+        visibility:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publiée le
+        own_visibility:
+          type: string
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AudioTrackStatusEnum'
+          title: État
+        failure_reason:
+          type: string
+          title: Motif de l'échec
+        version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Version demandée
+        encoded_version:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+          title: Version encodée
+        encoded_at:
+          type: string
+          format: date-time
+          nullable: true
+        hidden_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Retirée par la modération le
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - album
+      - id
+      - own_visibility
+      - source
+      - title
+      - visibility
+    AudioStream:
+      type: object
+      properties:
+        format:
+          type: string
+          description: « hls »
+        master_url:
+          type: string
+          format: uri
+          description: master.m3u8 signé (préfixe versionné, 6 h)
+        mp3_url:
+          type: string
+          format: uri
+          description: MP3 128 kb/s pour l'écoute hors ligne (même signature)
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - expires_at
+      - format
+      - master_url
+      - mp3_url
+    AudioTrack:
+      type: object
+      description: 'Piste vue par un auditeur (aucun compteur : pas de palmarès).'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 250
+        performers:
+          type: array
+          items:
+            type: string
+            maxLength: 150
+          title: Interprètes
+        composer:
+          type: string
+          title: Compositeur
+          maxLength: 200
+        language:
+          allOf:
+          - $ref: '#/components/schemas/AudioLanguageEnum'
+          title: Langue
+        liturgical_season:
+          title: Temps liturgique
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 60
+          title: Mots-clés
+        description:
+          type: string
+        duration_seconds:
+          type: number
+          format: double
+          nullable: true
+          title: Durée (s)
+        source:
+          $ref: '#/components/schemas/AudioSourceRef'
+        album:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumRef'
+          nullable: true
+        position:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Position dans l'album
+        visibility:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publiée le
+      required:
+      - album
+      - id
+      - source
+      - title
+      - visibility
+    AudioTrackStatusEnum:
+      enum:
+      - brouillon
+      - en_file
+      - encodage
+      - pret
+      - echec
+      type: string
+      description: |-
+        * `brouillon` - Brouillon (upload en cours)
+        * `en_file` - En file d'encodage
+        * `encodage` - Encodage en cours
+        * `pret` - Prêt
+        * `echec` - Échec de l'encodage
+    AudioUploadInput:
+      type: object
+      properties:
+        source_id:
+          type: string
+          format: uuid
+        album_id:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          default: ''
+          maxLength: 250
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          default: public
+        file_name:
+          type: string
+          maxLength: 255
+        file_type:
+          type: string
+          maxLength: 100
+        file_size:
+          type: integer
+          minimum: 1
+          description: Octets ; 500 Mo au plus
+        rights_confirmed:
+          type: boolean
+          description: Case « J'ai les droits sur cet enregistrement » (obligatoire)
+      required:
+      - file_name
+      - file_size
+      - file_type
+      - rights_confirmed
+      - source_id
+    AudioUploadOutput:
+      type: object
+      properties:
+        upload_id:
+          type: string
+          format: uuid
+          description: Identifiant de l'envoi (= identifiant de la piste)
+        track:
+          $ref: '#/components/schemas/AudioStaffTrack'
+        method:
+          type: string
+        url:
+          type: string
+          format: uri
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Champs du formulaire POST présigné
+        max_size:
+          type: integer
+        expires_in:
+          type: integer
+      required:
+      - expires_in
+      - fields
+      - max_size
+      - method
+      - track
+      - upload_id
+      - url
+    AudioVisibilityEnum:
+      enum:
+      - public
+      - paroisse
+      - prive
+      type: string
+      description: |-
+        * `public` - Public
+        * `paroisse` - Membres de la paroisse
+        * `prive` - Privé (brouillon du staff)
     AuditEventOutput:
       type: object
       properties:
@@ -10435,6 +12589,89 @@ components:
           description: 'Qualifier : nouvelle qualité'
           maxLength: 40
           pattern: ^[-a-zA-Z0-9_]+$
+    PatchedAudioAlbumUpdateInput:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/AudioAlbumKindEnum'
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/AudioVisibilityEnum'
+        recorded_on:
+          type: string
+          format: date
+          nullable: true
+        liturgical_season:
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+    PatchedAudioPlaylistUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/AudioVisibilityEnum'
+        published:
+          type: boolean
+          description: 'Playlist éditoriale : publiée ou non'
+    PatchedAudioSourceUpdateInput:
+      type: object
+      properties:
+        kind:
+          $ref: '#/components/schemas/AudioSourceKindEnum'
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        is_active:
+          type: boolean
+    PatchedAudioTrackUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+          maxLength: 250
+        performers:
+          type: array
+          items:
+            type: string
+            maxLength: 150
+          maxItems: 20
+        composer:
+          type: string
+          maxLength: 200
+        language:
+          $ref: '#/components/schemas/AudioLanguageEnum'
+        liturgical_season:
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 60
+          maxItems: 30
+        description:
+          type: string
+        visibility:
+          $ref: '#/components/schemas/AudioVisibilityEnum'
+        position:
+          type: integer
+          minimum: 0
+        album_id:
+          type: string
+          format: uuid
+          nullable: true
     PatchedEventUpdateInput:
       type: object
       properties:
