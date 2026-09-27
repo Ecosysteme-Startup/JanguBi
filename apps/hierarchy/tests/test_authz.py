@@ -330,13 +330,21 @@ def test_nobody_appoints_themselves(world):
 
 
 def test_frozen_catalogue_migration_matches_the_runtime_profile():
-    """La migration 0006 est une copie figée : elle doit rester égale au profil tant qu'aucune
-    nouvelle migration de catalogue n'a été écrite (sinon : écrire la migration)."""
+    """Les migrations de catalogue (0004, puis 0009 pour les dons) sont des copies figées : leur
+    cumul doit rester égal au profil (sinon : écrire une nouvelle migration de catalogue)."""
     import importlib
 
     from apps.hierarchy.profiles import CAPABILITIES, OFFICES
 
     frozen = importlib.import_module("apps.hierarchy.migrations.0004_seed_offices_catalogue")
-    assert [c[0] for c in frozen.CAPABILITIES] == [c["code"] for c in CAPABILITIES]
-    assert {o[0]: sorted(o[8]) for o in frozen.OFFICES} == {o["code"]: sorted(o["capabilities"]) for o in OFFICES}
-    assert {o[0]: sorted(o[5]) for o in frozen.OFFICES} == {o["code"]: sorted(o["appointed_by"]) for o in OFFICES}
+    dons = importlib.import_module("apps.hierarchy.migrations.0009_dons_capacites")
+    capabilities = [c[0] for c in frozen.CAPABILITIES] + [c[0] for c in dons.CAPABILITIES]
+    assert capabilities == [c["code"] for c in CAPABILITIES]
+    office_caps = {o[0]: set(o[8]) for o in frozen.OFFICES}
+    appointed = {o[0]: sorted(o[5]) for o in frozen.OFFICES}
+    for code, extra in dons.OFFICE_CAPABILITIES.items():
+        office_caps[code] |= set(extra)
+    office_caps[dons.ECONOME["code"]] = set(dons.ECONOME["capabilities"])
+    appointed[dons.ECONOME["code"]] = sorted(dons.ECONOME["appointed_by"])
+    assert {k: sorted(v) for k, v in office_caps.items()} == {o["code"]: sorted(o["capabilities"]) for o in OFFICES}
+    assert appointed == {o["code"]: sorted(o["appointed_by"]) for o in OFFICES}
