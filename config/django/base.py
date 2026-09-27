@@ -73,6 +73,18 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.documents.tasks.document_attachments_purge_task",
         "schedule": crontab(hour=2, minute=30),
     },
+    "donations_reconcile": {
+        "task": "apps.donations.tasks.donations_reconcile_task",
+        "schedule": crontab(minute="*/10"),
+    },
+    "donations_payouts_sync": {
+        "task": "apps.donations.tasks.donations_payouts_sync_task",
+        "schedule": crontab(hour=5, minute=10),
+    },
+    "donations_donor_email_purge": {
+        "task": "apps.donations.tasks.donations_donor_email_purge_task",
+        "schedule": crontab(hour=4, minute=20),
+    },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
         "schedule": crontab(hour=8, minute=0),
@@ -124,6 +136,7 @@ LOCAL_APPS = [
     "apps.agenda.apps.AgendaConfig",
     "apps.dashboards.apps.DashboardsConfig",
     "apps.contact.apps.ContactConfig",
+    "apps.donations.apps.DonationsConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -370,6 +383,7 @@ from config.settings.files_and_storages import *  # noqa
 from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa
+from config.settings.dons import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
