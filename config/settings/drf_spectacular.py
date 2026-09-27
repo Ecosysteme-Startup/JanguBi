@@ -7,6 +7,8 @@ SPECTACULAR_SETTINGS = {
     # les collisions « status », « kind »… et le client généré change à chaque lot).
     'ENUM_NAME_OVERRIDES': {
         'NodeStatusEnum': 'apps.hierarchy.enums.NodeStatus',
+        'ReadingEventKindEnum': 'apps.bible.models.ReadingEvent.Kind',
+        'BookmarkColorEnum': 'apps.bible.models.Bookmark.Color',
         'PlaceKindEnum': 'apps.hierarchy.enums.PlaceKind',
         'ScheduleKindEnum': 'apps.hierarchy.enums.ScheduleKind',
         'WeekdayEnum': 'apps.hierarchy.enums.Weekday',

@@ -10,6 +10,13 @@ from apps.bible.apis import (
     ReadingPlanSubscribeApi,
     ReadingPlanUnsubscribeApi,
 )
+from apps.bible.apis_reco import (
+    BookmarkDetailApi,
+    BookmarkListCreateApi,
+    ParolePreferenceApi,
+    PourVousApi,
+    ReadingEventApi,
+)
 from apps.bible.views import (
     BookDetailApi,
     BookListApi,
@@ -36,6 +43,13 @@ urlpatterns = [
 
     # Search
     path("search/", SearchApi.as_view(), name="search"),
+
+    # « Pour vous aujourd'hui » (plan V2 §6) : signaux, signets, réglage, recommandation
+    path("evenements/", ReadingEventApi.as_view(), name="reading-events"),
+    path("signets/", BookmarkListCreateApi.as_view(), name="bookmark-list-create"),
+    path("signets/<int:bookmark_id>/", BookmarkDetailApi.as_view(), name="bookmark-detail"),
+    path("reglages/", ParolePreferenceApi.as_view(), name="parole-preferences"),
+    path("pour-vous/", PourVousApi.as_view(), name="pour-vous"),
 
     # Daily Texts
 

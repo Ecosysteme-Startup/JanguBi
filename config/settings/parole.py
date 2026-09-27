@@ -32,3 +32,24 @@ if LITURGY_SOURCE == "crampon_refs" and not BIBLE_EDITION:
         "BIBLE_EDITION vide en mode crampon_refs : toutes les éditions en base sont servies, "
         "y compris un texte AELF importé. Positionner BIBLE_EDITION=crampon1923 après l'import (ADR-008)."
     )
+
+# « Pour vous aujourd'hui » : recommandations de versets et de livres (plan V2 §6).
+# Poids des signaux décroissant de moitié tous les PAROLE_RECO_HALF_LIFE_DAYS jours ;
+# on ne regarde pas au-delà de PAROLE_RECO_HISTORY_DAYS.
+PAROLE_RECO_HALF_LIFE_DAYS = env.int("PAROLE_RECO_HALF_LIFE_DAYS", default=30)
+PAROLE_RECO_HISTORY_DAYS = env.int("PAROLE_RECO_HISTORY_DAYS", default=90)
+# Un verset lu (ou un chapitre lu) depuis moins de N jours n'est pas reproposé.
+PAROLE_RECO_EXCLUDE_READ_DAYS = env.int("PAROLE_RECO_EXCLUDE_READ_DAYS", default=60)
+# Précalcul nocturne : seulement les fidèles qui ont lu ou marqué un verset depuis N jours.
+PAROLE_RECO_ACTIVE_DAYS = env.int("PAROLE_RECO_ACTIVE_DAYS", default=30)
+# Voisins HNSW demandés avant filtrage et diversification.
+PAROLE_RECO_CANDIDATES = env.int("PAROLE_RECO_CANDIDATES", default=200)
+# Bonus (sans unité, ajouté à la similarité cosinus) : proximité avec les lectures du jour,
+# verset faisant partie des lectures du jour, livre de saison (Avent, Carême…).
+PAROLE_RECO_LITURGY_BONUS = env.float("PAROLE_RECO_LITURGY_BONUS", default=0.15)
+PAROLE_RECO_READING_BONUS = env.float("PAROLE_RECO_READING_BONUS", default=0.10)
+PAROLE_RECO_SEASON_BONUS = env.float("PAROLE_RECO_SEASON_BONUS", default=0.05)
+# Au-delà de cette similarité avec les lectures du jour, on l'explique (« En lien avec l'évangile du jour »).
+PAROLE_RECO_LITURGY_REASON_MIN = env.float("PAROLE_RECO_LITURGY_REASON_MIN", default=0.6)
+# Recommandations précalculées conservées N jours (purge par la tâche nocturne).
+PAROLE_RECO_RETENTION_DAYS = env.int("PAROLE_RECO_RETENTION_DAYS", default=7)

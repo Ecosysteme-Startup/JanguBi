@@ -155,6 +155,10 @@ def _forget_traces(user: Any) -> None:
     NotificationPreference.objects.filter(user=user).delete()
     MessagingAvailability.objects.filter(user=user).delete()
     ArticleRead.objects.filter(user=user).delete()
+    # Parole : historique de lecture, signets, recommandations, réglage (plan V2 §6).
+    from apps.bible.services.reading_signals import parole_data_forget
+
+    parole_data_forget(user=user)
 
 
 def _declaration_forget(user: Any) -> None:
