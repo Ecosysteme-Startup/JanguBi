@@ -20,7 +20,7 @@ from apps.api.pagination import LimitOffsetPagination, get_paginated_response, p
 from apps.api.v1 import V1ApiMixin, error_body
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.core.exceptions import ApplicationError, NotFoundError
-from apps.donations import access, exports, selectors, services
+from apps.donations import access, exports, selectors, services, services_tresorerie
 from apps.donations.enums import DonationStatus
 from apps.donations.providers import known_provider
 from apps.donations.serializers import (
@@ -29,6 +29,8 @@ from apps.donations.serializers import (
     CashCollectionFilterSerializer,
     CashCollectionInputSerializer,
     CashCollectionSerializer,
+    CashDepositInputSerializer,
+    CashDepositSerializer,
     CashRejectInputSerializer,
     CheckoutInputSerializer,
     CheckoutOutputSerializer,
@@ -57,6 +59,9 @@ from apps.donations.serializers import (
     PublicParishSerializer,
     ReconciliationSerializer,
     RefundInputSerializer,
+    RemittanceFilterSerializer,
+    RemittanceInputSerializer,
+    RemittanceSerializer,
     StaffFundSerializer,
     YearQuerySerializer,
     amounts_payload,
@@ -484,6 +489,114 @@ class CashCollectionRejectApi(_StaffApi):
             collection=selectors.cash_collection_get(collection_id=collection_id), actor=request.user, **data
         )
         return Response(CashCollectionSerializer(selectors.cash_collection_get(collection_id=collection.pk)).data)
+
+
+class CashDepositListCreateApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_deposits_list",
+        summary="Dépôts en banque des espèces d'une paroisse",
+        parameters=[NodeQuerySerializer, *_PAGINATION],
+        responses=paginated_response_serializer(CashDepositSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=CashDepositSerializer,
+            queryset=selectors.cash_deposits_for_parish(node=node),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_deposits_create",
+        summary="Déclarer le dépôt en banque de quêtes validées (montant = somme des quêtes)",
+        request=CashDepositInputSerializer,
+        responses={201: CashDepositSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(CashDepositInputSerializer, request)
+        node = _parish(data.pop("node"))
+        deposit = services_tresorerie.cash_deposit_declare(actor=request.user, node=node, **data)
+        return Response(
+            CashDepositSerializer(selectors.cash_deposit_get(deposit_id=deposit.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RemittanceListCreateApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (
+        IsAuthenticated,
+        HasAnyCapability("dons.voir_fonds", "dons.gerer_fonds", "dons.definir_quete_imperee"),
+    )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_remittances_list",
+        summary="Remises à la curie des espèces de quête impérée (d'une paroisse, ou de tout le diocèse)",
+        parameters=[RemittanceFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(RemittanceSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(RemittanceFilterSerializer, request)
+        node = hierarchy_selectors.node_get(node_id=filters["node"])
+        if access.is_diocese(node):
+            access.require_diocese(request.user, "dons.definir_quete_imperee", node)
+        else:
+            access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=RemittanceSerializer,
+            queryset=selectors.remittances_for(node=node, status=filters.get("status")),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_remittances_create",
+        summary="Déclarer une remise à la curie (espèces d'une quête impérée)",
+        request=RemittanceInputSerializer,
+        responses={201: RemittanceSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(RemittanceInputSerializer, request)
+        fund = selectors.fund_get(fund_id=data.pop("fund_id"))
+        remittance = services_tresorerie.curia_remittance_declare(actor=request.user, fund=fund, **data)
+        return Response(
+            RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RemittanceConfirmApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (IsAuthenticated, HasCapability("dons.definir_quete_imperee"))
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_remittances_confirm",
+                   summary="Confirmer la réception d'une remise (curie, autre personne que la déclaration)",
+                   request=None, responses=RemittanceSerializer)  # fmt: skip
+    def post(self, request: Request, remittance_id: int) -> Response:
+        remittance = services_tresorerie.curia_remittance_confirm(
+            remittance=selectors.remittance_get(remittance_id=remittance_id), actor=request.user
+        )
+        return Response(RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data)
+
+
+class RemittanceContestApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (IsAuthenticated, HasCapability("dons.definir_quete_imperee"))
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_remittances_contest",
+                   summary="Contester une remise (motif obligatoire)", request=CashRejectInputSerializer,
+                   responses=RemittanceSerializer)  # fmt: skip
+    def post(self, request: Request, remittance_id: int) -> Response:
+        data = _body(CashRejectInputSerializer, request)
+        remittance = services_tresorerie.curia_remittance_contest(
+            remittance=selectors.remittance_get(remittance_id=remittance_id), actor=request.user, **data
+        )
+        return Response(RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data)
 
 
 class ExportApi(V1ApiMixin, ApiAuthMixin, APIView):

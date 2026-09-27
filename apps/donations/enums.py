@@ -113,3 +113,15 @@ class PayoutStatus(models.TextChoices):
     RECU = "recu", _("Reçu, à rapprocher")
     RAPPROCHE = "rapproche", _("Rapproché")
     ECART = "ecart", _("Écart constaté")
+
+
+class RemittanceMode(models.TextChoices):
+    ESPECES = "especes", _("Espèces remises à la curie")
+    VIREMENT = "virement", _("Virement")
+    COMPENSATION = "compensation", _("Compensation sur la rétrocession de l'économat")
+
+
+class RemittanceStatus(models.TextChoices):
+    DECLAREE = "declaree", _("Déclarée par la paroisse")
+    CONFIRMEE = "confirmee", _("Réception confirmée par la curie")
+    CONTESTEE = "contestee", _("Contestée par la curie")

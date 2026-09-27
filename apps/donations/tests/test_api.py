@@ -240,7 +240,8 @@ def test_imperee_over_http_shows_aggregates_only(world, django_capture_on_commit
     rows = client.get(f"/api/v1/staff/dons/quetes-imperees/{created.json()['id']}/suivi/").json()
     assert rows == [
         {"fund_id": str(parish_fund.pk), "parish_id": str(world.sd.pk), "parish": "Saint-Dominique",
-         "status": "ouvert", "online": child.net_amount, "cash": 0, "count": 1, "total": child.net_amount}
+         "status": "ouvert", "online": child.net_amount, "cash": 0, "count": 1, "total": child.net_amount,
+         "remitted_confirmed": 0, "remitted_declared": 0, "to_remit": 0, "remit_by": "2026-10-04"}
     ]  # fmt: skip
     assert "Diop" not in str(rows)
     listing = client.get(f"/api/v1/staff/dons/quetes-imperees/?node={world.dakar.pk}").json()

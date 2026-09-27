@@ -11,8 +11,19 @@ from apps.donations.enums import (
     DonationStatus,
     FundKind,
     FundStatus,
+    RemittanceMode,
+    RemittanceStatus,
 )
-from apps.donations.models import CashCollection, Donation, DonationActivation, Fund, FundUpdate, Payout
+from apps.donations.models import (
+    CashCollection,
+    CashDeposit,
+    CuriaRemittance,
+    Donation,
+    DonationActivation,
+    Fund,
+    FundUpdate,
+    Payout,
+)
 from apps.donations.selectors import donor_label, fund_updates
 
 PARISH_KINDS = [c for c in FundKind.choices if c[0] != FundKind.QUETE_IMPEREE]
@@ -161,6 +172,32 @@ class ImpereeCreateInputSerializer(serializers.Serializer):
         help_text="Paroisses concernées (défaut : toutes les paroisses du diocèse où la collecte est active)",
     )  # fmt: skip
     authorization_ref = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
+    remit_by = serializers.DateField(
+        required=False, allow_null=True, default=None,
+        help_text="Échéance de remise des espèces à la curie (défaut : sept jours après la quête)",
+    )  # fmt: skip
+
+
+class CashDepositInputSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+    collection_ids = serializers.ListField(child=serializers.IntegerField(), min_length=1,
+                                           help_text="Quêtes validées incluses dans le dépôt")  # fmt: skip
+    deposited_on = serializers.DateField()
+    bank_label = serializers.CharField(max_length=120, help_text="Banque et compte")
+    slip_number = serializers.CharField(max_length=60, help_text="Numéro de bordereau")
+    note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+
+class RemittanceInputSerializer(serializers.Serializer):
+    fund_id = serializers.UUIDField(help_text="Quête impérée de la paroisse (déclinaison paroissiale)")
+    amount = serializers.IntegerField(min_value=1)
+    remitted_on = serializers.DateField()
+    mode = serializers.ChoiceField(choices=RemittanceMode.choices, default=RemittanceMode.ESPECES)
+    reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+
+
+class RemittanceFilterSerializer(NodeQuerySerializer):
+    status = serializers.ChoiceField(choices=RemittanceStatus.choices, required=False)
 
 
 class ActivationInputSerializer(serializers.Serializer):
@@ -392,7 +429,7 @@ class CashCollectionSerializer(serializers.ModelSerializer):
         model = CashCollection
         fields = ["id", "fund", "place", "mass_date", "mass_label", "amount", "counter_one", "counter_two",
                   "observation", "status", "entered_by", "validated_by", "validated_at", "rejection_reason",
-                  "created_at"]  # fmt: skip
+                  "deposit_id", "created_at"]  # fmt: skip
 
     def get_entered_by(self, obj: CashCollection) -> str:
         return _full_name(obj.entered_by)
@@ -425,7 +462,7 @@ class ImpereeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Fund
-        fields = ["id", "title", "description", "starts_on", "ends_on", "status", "authorization_ref",
+        fields = ["id", "title", "description", "starts_on", "ends_on", "remit_by", "status", "authorization_ref",
                   "decided_by_office", "raised", "parishes_count", "created_at"]  # fmt: skip
 
 
@@ -438,6 +475,41 @@ class ImpereeFollowRowSerializer(serializers.Serializer):
     cash = serializers.IntegerField()
     count = serializers.IntegerField()
     total = serializers.IntegerField()
+    remitted_confirmed = serializers.IntegerField(help_text="Espèces remises, réception confirmée par la curie")
+    remitted_declared = serializers.IntegerField(help_text="Remises déclarées, en attente de confirmation")
+    to_remit = serializers.IntegerField(help_text="Espèces restant à remettre")
+    remit_by = serializers.DateField(allow_null=True)
+
+
+class CashDepositSerializer(serializers.ModelSerializer):
+    collections_count = serializers.IntegerField(read_only=True)
+    declared_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CashDeposit
+        fields = ["id", "node_id", "deposited_on", "bank_label", "slip_number", "amount", "note", "collections_count",
+                  "declared_by", "created_at"]  # fmt: skip
+
+    def get_declared_by(self, obj: CashDeposit) -> str:
+        return _full_name(obj.declared_by)
+
+
+class RemittanceSerializer(serializers.ModelSerializer):
+    fund = FundBriefSerializer()
+    parish = serializers.CharField(source="node.name")
+    declared_by = serializers.SerializerMethodField()
+    confirmed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CuriaRemittance
+        fields = ["id", "fund", "node_id", "parish", "amount", "remitted_on", "mode", "reference", "status",
+                  "declared_by", "confirmed_by", "confirmed_at", "rejection_reason", "created_at"]  # fmt: skip
+
+    def get_declared_by(self, obj: CuriaRemittance) -> str:
+        return _full_name(obj.declared_by)
+
+    def get_confirmed_by(self, obj: CuriaRemittance) -> str | None:
+        return _full_name(obj.confirmed_by) if obj.confirmed_by else None
 
 
 class PayoutSerializer(serializers.ModelSerializer):

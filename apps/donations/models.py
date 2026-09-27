@@ -23,6 +23,8 @@ from apps.donations.enums import (
     FundStatus,
     PaymentMethod,
     PayoutStatus,
+    RemittanceMode,
+    RemittanceStatus,
     StatusSource,
     WebhookStatus,
 )
@@ -79,6 +81,8 @@ class Fund(BaseModel):
     decided_by_office = models.CharField(_("office qui décide"), max_length=60, blank=True, default="")
     authorization_ref = models.CharField(_("référence de l'autorisation"), max_length=120, blank=True, default="")
     image = models.ForeignKey("files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Quête impérée : échéance de la remise des espèces à la curie (ex. le dimanche suivant).
+    remit_by = models.DateField(_("à remettre à la curie avant le"), null=True, blank=True)
     # Lieu de culte propre au fonds (campagne de la chapelle) : repris sur les dons en ligne.
     place = models.ForeignKey(
         "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
@@ -146,6 +150,10 @@ class CashCollection(BaseModel):
     )
     validated_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.CharField(max_length=300, blank=True, default="")
+    # Dépôt en banque qui inclut cette quête (une quête n'est déposée qu'une fois).
+    deposit = models.ForeignKey(
+        "donations.CashDeposit", on_delete=models.PROTECT, null=True, blank=True, related_name="collections"
+    )
 
     class Meta:
         verbose_name = _("quête en espèces")
@@ -157,6 +165,61 @@ class CashCollection(BaseModel):
             models.CheckConstraint(
                 condition=Q(validated_by__isnull=True) | ~Q(validated_by=F("entered_by")),
                 name="dons_cash_four_eyes",
+            ),
+        ]
+
+
+class CashDeposit(BaseModel):
+    """Dépôt en banque d'espèces validées (bordereau). Le montant est la somme des quêtes incluses."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="cash_deposits")
+    deposited_on = models.DateField(_("date du dépôt"))
+    bank_label = models.CharField(_("banque et compte"), max_length=120)
+    slip_number = models.CharField(_("numéro de bordereau"), max_length=60)
+    amount = models.PositiveIntegerField(_("montant déposé (FCFA)"))
+    note = models.CharField(_("observation"), max_length=300, blank=True, default="")
+    declared_by = models.ForeignKey("users.BaseUser", on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        verbose_name = _("dépôt d'espèces")
+        verbose_name_plural = _("dépôts d'espèces")
+        ordering = ["-deposited_on", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="dons_deposit_amount_positive"),
+            models.UniqueConstraint(fields=["node", "slip_number"], name="dons_deposit_unique_slip"),
+        ]
+
+
+class CuriaRemittance(BaseModel):
+    """Remise à la curie des espèces d'une quête impérée (c. 1266). Ce n'est pas un don : aucun
+    ``Donation`` n'est créé au diocèse (pas de double compte). Déclarée par la paroisse, confirmée
+    par la curie (une autre personne)."""
+
+    fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="remittances")
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="curia_remittances")
+    amount = models.PositiveIntegerField(_("montant remis (FCFA)"))
+    remitted_on = models.DateField(_("date de la remise"))
+    mode = models.CharField(max_length=15, choices=RemittanceMode.choices, default=RemittanceMode.ESPECES)
+    reference = models.CharField(_("référence (reçu de la curie, virement)"), max_length=120, blank=True, default="")
+    status = models.CharField(
+        max_length=10, choices=RemittanceStatus.choices, default=RemittanceStatus.DECLAREE, db_index=True
+    )
+    declared_by = models.ForeignKey("users.BaseUser", on_delete=models.PROTECT, related_name="+")
+    confirmed_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.CharField(max_length=300, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("remise à la curie")
+        verbose_name_plural = _("remises à la curie")
+        ordering = ["-remitted_on", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="dons_remittance_amount_positive"),
+            models.CheckConstraint(
+                condition=Q(confirmed_by__isnull=True) | ~Q(confirmed_by=F("declared_by")),
+                name="dons_remittance_four_eyes",
             ),
         ]
 

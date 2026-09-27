@@ -71,6 +71,7 @@ EDITABLE_FUND_FIELDS = (
     "title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image", "place",
 )
 MAX_CASH_AMOUNT = 50_000_000
+IMPEREE_REMIT_DAYS = 7
 
 
 class ProviderUnavailable(ApplicationError):
@@ -308,12 +309,17 @@ def imperee_create(
     ends_on: datetime.date | None = None,
     parishes: list[Node] | None = None,
     authorization_ref: str = "",
+    remit_by: datetime.date | None = None,
 ) -> Fund:
     """Quête impérée diocésaine, déclinée en un fonds par paroisse concernée (destination : curie).
 
-    Sans liste de paroisses : toutes les paroisses du diocèse dont la collecte est activée."""
+    Sans liste de paroisses : toutes les paroisses du diocèse dont la collecte est activée.
+    Échéance de remise des espèces à la curie : ``remit_by``, par défaut sept jours après la quête."""
     access.require_diocese(actor, "dons.definir_quete_imperee", diocese)
     _check_period(starts_on, ends_on)
+    remit_by = remit_by or (ends_on or starts_on) + datetime.timedelta(days=IMPEREE_REMIT_DAYS)
+    if remit_by < (ends_on or starts_on):
+        raise ApplicationError("L'échéance de remise suit la quête.", code="invalid_remit_by")
     if parishes is None:
         targets = list(
             Node.objects.filter(
@@ -342,6 +348,7 @@ def imperee_create(
         "decided_by": actor,
         "decided_by_office": office,
         "authorization_ref": authorization_ref,
+        "remit_by": remit_by,
         "status": FundStatus.OUVERT,
         "published_at": timezone.now(),
     }

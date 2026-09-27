@@ -20,10 +20,13 @@ from apps.donations.enums import (
     FundKind,
     FundStatus,
     PayoutStatus,
+    RemittanceStatus,
     WebhookStatus,
 )
 from apps.donations.models import (
     CashCollection,
+    CashDeposit,
+    CuriaRemittance,
     Donation,
     DonationActivation,
     Fund,
@@ -357,7 +360,18 @@ def imperee_get(*, fund_id: UUID | str) -> Fund:
 
 
 def imperee_follow(*, fund: Fund) -> list[dict[str, Any]]:
-    """Par paroisse : en ligne, espèces, nombre de dons. Aucune donnée nominative."""
+    """Par paroisse : en ligne, espèces, nombre de dons, remises à la curie. Aucune donnée nominative.
+
+    Seules les espèces se remettent : la part en ligne est déjà sur le compte de l'économat (H1)."""
+    remittances = {
+        r["fund_id"]: r
+        for r in CuriaRemittance.objects.filter(fund__parent=fund)
+        .values("fund_id")
+        .annotate(
+            confirmed=_sum("amount", Q(status=RemittanceStatus.CONFIRMEE)),
+            declared=_sum("amount", Q(status=RemittanceStatus.DECLAREE)),
+        )
+    }
     rows = (
         Fund.objects.filter(parent=fund)
         .values("id", "node_id", "node__name", "status")
@@ -370,11 +384,56 @@ def imperee_follow(*, fund: Fund) -> list[dict[str, Any]]:
         )  # fmt: skip
         .order_by("node__name")
     )
-    return [
-        {"fund_id": r["id"], "parish_id": r["node_id"], "parish": r["node__name"], "status": r["status"],
-         "online": r["online"], "cash": r["cash"], "count": r["count"], "total": r["online"] + r["cash"]}
-        for r in rows
-    ]  # fmt: skip
+    result = []
+    for r in rows:
+        rem = remittances.get(r["id"], {"confirmed": 0, "declared": 0})
+        result.append(
+            {"fund_id": r["id"], "parish_id": r["node_id"], "parish": r["node__name"], "status": r["status"],
+             "online": r["online"], "cash": r["cash"], "count": r["count"], "total": r["online"] + r["cash"],
+             "remitted_confirmed": rem["confirmed"], "remitted_declared": rem["declared"],
+             "to_remit": max(r["cash"] - rem["confirmed"] - rem["declared"], 0), "remit_by": fund.remit_by}
+        )  # fmt: skip
+    return result
+
+
+# --- Trésorerie : dépôts et remises ---------------------------------------------------------
+
+
+def _deposits() -> QuerySet[CashDeposit]:
+    return CashDeposit.objects.select_related("declared_by__profile").annotate(collections_count=Count("collections"))
+
+
+def cash_deposits_for_parish(*, node: Node) -> QuerySet[CashDeposit]:
+    return _deposits().filter(node=node).order_by("-deposited_on", "-created_at")
+
+
+def cash_deposit_get(*, deposit_id: int) -> CashDeposit:
+    deposit = _deposits().filter(pk=deposit_id).first()
+    if deposit is None:
+        raise NotFoundError("Dépôt introuvable.")
+    return deposit
+
+
+def remittances_for(*, node: Node, status: str | None = None) -> QuerySet[CuriaRemittance]:
+    """Remises d'une paroisse, ou de toutes les paroisses d'un diocèse (``node`` = diocèse)."""
+    qs = CuriaRemittance.objects.filter(node__path__startswith=node.path).select_related(
+        "fund", "node", "declared_by__profile", "confirmed_by__profile"
+    )
+    if status:
+        qs = qs.filter(status=status)
+    return qs.order_by("-remitted_on", "-created_at")
+
+
+def remittance_get(*, remittance_id: int) -> CuriaRemittance:
+    remittance = (
+        CuriaRemittance.objects.select_related("fund__parent__node", "node__type", "declared_by__profile",
+                                               "confirmed_by__profile")  # fmt: skip
+        .filter(pk=remittance_id)
+        .first()
+    )
+    if remittance is None:
+        raise NotFoundError("Remise introuvable.")
+    return remittance
 
 
 def payouts_for_diocese(*, diocese: Node) -> QuerySet[Payout]:
