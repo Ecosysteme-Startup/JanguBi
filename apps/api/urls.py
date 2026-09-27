@@ -41,6 +41,7 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("donations", "me/dons/", "apps.donations.urls_me", "me-dons"),
     ("donations", "staff/dons/", "apps.donations.urls_staff", "staff-dons"),
     ("donations", "platform/dons/", "apps.donations.urls_platform", "platform-dons"),
+    ("audio", "audio/", "apps.audio.urls", "audio"),
 )
 
 

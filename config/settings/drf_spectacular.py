@@ -36,5 +36,16 @@ SPECTACULAR_SETTINGS = {
         'PayoutStatusEnum': 'apps.donations.enums.PayoutStatus',
         'ReconciliationIssueKindEnum': 'apps.donations.serializers.ISSUE_KINDS',
         'ExportFileEnum': 'apps.donations.serializers.EXPORT_FILES',
+        # Sonothèque (plan suite V2, §5).
+        'AudioSourceKindEnum': 'apps.audio.enums.SourceKind',
+        'AudioAlbumKindEnum': 'apps.audio.enums.AlbumKind',
+        'AudioVisibilityEnum': 'apps.audio.enums.Visibility',
+        'AudioTrackStatusEnum': 'apps.audio.enums.TrackStatus',
+        'AudioLanguageEnum': 'apps.audio.enums.Language',
+        'AudioLiturgicalSeasonEnum': 'apps.audio.enums.LiturgicalSeason',
+        'AudioPlayEventKindEnum': 'apps.audio.enums.PlayEventKind',
+        'AudioReportReasonEnum': 'apps.audio.enums.ReportReason',
+        'AudioReportStatusEnum': 'apps.audio.enums.ReportStatus',
+        'AudioReportDecisionEnum': 'apps.audio.serializers.REPORT_DECISIONS',
     },
 }

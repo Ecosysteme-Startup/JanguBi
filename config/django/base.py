@@ -85,6 +85,16 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.donations.tasks.donations_donor_email_purge_task",
         "schedule": crontab(hour=4, minute=20),
     },
+    # Sonothèque (plan suite V2, §5) : recommandations précalculées la nuit (file « reco »),
+    # partitions mensuelles des événements d'écoute créées d'avance et purgées après 13 mois.
+    "audio_reco_recompute": {
+        "task": "apps.audio.tasks.audio_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=5),
+    },
+    "audio_play_event_partitions": {
+        "task": "apps.audio.tasks.audio_play_event_partitions_task",
+        "schedule": crontab(day_of_month=1, hour=1, minute=10),
+    },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
         "schedule": crontab(hour=8, minute=0),
@@ -137,6 +147,7 @@ LOCAL_APPS = [
     "apps.dashboards.apps.DashboardsConfig",
     "apps.contact.apps.ContactConfig",
     "apps.donations.apps.DonationsConfig",
+    "apps.audio.apps.AudioConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -384,6 +395,7 @@ from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa
 from config.settings.dons import *  # noqa
+from config.settings.audio import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
