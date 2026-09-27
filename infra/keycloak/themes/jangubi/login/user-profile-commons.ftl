@@ -1,11 +1,13 @@
 <#-- Surcharge Jàngu Bi de base/login/user-profile-commons.ftl (Keycloak 26.3) — recette A11Y-10 :
      - chaque message d'erreur est relié à son champ (aria-describedby), aria-invalid seulement en erreur ;
      - astérisque de champ obligatoire masqué aux lecteurs d'écran, aria-required sur le champ ;
-     - e-mail en type="email", téléphone en type="tel" (clavier mobile adapté). -->
-<#macro userProfileFormFields>
+     - e-mail en type="email", téléphone en type="tel" (clavier mobile adapté) ;
+     - `skip` : attributs déjà placés à la main par la page (register.ftl). -->
+<#macro userProfileFormFields skip=[]>
 	<#assign currentGroup="">
 	
 	<#list profile.attributes as attribute>
+		<#if skip?seq_contains(attribute.name)><#continue></#if>
 
 		<#if attribute.name=='locale' && realm.internationalizationEnabled && locale.currentLanguageTag?has_content>
 			<input type="hidden" id="${attribute.name}" name="${attribute.name}" value="${locale.currentLanguageTag}"/>

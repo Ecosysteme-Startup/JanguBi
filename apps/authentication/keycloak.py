@@ -4,6 +4,7 @@ Seule authentification de l'API : tout jeton Bearer est validé ici (émetteur, 
 JWKS, audience, expiration) ; un jeton invalide donne 401.
 """
 
+import datetime
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import DatabaseError, IntegrityError, transaction
+from django.utils import timezone
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 
@@ -46,6 +48,8 @@ class KeycloakIdentity:
     claims: dict[str, Any] = field(repr=False, compare=False, hash=False)
     # Attribut de profil Keycloak facultatif « phone » (claim OIDC ``phone_number``), saisi à l'inscription.
     phone_number: str = field(default="", repr=False)
+    # Attribut de profil Keycloak facultatif « birthdate » (claim OIDC ``birthdate``, AAAA-MM-JJ), saisi à l'inscription.
+    birthdate: str = field(default="", repr=False)
 
     @property
     def mfa(self) -> bool:
@@ -138,6 +142,7 @@ def token_validate(token: str) -> KeycloakIdentity:
         acr=str(claims.get("acr", "")),
         claims=claims,
         phone_number=str(claims.get("phone_number") or ""),
+        birthdate=str(claims.get("birthdate") or ""),
     )
 
 
@@ -214,19 +219,50 @@ def phone_from_claim(raw: str) -> str | None:
     return phonenumbers.format_number(number, phonenumbers.PhoneNumberFormat.E164)
 
 
+BIRTHDATE_MIN = datetime.date(1900, 1, 1)
+
+
+def birthdate_from_claim(raw: str, *, today: datetime.date | None = None) -> datetime.date | None:
+    """Date de naissance saisie à l'inscription (claim OIDC ``birthdate``, AAAA-MM-JJ) ;
+    ``None`` si elle est absente, mal formée ou invraisemblable (jamais bloquant)."""
+    try:
+        value = datetime.date.fromisoformat(raw.strip()) if raw and len(raw.strip()) == 10 else None
+    except ValueError:
+        return None
+    if value is None:
+        return None
+    if not BIRTHDATE_MIN <= value <= (today or timezone.localdate()):
+        return None
+    return value
+
+
 def _profile_ensure(person: Any, identity: KeycloakIdentity) -> None:
-    """Profil créé depuis le jeton. Le téléphone du jeton ne remplit qu'un champ vide :
-    une valeur déjà saisie dans l'application n'est jamais écrasée."""
+    """Profil créé depuis le jeton. Le téléphone et la date de naissance du jeton ne remplissent
+    qu'un champ vide : une valeur déjà saisie dans l'application n'est jamais écrasée."""
     from apps.users.models import Profile
 
     phone = phone_from_claim(identity.phone_number)
+    birthdate = birthdate_from_claim(identity.birthdate)
     profile, created = Profile.objects.get_or_create(
         user=person,
-        defaults={"first_name": identity.given_name[:50], "last_name": identity.family_name[:50], "phone": phone},
+        defaults={
+            "first_name": identity.given_name[:50],
+            "last_name": identity.family_name[:50],
+            "phone": phone,
+            "date_of_birth": birthdate,
+        },
     )
-    if not created and phone and not profile.phone:
+    if created:
+        return
+    fields = []
+    if phone and not profile.phone:
         profile.phone = phone
-        profile.save(update_fields=["phone", "updated_at"])
+        fields.append("phone")
+    if birthdate and not profile.date_of_birth:
+        profile.date_of_birth = birthdate
+        fields.append("date_of_birth")
+    if fields:
+        profile.save(update_fields=[*fields, "updated_at"])
 
 
 def user_attach_identity(user: Any, identity: KeycloakIdentity) -> Any:
@@ -237,8 +273,6 @@ def user_attach_identity(user: Any, identity: KeycloakIdentity) -> Any:
 
 def activity_stamp(user: Any, *, mfa: bool) -> None:
     """Dernière activité (et connexion MFA) au jour près ; au plus une écriture par jour."""
-    from django.utils import timezone
-
     today = timezone.localdate()
     fields = {}
     if user.last_seen_on != today:
