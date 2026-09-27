@@ -19,9 +19,10 @@ Backend (Django 5.2, DRF, Channels, Celery) de la V1 de Jàngu Bi, application w
 6. **Demandes d'actes** : de la demande au retrait de l'original.
 7. **Parler à un prêtre** : messagerie temps réel (chiffrement de bout en bout en L6b) et rendez-vous de confession en présentiel.
 8. Tableaux de bord par nœud, journal d'audit, conformité (loi 2008-12).
+9. **Dons et quêtes** (ADR-017, pilote Saint-Dominique) : fonds rattachés à une paroisse, paiement chez un agrégateur agréé BCEAO, quêtes en espèces, quêtes impérées, rapprochement.
 
 ### 1.3 Hors périmètre (gelé)
-Dons, quêtes et paiements ; intentions de messe ; transfert paroissial ; TV ; assistant IA (RAG/Gemini) ; réflexion pastorale ; Liturgie des Heures (jusqu'à un accord AELF) ; chapelet communautaire ; Lectio Divina et plans de lecture ; lettres pastorales ; messagerie inter-clergé (S) ; **confession ou absolution à distance (exclue par l'Église)**.
+Offrandes et honoraires de messe (les dons et quêtes sont réintégrés par l'ADR-017) ; intentions de messe ; transfert paroissial ; TV ; assistant IA (RAG/Gemini) ; réflexion pastorale ; Liturgie des Heures (jusqu'à un accord AELF) ; chapelet communautaire ; Lectio Divina et plans de lecture ; lettres pastorales ; messagerie inter-clergé (S) ; **confession ou absolution à distance (exclue par l'Église)**.
 
 ### 1.4 Définitions
 | Terme | Définition |
@@ -255,22 +256,29 @@ Lire les contenus publics · suivre une paroisse · demander un acte et suivre s
 | `tableau_bord.voir` | Tableau de bord du nœud |
 | `audit.voir` | Journal d'audit du nœud |
 | `plateforme.admin` | Administration Numerisen (hors arbre) |
+| `dons.voir_fonds` | Fonds, synthèse et opérations d'une paroisse (noms masqués) — nomination sur la paroisse même |
+| `dons.gerer_fonds` | Créer, publier, clore les fonds et campagnes ; constater un remboursement |
+| `dons.saisir_quete` | Saisir et valider (seconde personne) les quêtes en espèces |
+| `dons.voir_donateurs` | Nom des donateurs non anonymes |
+| `dons.exporter` | Export comptable et rapprochement de la paroisse |
+| `dons.definir_quete_imperee` | Définir une quête impérée et en suivre les agrégats par paroisse |
 
 ### 6.3 Offices par défaut (profil « Sénégal ») et capacités
 | Office | Nœud | Ordre requis | Card. | Nommé par | Hérite | Capacités |
 |---|---|---|---|---|---|---|
-| `eveque_diocesain` | diocèse | évêque | 1 | plateforme | oui | toutes sauf `plateforme.admin` et `messagerie.recevoir_fideles` |
+| `eveque_diocesain` | diocèse | évêque | 1 | plateforme | oui | toutes sauf `plateforme.admin`, `messagerie.recevoir_fideles` et les capacités `dons.*` (seule `dons.definir_quete_imperee`) |
 | `eveque_auxiliaire` | diocèse | évêque | n | plateforme | oui | `tableau_bord.voir`, `actes.superviser`, `annonces.publier`, `audit.voir` |
 | `vicaire_general` | diocèse, zone | prêtre | n | évêque | oui | `structure.gerer`, `offices.nommer`, `tableau_bord.voir`, `actes.superviser`, `audit.voir` |
 | `chancelier` | diocèse | aucun | 1 | évêque | oui | `structure.gerer`, `offices.nommer`, `personnes.verifier`, `tableau_bord.voir`, `audit.voir` |
 | `delegue_numerique_diocesain` | diocèse | aucun | n | évêque, chancelier | oui | `structure.gerer`, `horaires.gerer`, `tableau_bord.voir` |
-| `econome_diocesain` | diocèse | aucun | 1 | évêque | oui | `tableau_bord.voir` |
+| `econome_diocesain` | diocèse | aucun | 1 | évêque | oui | `tableau_bord.voir`, `dons.definir_quete_imperee` |
 | `doyen` | doyenné | prêtre | 1 | évêque, chancelier | oui | `tableau_bord.voir`, `actes.superviser` |
-| `cure` | paroisse, quasi-paroisse | prêtre | 1 | évêque, chancelier | oui | `horaires.gerer`, `offices.nommer`, `annonces.publier`, `evenements.gerer`, `actes.traiter`, `messagerie.recevoir_fideles`, `confessions.gerer`, `confessions.voir_planning`, `tableau_bord.voir`, `audit.voir` |
+| `cure` | paroisse, quasi-paroisse | prêtre | 1 | évêque, chancelier | oui | `horaires.gerer`, `offices.nommer`, `annonces.publier`, `evenements.gerer`, `actes.traiter`, `messagerie.recevoir_fideles`, `confessions.gerer`, `confessions.voir_planning`, `tableau_bord.voir`, `audit.voir`, `dons.voir_fonds`, `dons.gerer_fonds`, `dons.saisir_quete`, `dons.voir_donateurs`, `dons.exporter` |
+| `econome_paroissial` | paroisse, quasi-paroisse | aucun | 1 | curé | oui | `tableau_bord.voir`, `dons.voir_fonds`, `dons.gerer_fonds`, `dons.saisir_quete`, `dons.voir_donateurs`, `dons.exporter` |
 | `vicaire_paroissial` | paroisse | prêtre | n | évêque, chancelier | oui | `annonces.publier`, `evenements.gerer`, `actes.traiter`, `messagerie.recevoir_fideles`, `confessions.gerer` |
 | `aumonier` | aumônerie | prêtre | 1 | évêque | non | `annonces.publier`, `evenements.gerer`, `messagerie.recevoir_fideles`, `confessions.gerer` |
 | `recteur` | lieu de culte (via nœud) | prêtre | 1 | évêque | non | `horaires.gerer`, `annonces.publier`, `confessions.gerer` |
-| `secretaire_paroissial` | paroisse | aucun | n | curé | oui | `horaires.gerer`, `annonces.publier`, `evenements.gerer`, `actes.traiter`, `confessions.voir_planning`, `tableau_bord.voir` |
+| `secretaire_paroissial` | paroisse | aucun | n | curé | oui | `horaires.gerer`, `annonces.publier`, `evenements.gerer`, `actes.traiter`, `confessions.voir_planning`, `tableau_bord.voir`, `dons.voir_fonds`, `dons.saisir_quete` |
 | `referent_numerique` | paroisse | aucun | n | curé | oui | `horaires.gerer`, `annonces.publier`, `evenements.gerer`, `tableau_bord.voir` |
 | `catechiste` | paroisse, CEB | aucun | n | curé | non | `evenements.gerer` |
 | `responsable_ceb` | CEB | aucun | n | curé | non | `annonces.publier`, `evenements.gerer` |
@@ -307,6 +315,11 @@ Base : `/api/v1/`. JSON, pagination `limit`/`offset`, erreurs `{"error": {"code"
 | Audit | `GET /audit/?node=&actor=&action=&from=&to=` | `audit.voir` / `plateforme.admin` |
 | Contact paroisses | `POST /public/contact/` (formulaire « Pour les paroisses » : nom, fonction, paroisse, diocèse, téléphone, e-mail, message, consentement ; anti-spam et limitation de débit ; notification e-mail à Numerisen) | public |
 | Notifications | `GET /notifications/` · `POST /notifications/read-all/` · `GET/PUT /me/notification-preferences/` | authentifié |
+| Dons — public | `GET /public/dons/paroisses/{id}/` · `GET /public/dons/fonds/{id}/` · `POST /dons/checkout/` (en-tête `Idempotency-Key`) · `GET /dons/checkout/{donation_id}/` · `POST /dons/webhooks/{provider}/` | public (compte facultatif, limité en débit) / agrégateur signé |
+| Dons — fidèle | `GET /me/dons/?fund=&year=` · `GET /me/dons/resume/?year=` · `GET /me/dons/{id}/recu/` | authentifié |
+| Dons — paroisse | `GET/POST /staff/dons/fonds/?node=` · `GET/PATCH /staff/dons/fonds/{id}/` · `POST …/publier/`, `…/clore/`, `…/nouvelles/` · `GET /staff/dons/synthese/?node=&month=` · `GET /staff/dons/operations/?node=` · `POST /staff/dons/operations/{id}/rembourser/` · `GET/POST /staff/dons/quetes/?node=` · `POST …/{id}/valider/`, `…/rejeter/` · `GET /staff/dons/export/?node=&date_from=&date_to=&fichier=csv|xlsx` · `GET /staff/dons/rapprochement/?node=&date_from=&date_to=` | `dons.*` (nomination sur la paroisse) |
+| Dons — diocèse | `GET/POST /staff/dons/quetes-imperees/?node=` · `GET /staff/dons/quetes-imperees/{id}/suivi/` · `GET /staff/dons/reversements/?node=` | `dons.definir_quete_imperee` |
+| Dons — plateforme | `GET /platform/dons/sante/` · `GET/PUT /platform/dons/activations/` | `plateforme.admin` |
 
 ---
 
@@ -326,6 +339,16 @@ annulee                               └──reject(motif obligatoire)──�
 
 ### 8.3 Réservation de confession
 `reservee → honoree | absent` (par le prêtre après le créneau) · `reservee → annulee_fidele` (jusqu'à H-1) · `reservee → annulee_pretre` (avec message).
+
+### 8.4 Don (ADR-017)
+```
+initie ──checkout créé──▶ en_attente ──notification signée + statut relu──▶ confirme ──remboursement──▶ rembourse
+  │                          ├──échec / annulation──▶ echoue
+  │                          └──délai dépassé (réconciliation)──▶ expire
+  └──agrégateur indisponible──▶ echoue
+especes : « confirme » à la validation de la saisie de quête par une seconde personne.
+```
+Transitions strictes et journalisées (`DonationStatusChange`) ; rejeu d'une notification sans double comptage ; paiement réussi après expiration = incident (`late_payment`), pas une confirmation.
 
 ---
 
