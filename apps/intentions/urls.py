@@ -8,6 +8,7 @@ urlpatterns = [
     path("mine/", apis.MyIntentionsApi.as_view(), name="mine"),
     path("parish/", apis.ParishIntentionsApi.as_view(), name="parish"),
     path("parish/messes/", apis.ParishMassesApi.as_view(), name="parish-masses"),
+    path("parish/messes/plafond/", apis.MassCapApi.as_view(), name="parish-mass-cap"),
     path("parish/feuille/", apis.ParishSheetApi.as_view(), name="parish-sheet"),
     path("parish/reglages/", apis.ParishSettingsApi.as_view(), name="parish-settings"),
     path("<uuid:intention_id>/cancel/", apis.IntentionCancelApi.as_view(), name="cancel"),

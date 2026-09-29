@@ -106,12 +106,22 @@ def test_decline_requires_a_reason_and_notifies(world):
 def test_scope_and_validation(world):
     intention_id = ask(world).json()["id"]
     other = client_for(world.secretaire_st)
-    assert other.post(f"/api/v1/mass-intentions/{intention_id}/accept/", {"scheduled_date": "2026-10-04"}, format="json").status_code == 404
+    assert (
+        other.post(
+            f"/api/v1/mass-intentions/{intention_id}/accept/", {"scheduled_date": "2026-10-04"}, format="json"
+        ).status_code
+        == 404
+    )
     assert other.get("/api/v1/mass-intentions/parish/", {"node": str(world.saint_dominique.pk)}).status_code == 403
     assert ask(world, requested_date="2026-09-01").json()["error"]["code"] == "date_past"
     assert ask(world, node=str(world.sainte_therese.pk)).json()["error"]["code"] == "parish_inactive"
     assert ask(world, node=str(world.doyenne.pk)).json()["error"]["code"] == "not_a_parish"
-    assert client_for(world.fidele).get("/api/v1/mass-intentions/parish/", {"node": str(world.saint_dominique.pk)}).status_code == 403
+    assert (
+        client_for(world.fidele)
+        .get("/api/v1/mass-intentions/parish/", {"node": str(world.saint_dominique.pk)})
+        .status_code
+        == 403
+    )
 
 
 @freeze_time(NOW)
@@ -151,7 +161,14 @@ def test_request_without_precise_date(world):
     created = ask(world, requested_date=None)
     assert created.status_code == 201, created.content
     assert created.json()["requested_date"] is None
-    payload = {k: v for k, v in {"node": str(world.saint_dominique.pk), "kind": "particuliere", "intention": "Pour ma famille"}.items()}
+    payload = {
+        k: v
+        for k, v in {
+            "node": str(world.saint_dominique.pk),
+            "kind": "particuliere",
+            "intention": "Pour ma famille",
+        }.items()
+    }
     assert client_for(world.fidele).post("/api/v1/mass-intentions/", payload, format="json").status_code == 201
 
 
@@ -161,16 +178,35 @@ def test_masses_of_day_cap_and_sheet(world):
     staff = client_for(world.secretaire)
     node = str(world.saint_dominique.pk)
     assert staff.get("/api/v1/mass-intentions/parish/reglages/", {"node": node}).json()["max_per_mass"] == 5
-    assert staff.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 0}, format="json").status_code == 400
-    assert staff.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 2}, format="json").json()["max_per_mass"] == 2
+    assert (
+        staff.patch(
+            "/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 0}, format="json"
+        ).status_code
+        == 400
+    )
+    assert (
+        staff.patch(
+            "/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 2}, format="json"
+        ).json()["max_per_mass"]
+        == 2
+    )
 
     ids = [ask(world, intention=f"Intention {i}", is_anonymous=i != 0).json()["id"] for i in range(3)]
-    body = {"scheduled_date": "2026-10-04", "scheduled_time": "10:00", "place_id": place.pk, "scheduled_mass": "Messe de 10 h"}
+    body = {
+        "scheduled_date": "2026-10-04",
+        "scheduled_time": "10:00",
+        "place_id": place.pk,
+        "scheduled_mass": "Messe de 10 h",
+    }
     for intention_id in ids[:2]:
         assert staff.post(f"/api/v1/mass-intentions/{intention_id}/accept/", body, format="json").status_code == 200
     full = staff.post(f"/api/v1/mass-intentions/{ids[2]}/accept/", body, format="json")
     assert full.json()["error"]["code"] == "mass_full"
-    no_place = staff.post(f"/api/v1/mass-intentions/{ids[2]}/accept/", {**body, "place_id": None, "scheduled_time": "08:00"}, format="json")
+    no_place = staff.post(
+        f"/api/v1/mass-intentions/{ids[2]}/accept/",
+        {**body, "place_id": None, "scheduled_time": "08:00"},
+        format="json",
+    )
     assert no_place.json()["error"]["code"] == "place_required"
     # Déplacer une intention déjà retenue sur la même messe ne compte pas deux fois.
     assert staff.post(f"/api/v1/mass-intentions/{ids[0]}/accept/", body, format="json").status_code == 200
@@ -190,4 +226,65 @@ def test_masses_of_day_cap_and_sheet(world):
 
     other = client_for(world.secretaire_st)
     assert other.get("/api/v1/mass-intentions/parish/feuille/", {"node": node, "date": "2026-10-04"}).status_code == 403
-    assert other.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 3}, format="json").status_code == 403
+    assert (
+        other.patch(
+            "/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 3}, format="json"
+        ).status_code
+        == 403
+    )
+
+
+@freeze_time(NOW)
+def test_dynamic_caps_parish_none_and_per_mass_override(world):
+    place = _sunday_masses(world)
+    staff = client_for(world.secretaire)
+    node = str(world.saint_dominique.pk)
+    url_cap = "/api/v1/mass-intentions/parish/messes/plafond/"
+    body = {"scheduled_date": "2026-10-04", "scheduled_time": "10:00", "place_id": place.pk}
+
+    # Paroisse sans plafond.
+    res = staff.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": None}, format="json")
+    assert res.status_code == 200 and res.json()["max_per_mass"] is None
+    assert staff.get("/api/v1/mass-intentions/parish/reglages/", {"node": node}).json()["max_per_mass"] is None
+    ids = [ask(world, intention=f"I{i}").json()["id"] for i in range(4)]
+    for intention_id in ids[:3]:
+        assert staff.post(f"/api/v1/mass-intentions/{intention_id}/accept/", body, format="json").status_code == 200
+    day = staff.get("/api/v1/mass-intentions/parish/messes/", {"node": node, "date": "2026-10-04"}).json()
+    ten = day["masses"][1]
+    assert day["max_per_mass"] is None
+    assert ten["max_intentions"] is None and ten["remaining"] is None and ten["is_full"] is False
+    assert ten["cap_source"] == "paroisse" and ten["intentions_count"] == 3
+
+    # Plafond propre à l'horaire du dimanche 10 h : 3, la 4e est refusée.
+    weekly = {"node": node, "place_id": place.pk, "start_time": "10:00", "weekday": 6, "max_intentions": 3}
+    assert staff.put(url_cap, weekly, format="json").status_code == 200
+    assert (
+        staff.post(f"/api/v1/mass-intentions/{ids[3]}/accept/", body, format="json").json()["error"]["code"]
+        == "mass_full"
+    )
+    ten = staff.get("/api/v1/mass-intentions/parish/messes/", {"node": node, "date": "2026-10-04"}).json()["masses"][1]
+    assert ten["max_intentions"] == 3 and ten["is_full"] and ten["remaining"] == 0 and ten["cap_source"] == "horaire"
+
+    # Messe datée sans plafond : l'emporte sur l'horaire.
+    dated = {"node": node, "place_id": place.pk, "start_time": "10:00", "date": "2026-10-04", "max_intentions": None}
+    assert staff.put(url_cap, dated, format="json").json()["max_intentions"] is None
+    assert staff.post(f"/api/v1/mass-intentions/{ids[3]}/accept/", body, format="json").status_code == 200
+    ten = staff.get("/api/v1/mass-intentions/parish/messes/", {"node": node, "date": "2026-10-04"}).json()["masses"][1]
+    assert ten["cap_source"] == "date" and ten["max_intentions"] is None and not ten["is_full"]
+    assert len(staff.get(url_cap, {"node": node}).json()) == 2
+
+    # Retrait : on revient à l'horaire, puis à la paroisse.
+    assert (
+        staff.delete(f"{url_cap}?node={node}&place_id={place.pk}&start_time=10:00&date=2026-10-04").status_code == 204
+    )
+    ten = staff.get("/api/v1/mass-intentions/parish/messes/", {"node": node, "date": "2026-10-04"}).json()["masses"][1]
+    assert ten["cap_source"] == "horaire" and ten["remaining"] == 0
+    assert staff.delete(f"{url_cap}?node={node}&place_id={place.pk}&start_time=10:00&weekday=6").status_code == 204
+    assert staff.get(url_cap, {"node": node}).json() == []
+
+    # Erreurs et droits.
+    both = {**weekly, "date": "2026-10-04"}
+    assert staff.put(url_cap, both, format="json").json()["error"]["code"] == "weekday_or_date"
+    assert staff.put(url_cap, {**weekly, "max_intentions": 51}, format="json").status_code == 400
+    assert client_for(world.secretaire_st).put(url_cap, weekly, format="json").status_code == 403
+    assert AuditEvent.objects.filter(action="intention.plafond_messe").exists()

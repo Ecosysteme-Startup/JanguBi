@@ -146,8 +146,12 @@ def _file(owner, *, finished=True):
     from apps.files.models import File
 
     return File.objects.create(
-        original_file_name="celebret.pdf", file_name=f"f-{uuid.uuid4()}.pdf", file_type="application/pdf",
-        uploaded_by=owner, upload_finished_at=timezone.now() if finished else None, file="files/celebret.pdf",
+        original_file_name="celebret.pdf",
+        file_name=f"f-{uuid.uuid4()}.pdf",
+        file_type="application/pdf",
+        uploaded_by=owner,
+        upload_finished_at=timezone.now() if finished else None,
+        file="files/celebret.pdf",
     )
 
 
@@ -168,11 +172,15 @@ def test_optional_justificatif_on_invite_and_accept(world):
     )
     assert bad.json()["error"]["code"] == "file_incomplete"
     proof = _file(newcomer)
-    ok = client_for(newcomer).post(f"{BASE}invitations/accept/", {"token": token, "justificatif_id": proof.pk}, format="json")
+    ok = client_for(newcomer).post(
+        f"{BASE}invitations/accept/", {"token": token, "justificatif_id": proof.pk}, format="json"
+    )
     assert ok.status_code == 200 and ok.json()["justificatif"]["id"] == proof.pk
     # Sans pièce : reste facultatif.
     token2 = token_of(invite(world, email="sans@test.sn"))
-    plain = client_for(BaseUserFactory(email="sans@test.sn")).post(f"{BASE}invitations/accept/", {"token": token2}, format="json")
+    plain = client_for(BaseUserFactory(email="sans@test.sn")).post(
+        f"{BASE}invitations/accept/", {"token": token2}, format="json"
+    )
     assert plain.status_code == 200 and plain.json()["justificatif"] is None
 
 
@@ -202,3 +210,50 @@ def test_account_filters_and_validated_list(world):
     platform = client_for(SuperAdminFactory())
     assert platform.get(f"{BASE}", {"diocese": str(world.thies.pk)}).json()["count"] == 1
     assert manager.get(f"{BASE}", {"role": "inconnu"}).status_code == 400
+
+
+def _pending_newcomer(world, email="emmanuel.tine@test.sn", actor=None):
+    token = token_of(invite(world, actor=actor, email=email))
+    newcomer = BaseUserFactory(email=email)
+    assert client_for(newcomer).post(f"{BASE}invitations/accept/", {"token": token}, format="json").status_code == 200
+    return newcomer
+
+
+def test_both_chancellery_and_platform_can_validate(world):
+    """Décision : la chancellerie diocésaine (comptes.valider sur le diocèse) ET l'équipe plateforme
+    valident les comptes du clergé, quel que soit l'auteur de l'invitation."""
+    platform_admin = SuperAdminFactory()
+    platform = client_for(platform_admin)
+    by_chancery = _pending_newcomer(world, "a@test.sn")
+    by_platform = _pending_newcomer(world, "b@test.sn", actor=platform_admin)
+    refused_by_platform = _pending_newcomer(world, "c@test.sn")
+
+    # Les deux voient les comptes en attente du diocèse de Dakar.
+    assert client_for(world.chancelier).get(f"{BASE}pending/").json()["count"] == 3
+    assert platform.get(f"{BASE}pending/").json()["count"] == 3
+
+    # Invité par la plateforme, validé par la chancellerie ; et inversement.
+    assert (
+        client_for(world.chancelier).post(f"{BASE}{by_platform.pk}/validate/").json()["statut_verification"]
+        == "verifie"
+    )
+    ok = platform.post(f"{BASE}{by_chancery.pk}/validate/")
+    assert ok.status_code == 200 and ok.json()["statut_verification"] == "verifie"
+    refused = platform.post(f"{BASE}{refused_by_platform.pk}/refuse/", {"reason": "Pièce illisible"}, format="json")
+    assert refused.json()["statut_verification"] == "rejete"
+    assert platform.post(f"{BASE}{by_chancery.pk}/deactivate/").json()["is_active"] is False
+    by_chancery.refresh_from_db()
+    assert by_chancery.verified_by_id == platform_admin.pk
+    assert AuditEvent.objects.filter(action="compte.validation", actor=platform_admin).exists()
+    assert AuditEvent.objects.filter(action="compte.validation", actor=world.chancelier).exists()
+
+
+def test_validation_refused_outside_diocese_and_without_capability(world):
+    newcomer = _pending_newcomer(world)
+    # Chancellerie d'un autre diocèse : 404 (compte hors périmètre).
+    assert client_for(world.chancelier_thies).post(f"{BASE}{newcomer.pk}/validate/").status_code == 404
+    # Curé sans comptes.valider, simple fidèle : 403.
+    assert client_for(world.cure).post(f"{BASE}{newcomer.pk}/validate/").status_code == 403
+    assert client_for(BaseUserFactory()).post(f"{BASE}{newcomer.pk}/validate/").status_code == 403
+    newcomer.refresh_from_db()
+    assert newcomer.statut_verification == "declare"

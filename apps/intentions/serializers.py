@@ -35,7 +35,38 @@ class DayFilterSerializer(serializers.Serializer):
 
 class SettingsInputSerializer(serializers.Serializer):
     node = serializers.UUIDField(help_text="Paroisse")
-    max_per_mass = serializers.IntegerField(min_value=1, max_value=50)
+    max_per_mass = serializers.IntegerField(
+        min_value=1, max_value=50, allow_null=True, help_text="1 à 50 ; null = pas de plafond"
+    )
+
+
+class MassCapKeySerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+    place_id = serializers.IntegerField(help_text="Lieu de la messe")
+    start_time = serializers.TimeField(help_text="Heure de la messe (10:00)")
+    weekday = serializers.IntegerField(
+        required=False,
+        allow_null=True,
+        min_value=0,
+        max_value=6,
+        help_text="Horaire hebdomadaire : 0 = lundi … 6 = dimanche (exclusif avec date)",
+    )
+    date = serializers.DateField(required=False, allow_null=True, help_text="Messe datée (exclusif avec weekday)")
+
+
+class MassCapInputSerializer(MassCapKeySerializer):
+    max_intentions = serializers.IntegerField(
+        min_value=1, max_value=50, allow_null=True, help_text="1 à 50 ; null = pas de plafond pour cette messe"
+    )
+
+
+class MassCapOutputSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    place_id = serializers.IntegerField()
+    start_time = serializers.TimeField()
+    weekday = serializers.IntegerField(allow_null=True)
+    date = serializers.DateField(allow_null=True)
+    max_intentions = serializers.IntegerField(allow_null=True)
 
 
 class SettingsFilterSerializer(serializers.Serializer):
@@ -137,15 +168,16 @@ class DayMassOutputSerializer(serializers.Serializer):
     language = serializers.CharField()
     note = serializers.CharField()
     intentions_count = serializers.IntegerField()
-    max_intentions = serializers.IntegerField()
-    remaining = serializers.IntegerField()
+    max_intentions = serializers.IntegerField(allow_null=True, help_text="Plafond effectif ; null = sans plafond")
+    cap_source = serializers.ChoiceField(choices=["paroisse", "horaire", "date"], help_text="Origine du plafond")
+    remaining = serializers.IntegerField(allow_null=True, help_text="null = sans plafond")
     is_full = serializers.BooleanField()
 
 
 class DayMassesOutputSerializer(serializers.Serializer):
     node = _RefSerializer()
     date = serializers.DateField()
-    max_per_mass = serializers.IntegerField()
+    max_per_mass = serializers.IntegerField(allow_null=True, help_text="Plafond de la paroisse ; null = sans plafond")
     masses = DayMassOutputSerializer(many=True)
     without_time_count = serializers.IntegerField()
 
@@ -176,4 +208,4 @@ class SheetOutputSerializer(serializers.Serializer):
 
 class SettingsOutputSerializer(serializers.Serializer):
     node = serializers.CharField()
-    max_per_mass = serializers.IntegerField()
+    max_per_mass = serializers.IntegerField(allow_null=True)

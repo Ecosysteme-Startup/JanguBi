@@ -36,9 +36,7 @@ class MassIntention(BaseModel):
     scheduled_mass = models.CharField(_("messe retenue"), max_length=120, blank=True, default="")
     # Heure de la messe retenue (issue des horaires du lieu) : sert au décompte par messe et à la feuille.
     scheduled_time = models.TimeField(_("heure de la messe retenue"), null=True, blank=True)
-    decided_by = models.ForeignKey(
-        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
-    )
+    decided_by = models.ForeignKey("users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     decided_at = models.DateTimeField(null=True, blank=True)
     refusal_reason = models.CharField(_("motif du refus"), max_length=300, blank=True, default="")
     celebrated_at = models.DateTimeField(null=True, blank=True)
@@ -67,19 +65,59 @@ DEFAULT_MAX_PER_MASS = 5
 
 
 class IntentionSettings(BaseModel):
-    """Réglages des intentions d'une paroisse : plafond d'intentions par messe (5 par défaut)."""
+    """Réglages des intentions d'une paroisse : plafond d'intentions par messe (5 par défaut, ``null`` = sans plafond)."""
 
     node = models.OneToOneField("hierarchy.Node", on_delete=models.CASCADE, related_name="intention_settings")
-    max_per_mass = models.PositiveSmallIntegerField(_("intentions par messe au plus"), default=DEFAULT_MAX_PER_MASS)
+    max_per_mass = models.PositiveSmallIntegerField(
+        _("intentions par messe au plus"), default=DEFAULT_MAX_PER_MASS, null=True, blank=True
+    )
 
     class Meta:
         verbose_name = _("réglages des intentions")
         verbose_name_plural = _("réglages des intentions")
         constraints = [
             models.CheckConstraint(
-                condition=Q(max_per_mass__gte=1) & Q(max_per_mass__lte=50), name="intention_settings_max_range"
+                condition=Q(max_per_mass__isnull=True) | (Q(max_per_mass__gte=1) & Q(max_per_mass__lte=50)),
+                name="intention_settings_max_range",
             ),
         ]
 
     def __str__(self) -> str:
         return f"Réglages intentions {self.node_id}"
+
+
+class MassCapOverride(BaseModel):
+    """Plafond propre à une messe : l'horaire hebdomadaire (lieu, jour, heure) ou une messe datée
+    (lieu, date, heure). ``max_intentions`` à ``null`` = pas de plafond pour cette messe.
+    Priorité : messe datée, puis horaire hebdomadaire, puis réglage de la paroisse."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.CASCADE, related_name="mass_cap_overrides")
+    place = models.ForeignKey("hierarchy.PlaceOfWorship", on_delete=models.CASCADE, related_name="mass_cap_overrides")
+    start_time = models.TimeField(_("heure"))
+    weekday = models.PositiveSmallIntegerField(_("jour (0 = lundi)"), null=True, blank=True)
+    date = models.DateField(_("date"), null=True, blank=True)
+    max_intentions = models.PositiveSmallIntegerField(_("intentions au plus"), null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("plafond d'une messe")
+        verbose_name_plural = _("plafonds des messes")
+        constraints = [
+            models.CheckConstraint(
+                condition=(Q(weekday__isnull=True) & Q(date__isnull=False))
+                | (Q(weekday__isnull=False) & Q(date__isnull=True) & Q(weekday__lte=6)),
+                name="mass_cap_weekday_xor_date",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_intentions__isnull=True) | (Q(max_intentions__gte=1) & Q(max_intentions__lte=50)),
+                name="mass_cap_range",
+            ),
+            models.UniqueConstraint(
+                fields=["place", "weekday", "start_time"], condition=Q(date__isnull=True), name="mass_cap_unique_weekly"
+            ),
+            models.UniqueConstraint(
+                fields=["place", "date", "start_time"], condition=Q(date__isnull=False), name="mass_cap_unique_dated"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Plafond {self.place_id} {self.date or self.weekday} {self.start_time}"

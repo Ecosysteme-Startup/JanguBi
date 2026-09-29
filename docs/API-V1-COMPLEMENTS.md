@@ -218,7 +218,7 @@ l'offrande de messe se remet directement au secrétariat de la paroisse. »
   `intention.refusee`, `intention.celebree` au fidèle. Journal : `intention.demande`, `.annulation`,
   `.planification`, `.refus`, `.celebration`.
 
-## 5. Compléments demandés par le web (migrations `intentions.0002`, `invitations.0002`)
+## 5. Compléments demandés par le web (migrations `intentions.0002`, `intentions.0003`, `invitations.0002`)
 
 ### 5.1 Recherche : résultats Bible
 
@@ -237,14 +237,17 @@ lecteur au bon verset.
 | `GET mass-intentions/parish/messes/?node=&date=` | `intentions.gerer` | `DayMasses` |
 | `GET mass-intentions/parish/feuille/?node=&date=` | `intentions.gerer` | `Sheet` (imprimable) |
 | `GET mass-intentions/parish/reglages/?node=` | `intentions.gerer` | `{"node", "max_per_mass"}` |
-| `PATCH mass-intentions/parish/reglages/` | `intentions.gerer` | `{"node", "max_per_mass": 1..50}` → idem |
+| `PATCH mass-intentions/parish/reglages/` | `intentions.gerer` | `{"node", "max_per_mass": 1..50 ou null}` → idem |
+| `GET mass-intentions/parish/messes/plafond/?node=` | `intentions.gerer` | liste de `MassCap` |
+| `PUT mass-intentions/parish/messes/plafond/` | `intentions.gerer` | `MassCapInput` → `MassCap` (crée ou remplace) |
+| `DELETE mass-intentions/parish/messes/plafond/?node=&place_id=&start_time=&weekday=` ou `&date=` | `intentions.gerer` | 204 |
 
 ```json
 // GET mass-intentions/parish/messes/?node=…&date=2026-10-04
 {"node": {"id": "uuid", "name": "Saint-Dominique"}, "date": "2026-10-04", "max_per_mass": 5,
  "masses": [{"place_id": 12, "place_name": "Église Saint-Dominique", "start_time": "10:00:00",
              "label": "Messe de 10 h", "language": "fr", "note": "", "intentions_count": 2,
-             "max_intentions": 5, "remaining": 3, "is_full": false}],
+             "max_intentions": 5, "cap_source": "paroisse", "remaining": 3, "is_full": false}],
  "without_time_count": 0}
 // GET mass-intentions/parish/feuille/?node=…&date=2026-10-04
 {"node": {…}, "date": "2026-10-04",
@@ -261,8 +264,21 @@ lecteur au bon verset.
   lieu est obligatoire (`place_id` ou lieu de la demande, sinon `place_required`) et le plafond
   s'applique (`mass_full`, l'intention déplacée elle-même n'est pas comptée). Sans heure, l'intention
   reste possible et figure dans `other_intentions` / `without_time_count`.
-- Plafond : 5 par défaut (`IntentionSettings`), réglable de 1 à 50 (`max_invalid` hors bornes ;
-  journal `intention.reglages`). La réponse `MassIntention` porte aussi `scheduled_time`.
+- Plafond **dynamique** (migration `intentions.0003`), résolu pour chaque messe dans cet ordre :
+  1. plafond de la **messe datée** (lieu, `date`, heure) ;
+  2. plafond de l'**horaire hebdomadaire** (lieu, `weekday` 0 = lundi … 6 = dimanche, heure — l'horaire
+     `MassSchedule` correspondant) ;
+  3. réglage de la **paroisse** (`IntentionSettings.max_per_mass`, 5 sans réglage).
+  Chaque niveau vaut 1 à 50 ou `null` = **pas de plafond** (`max_invalid` hors bornes). Dans
+  `parish/messes/` et la feuille : `max_intentions` (plafond effectif, `null` possible), `cap_source`
+  (`date`, `horaire`, `paroisse`), `remaining` (`null` sans plafond), `is_full` (toujours `false` sans
+  plafond) ; `max_per_mass` (paroisse) peut valoir `null`. `accept` avec `scheduled_time` applique le
+  plafond effectif (`mass_full`). Journal : `intention.reglages`, `intention.plafond_messe`.
+- `MassCapInput` : `{"node", "place_id", "start_time": "10:00", "weekday": 6 | null, "date": "2026-10-04" | null,
+  "max_intentions": 1..50 | null}` — exactement l'un de `weekday` / `date` (`weekday_or_date`) ; lieu de
+  la paroisse (`place_outside`). `MassCap` : `{"id", "place_id", "start_time", "weekday", "date",
+  "max_intentions"}`. `DELETE` retire le plafond propre (le niveau suivant s'applique de nouveau).
+- La réponse `MassIntention` porte aussi `scheduled_time`.
 - Feuille : texte des intentions et nom à annoncer (« Une personne » si anonyme), **jamais de
   montant** (il n'en existe aucun). 403 `intentions_forbidden` hors de mes paroisses.
 
@@ -285,6 +301,12 @@ lecteur au bon verset.
 | `GET clergy-accounts/pending/?diocese=&role=&node=&q=` | `comptes.valider` | comptes en attente |
 
 `statut` : `declare`, `verifie`, `rejete`, `complement`, ou `en_attente` (déclaré + complément demandé).
+
+**Qui valide** : la **chancellerie diocésaine** (chancelier, vicaire général, évêque diocésain :
+`comptes.valider` sur le diocèse, sous-arbre compris) **et l'équipe plateforme** (rôle
+`platform_admin`, `comptes.valider` partout) peuvent inviter, valider, refuser, activer et désactiver, quel
+que soit l'auteur de l'invitation. Hors de son diocèse : 404 ; sans `comptes.valider` : 403 ; jamais
+son propre compte (`self_action`). `verified_by` et le journal gardent qui a décidé.
 
 ## 6. Indicateurs à basculer côté fronts
 
