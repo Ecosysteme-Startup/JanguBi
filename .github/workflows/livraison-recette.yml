@@ -18,7 +18,7 @@
 #
 # Secrets requis : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, INFRA_DISPATCH_TOKEN
 # Variables      : INFRA_REPO (défaut Ecosysteme-Startup/Infrastructure),
-#                  IMAGE_REPO (défaut soszaboss/jangubi-api)
+#                  IMAGE_REPO (défaut soszaboss/jangubi-backend)
 #
 # --- Runners : TOUT sur `ceac` -------------------------------------------------
 # Plan gratuit, facturation refusée : pas de runner hébergé par GitHub. Mêmes
@@ -44,7 +44,7 @@ env:
   INFRA_REPO: ${{ vars.INFRA_REPO || 'Ecosysteme-Startup/Infrastructure' }}
   # Doit être le dépôt déclaré dans Infrastructure envs/*/versions.env
   # (JANGUBI_API_IMAGE) : une autre valeur est refusée à la livraison.
-  IMAGE_REPO: ${{ vars.IMAGE_REPO || 'soszaboss/jangubi-api' }}
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || 'soszaboss/jangubi-backend' }}
 
 # Sur `stage`, une livraison en cours n'est jamais annulée.
 concurrency:
