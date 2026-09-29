@@ -4272,6 +4272,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ParoisseSuivieOutput'
           description: ''
+  /api/v1/me/presence/:
+    get:
+      operationId: me_presence_get
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mon réglage « montrer ma présence »
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresenceSetting'
+          description: ''
+    put:
+      operationId: me_presence_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Changer mon réglage « montrer ma présence »
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresenceSetting'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PresenceSetting'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PresenceSetting'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresenceSetting'
+          description: ''
   /api/v1/me/ws-ticket/:
     post:
       operationId: v1_me_ws_ticket_create
@@ -4797,6 +4840,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationOutput'
+          description: ''
+  /api/v1/messaging/presence/:
+    get:
+      operationId: messaging_presence
+      description: À placer en premier dans les bases des vues V1.
+      summary: Présence de mes interlocuteurs (en ligne, vu à) ; les autres identifiants
+        sont ignorés
+      parameters:
+      - in: query
+        name: users
+        schema:
+          type: string
+        description: UUID séparés par des virgules
+        required: true
+      tags:
+      - messaging
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PresenceOutput'
           description: ''
   /api/v1/messaging/priests/:
     get:
@@ -6804,6 +6873,51 @@ paths:
                 type: string
                 format: binary
           description: ''
+  /api/v1/staff/dons/flux/:
+    get:
+      operationId: staff_dons_flux
+      description: 'text/event-stream. Battement « : ping » toutes les 15 s, champ
+        retry, reprise par l''en-tête Last-Event-ID. Protocole : docs/TEMPS-REEL.md.'
+      summary: Flux SSE des tableaux de bord (dons.operation, dons.synthese_invalidee)
+      parameters:
+      - in: header
+        name: Last-Event-ID
+        schema:
+          type: string
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - sse
+      - in: query
+        name: noeud
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (flux complet) ou diocèse (invalidations seulement).
+        required: true
+      - in: query
+        name: ticket
+        schema:
+          type: string
+        description: Ticket à usage unique (EventSource natif)
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      - sseTicket: []
+      responses:
+        '200':
+          content:
+            text/event-stream:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: string
+          description: text/event-stream
   /api/v1/staff/dons/fonds/:
     get:
       operationId: staff_dons_funds_list
@@ -11687,6 +11801,9 @@ components:
         email:
           type: boolean
           title: Par e-mail
+        push:
+          type: boolean
+          title: Sur le téléphone (push)
         topic_annonces:
           type: boolean
           title: Annonces de ma paroisse
@@ -13225,6 +13342,46 @@ components:
       - text
       - type
       - type_display
+    PresenceOutput:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        visible:
+          type: boolean
+          description: 'Faux : la personne ne montre pas sa présence.'
+        online:
+          type: boolean
+          nullable: true
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: « Vu à », seulement hors ligne.
+      required:
+      - last_seen_at
+      - online
+      - user_id
+      - visible
+    PresenceSetting:
+      type: object
+      properties:
+        montrer_presence:
+          type: boolean
+          nullable: true
+          description: 'null : revenir au réglage par défaut (oui pour le clergé et
+            le staff).'
+        effective:
+          type: boolean
+          readOnly: true
+        default:
+          type: boolean
+          readOnly: true
+      required:
+      - default
+      - effective
+      - montrer_presence
     PresentationRequestInput:
       type: object
       properties:
@@ -15427,3 +15584,9 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Jeton d'accès Keycloak (realm jangubi, audience jangubi-api).
+    sseTicket:
+      type: apiKey
+      in: query
+      name: ticket
+      description: Ticket à usage unique de POST /api/v1/me/ws-ticket/ (EventSource
+        natif).

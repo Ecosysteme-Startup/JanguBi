@@ -30,3 +30,13 @@ services:
     build:
       dockerfile: docker/production.Dockerfile
     volumes: !reset []
+
+  celery-media:
+    build:
+      dockerfile: docker/production.Dockerfile
+    volumes: !reset []
+
+  celery-reco:
+    build:
+      dockerfile: docker/production.Dockerfile
+    volumes: !reset []

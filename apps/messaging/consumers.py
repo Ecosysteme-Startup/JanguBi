@@ -1,14 +1,63 @@
+import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
 
 
 def _payload(event: dict) -> dict:
     return {k: v for k, v in event.items() if k != "type"}
 
 
-class ConversationConsumer(AsyncJsonWebsocketConsumer):
+class PresenceMixin:
+    """Présence (docs/TEMPS-REEL.md) : chaque socket authentifiée compte une connexion ; le
+    client envoie ``{"type": "presence.ping"}`` toutes les 25 s pour la garder vivante."""
+
+    _presence_counted = False
+    user: Any
+    send_json: Callable[..., Awaitable[None]]
+
+    # La présence est un confort : une panne du cache ne doit jamais fermer la socket.
+    async def presence_join(self, user) -> None:
+        from apps.messaging.services_presence import presence_connect
+
+        try:
+            await database_sync_to_async(presence_connect)(user=user)
+            self._presence_counted = True
+        except Exception:  # noqa: BLE001
+            logger.warning("presence.connect_failed", exc_info=True)
+
+    async def presence_leave(self) -> None:
+        if not self._presence_counted:
+            return
+        from apps.messaging.services_presence import presence_disconnect
+
+        self._presence_counted = False
+        try:
+            await database_sync_to_async(presence_disconnect)(user=self.user)
+        except Exception:  # noqa: BLE001
+            logger.warning("presence.disconnect_failed", exc_info=True)
+
+    async def presence_ping(self) -> None:
+        from apps.messaging.services_presence import presence_heartbeat
+
+        try:
+            await database_sync_to_async(presence_heartbeat)(user=self.user)
+        except Exception:  # noqa: BLE001
+            logger.warning("presence.heartbeat_failed", exc_info=True)
+        await self.send_json({"type": "presence.pong"})
+
+    # Diffusé aux interlocuteurs par services_presence.presence_broadcast.
+    async def presence_changed(self, event: dict):
+        await self.send_json({**_payload(event), "type": "presence.changed"})
+
+
+class ConversationConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
     async def connect(self):
         user = self.scope.get("user")
         if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
@@ -27,11 +76,13 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        await self.presence_join(user)
         await self._mark_read()
 
     async def disconnect(self, close_code):
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        await self.presence_leave()
 
     async def receive_json(self, content, **kwargs):
         msg_type = content.get("type")
@@ -41,6 +92,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             "message.react": self.handle_react,
             "typing.start": self.handle_typing_start,
             "typing.stop": self.handle_typing_stop,
+            "presence.ping": self.handle_presence_ping,
         }
         handler = handlers.get(msg_type)
         if handler:
@@ -85,6 +137,9 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
             await database_sync_to_async(svc)(message=message, user=self.user, emoji=emoji)
         except Exception as exc:
             await self.send_json({"type": "error", "detail": str(exc)})
+
+    async def handle_presence_ping(self, content: dict):
+        await self.presence_ping()
 
     async def handle_typing_start(self, content: dict):
         cache.set(f"typing:{self.conversation.id}:{self.user.id}", 1, timeout=8)
@@ -137,7 +192,7 @@ class ConversationConsumer(AsyncJsonWebsocketConsumer):
         message_mark_read(conversation=self.conversation, reader=self.user)
 
 
-class NotificationConsumer(AsyncJsonWebsocketConsumer):
+class NotificationConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
     async def connect(self):
         user = self.scope.get("user")
         if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
@@ -149,14 +204,18 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
+        await self.presence_join(user)
 
     async def disconnect(self, close_code):
         if hasattr(self, "group_name"):
             await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        await self.presence_leave()
 
     async def receive_json(self, content, **kwargs):
         if content.get("type") == "notification.read":
             await self._mark_notification_read(content.get("notification_id"))
+        elif content.get("type") == "presence.ping":
+            await self.presence_ping()
 
     async def notification_push(self, event: dict):
         # `event["type"]` = "notification.push" (clé de dispatch Channels) : le

@@ -40,6 +40,8 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("donations", "public/dons/", "apps.donations.urls_public", "public-dons"),
     ("donations", "me/dons/", "apps.donations.urls_me", "me-dons"),
     ("donations", "staff/dons/", "apps.donations.urls_staff", "staff-dons"),
+    # Flux SSE des tableaux de bord (lot B2, docs/TEMPS-REEL.md).
+    ("donations", "staff/dons/flux/", "apps.realtime.urls_dons", "staff-dons-flux"),
     ("donations", "platform/dons/", "apps.donations.urls_platform", "platform-dons"),
     ("audio", "audio/", "apps.audio.urls", "audio"),
 )

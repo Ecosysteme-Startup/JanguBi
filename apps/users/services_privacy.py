@@ -184,11 +184,13 @@ def _anonymize_identity(user: Any) -> str | None:
     user.paroisse_suivie = None
     user.last_seen_on = None
     user.last_mfa_on = None
+    user.last_seen_at = None
+    user.montrer_presence = None
     user.set_unusable_password()
     user.save(
         update_fields=[
             "is_active", "email", "phone_number", "keycloak_sub", "paroisse_suivie", "last_seen_on",
-            "last_mfa_on", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
+            "last_mfa_on", "last_seen_at", "montrer_presence", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
             "password", "updated_at",
         ]
     )  # fmt: skip
