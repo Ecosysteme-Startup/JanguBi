@@ -261,17 +261,18 @@ Lire les contenus publics · suivre une paroisse · demander un acte et suivre s
 | `dons.saisir_quete` | Saisir et valider (seconde personne) les quêtes en espèces |
 | `dons.voir_donateurs` | Nom des donateurs non anonymes |
 | `dons.exporter` | Export comptable et rapprochement de la paroisse |
-| `dons.definir_quete_imperee` | Définir une quête impérée et en suivre les agrégats par paroisse |
+| `dons.definir_quete_imperee` | Définir une quête impérée et en suivre les agrégats par paroisse ; confirmer les remises à la curie |
+| `dons.voir_agregats` | Agrégats des dons des paroisses d'un diocèse ou d'un doyenné (`staff/dons/analyse/?niveau=diocese`) : montants arrondis au millier, aucun nom, ordre alphabétique (V2, 27/09/2026) |
 
 ### 6.3 Offices par défaut (profil « Sénégal ») et capacités
 | Office | Nœud | Ordre requis | Card. | Nommé par | Hérite | Capacités |
 |---|---|---|---|---|---|---|
-| `eveque_diocesain` | diocèse | évêque | 1 | plateforme | oui | toutes sauf `plateforme.admin`, `messagerie.recevoir_fideles` et les capacités `dons.*` (seule `dons.definir_quete_imperee`) |
+| `eveque_diocesain` | diocèse | évêque | 1 | plateforme | oui | toutes sauf `plateforme.admin`, `messagerie.recevoir_fideles` et les capacités `dons.*` (seules `dons.definir_quete_imperee` et `dons.voir_agregats`) |
 | `eveque_auxiliaire` | diocèse | évêque | n | plateforme | oui | `tableau_bord.voir`, `actes.superviser`, `annonces.publier`, `audit.voir` |
 | `vicaire_general` | diocèse, zone | prêtre | n | évêque | oui | `structure.gerer`, `offices.nommer`, `tableau_bord.voir`, `actes.superviser`, `audit.voir` |
 | `chancelier` | diocèse | aucun | 1 | évêque | oui | `structure.gerer`, `offices.nommer`, `personnes.verifier`, `tableau_bord.voir`, `audit.voir` |
 | `delegue_numerique_diocesain` | diocèse | aucun | n | évêque, chancelier | oui | `structure.gerer`, `horaires.gerer`, `tableau_bord.voir` |
-| `econome_diocesain` | diocèse | aucun | 1 | évêque | oui | `tableau_bord.voir`, `dons.definir_quete_imperee` |
+| `econome_diocesain` | diocèse | aucun | 1 | évêque | oui | `tableau_bord.voir`, `dons.definir_quete_imperee`, `dons.voir_agregats` |
 | `doyen` | doyenné | prêtre | 1 | évêque, chancelier | oui | `tableau_bord.voir`, `actes.superviser` |
 | `cure` | paroisse, quasi-paroisse | prêtre | 1 | évêque, chancelier | oui | `horaires.gerer`, `offices.nommer`, `annonces.publier`, `evenements.gerer`, `actes.traiter`, `messagerie.recevoir_fideles`, `confessions.gerer`, `confessions.voir_planning`, `tableau_bord.voir`, `audit.voir`, `dons.voir_fonds`, `dons.gerer_fonds`, `dons.saisir_quete`, `dons.voir_donateurs`, `dons.exporter` |
 | `econome_paroissial` | paroisse, quasi-paroisse | aucun | 1 | curé | oui | `tableau_bord.voir`, `dons.voir_fonds`, `dons.gerer_fonds`, `dons.saisir_quete`, `dons.voir_donateurs`, `dons.exporter` |

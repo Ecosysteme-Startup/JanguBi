@@ -81,6 +81,10 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.donations.tasks.donations_payouts_sync_task",
         "schedule": crontab(hour=5, minute=10),
     },
+    "donations_month_close": {
+        "task": "apps.donations.tasks.donations_month_close_task",
+        "schedule": crontab(hour=3, minute=40),
+    },
     "donations_donor_email_purge": {
         "task": "apps.donations.tasks.donations_donor_email_purge_task",
         "schedule": crontab(hour=4, minute=20),

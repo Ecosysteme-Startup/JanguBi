@@ -11,6 +11,7 @@ Keycloak dit **qui** est connecté ; l'application dit **ce qu'il peut faire, o�
 | Élément | Réglage |
 |---|---|
 | Client `jangubi-web` | public, Authorization Code + **PKCE S256**, pas de flux implicite ni direct grant ; redirection **exacte** vers le rappel Auth.js (`/api/auth/callback/keycloak`, jamais de joker) ; mapper d'audience ajoutant `jangubi-api` à `aud` ; mapper `amr` |
+| Client `jangubi-mobile` (V2, 27/09/2026) | app iOS et Android : public, Authorization Code + **PKCE S256** dans le navigateur système (RFC 8252), pas de flux implicite ni direct grant ; redirection **exacte** `sn.numerisen.jangubi://oauth` (`KC_MOBILE_REDIRECT_URI`) ; mêmes mappers (audience `jangubi-api`, `amr`, téléphone, date de naissance) ; ajouté à `KEYCLOAK_ALLOWED_CLIENTS` (claim `azp`) |
 | Client `jangubi-api` | bearer-only (aucune connexion) : c'est l'**audience** attendue par l'API |
 | Client `jangubi-admin-sync` | confidentiel, compte de service seulement, rôles `realm-management` : `view-users`, `manage-users`, `view-realm` (synchronisation du rôle `staff`, migration des comptes) |
 | Rôles | `fidele` (rôle par défaut), `staff`, `platform_admin` |

@@ -25,13 +25,16 @@ from apps.donations import access
 from apps.donations.enums import (
     DONATION_TRANSITIONS,
     PARISH_TYPES,
+    AdjustmentKind,
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundDestination,
     FundKind,
     FundStatus,
+    IncidentKind,
     PaymentMethod,
     PayoutStatus,
     StatusSource,
@@ -41,10 +44,13 @@ from apps.donations.models import (
     CashCollection,
     Donation,
     DonationActivation,
+    DonationAdjustment,
     DonationStatusChange,
     Fund,
     FundUpdate,
+    MonthClosing,
     PaymentAttempt,
+    PaymentIncident,
     PaymentWebhookEvent,
     Payout,
     PayoutLine,
@@ -66,8 +72,11 @@ from apps.hierarchy.models import Node, PlaceOfWorship
 
 logger = logging.getLogger(__name__)
 
-EDITABLE_FUND_FIELDS = ("title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image")
+EDITABLE_FUND_FIELDS = (
+    "title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image", "place",
+)
 MAX_CASH_AMOUNT = 50_000_000
+IMPEREE_REMIT_DAYS = 7
 
 
 class ProviderUnavailable(ApplicationError):
@@ -183,6 +192,7 @@ def fund_create(
     goal_amount: int | None = None,
     authorization_ref: str = "",
     image: Any = None,
+    place: PlaceOfWorship | None = None,
 ) -> Fund:
     access.require_parish_level(actor, "dons.gerer_fonds", node)
     if kind == FundKind.QUETE_IMPEREE:
@@ -191,6 +201,7 @@ def fund_create(
         raise ApplicationError("Type de fonds inconnu.", code="invalid_kind")
     _check_period(starts_on, ends_on)
     _check_image(image)
+    _check_place(place, node)
     fund = Fund.objects.create(
         node=node,
         kind=kind,
@@ -204,6 +215,7 @@ def fund_create(
         decided_by_office=access.office_code_for(actor, "dons.gerer_fonds", node),
         authorization_ref=authorization_ref,
         image=image,
+        place=place,
     )
     audit_log(actor=actor, action="dons.fonds_creation", target=fund, node=node, metadata={"kind": kind})
     return fund
@@ -212,6 +224,11 @@ def fund_create(
 def _check_period(starts_on: datetime.date | None, ends_on: datetime.date | None) -> None:
     if starts_on and ends_on and ends_on < starts_on:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_period")
+
+
+def _check_place(place: PlaceOfWorship | None, node: Node) -> None:
+    if place is not None and (place.node_id != node.pk or not place.is_active):
+        raise ApplicationError("Ce lieu n'appartient pas à la paroisse.", code="place_outside")
 
 
 def _check_image(image: Any) -> None:
@@ -236,6 +253,8 @@ def fund_update(*, fund: Fund, actor: Any, **fields: Any) -> Fund:
     _check_period(fields.get("starts_on", fund.starts_on), fields.get("ends_on", fund.ends_on))
     if "image" in fields:
         _check_image(fields["image"])
+    if "place" in fields:
+        _check_place(fields["place"], fund.node)
     if "goal_amount" in fields and fund.kind != FundKind.CAMPAGNE:
         fields["goal_amount"] = None
     for name, value in fields.items():
@@ -295,12 +314,20 @@ def imperee_create(
     ends_on: datetime.date | None = None,
     parishes: list[Node] | None = None,
     authorization_ref: str = "",
+    remit_by: datetime.date | None = None,
+    messe_anticipee_incluse: bool = False,
 ) -> Fund:
     """Quête impérée diocésaine, déclinée en un fonds par paroisse concernée (destination : curie).
 
-    Sans liste de paroisses : toutes les paroisses du diocèse dont la collecte est activée."""
+    Sans liste de paroisses : toutes les paroisses du diocèse dont la collecte est activée.
+    Échéance de remise des espèces à la curie : ``remit_by``, par défaut sept jours après la quête.
+    ``messe_anticipee_incluse`` : la quête de la messe anticipée de la veille au soir en fait partie
+    (décision du diocèse, quête par quête)."""
     access.require_diocese(actor, "dons.definir_quete_imperee", diocese)
     _check_period(starts_on, ends_on)
+    remit_by = remit_by or (ends_on or starts_on) + datetime.timedelta(days=IMPEREE_REMIT_DAYS)
+    if remit_by < (ends_on or starts_on):
+        raise ApplicationError("L'échéance de remise suit la quête.", code="invalid_remit_by")
     if parishes is None:
         targets = list(
             Node.objects.filter(
@@ -329,6 +356,8 @@ def imperee_create(
         "decided_by": actor,
         "decided_by_office": office,
         "authorization_ref": authorization_ref,
+        "remit_by": remit_by,
+        "messe_anticipee_incluse": messe_anticipee_incluse,
         "status": FundStatus.OUVERT,
         "published_at": timezone.now(),
     }
@@ -368,13 +397,20 @@ def checkout_create(
     donor: Any = None,
     donor_email: str = "",
     idempotency_key: str = "",
+    source: str = DonationSource.INCONNU,
+    place: PlaceOfWorship | None = None,
 ) -> tuple[Donation, PaymentAttempt, bool]:
     """Crée le don (``initie``) et la session de paiement chez l'agrégateur (``en_attente``).
 
     L'appel à l'agrégateur a lieu hors transaction ; un échec passe le don en ``echoue``.
     Une même clé d'idempotence renvoie le même don (double clic, reprise réseau) ; le booléen
-    dit si le don vient d'être créé."""
+    dit si le don vient d'être créé.
+
+    ``source`` : canal d'entrée déclaré par la page de don (``?src=``) ; ``place`` : lieu de culte
+    (QR code affiché dans le lieu), sinon celui du fonds."""
     amount = _check_amount(amount)
+    if source not in DonationSource.values:
+        source = DonationSource.INCONNU
     donor = donor if getattr(donor, "is_authenticated", False) else None
     if idempotency_key:
         existing = PaymentAttempt.objects.select_related("donation").filter(idempotency_key=idempotency_key).first()
@@ -383,6 +419,7 @@ def checkout_create(
                 raise ConflictError("Cette clé d'idempotence a déjà servi pour un autre don.", code="idempotency_conflict")
             return existing.donation, existing, False
     activation = _check_fund_open(fund)
+    _check_place(place, fund.node)
     provider = get_provider()
     fee, charged, net = fees_compute(amount=amount, fees_covered=fees_covered)
     try:
@@ -399,6 +436,8 @@ def checkout_create(
                 donor=donor,
                 donor_email="" if donor else (donor_email or "").strip().lower(),
                 channel=DonationChannel.EN_LIGNE,
+                source=source,
+                place_id=place.pk if place is not None else fund.place_id,
                 status=DonationStatus.INITIE,
                 status_changed_at=timezone.now(),
             )
@@ -444,6 +483,15 @@ def checkout_create(
     return donation, attempt, True
 
 
+def donation_mark_returned(*, donation: Donation) -> Donation:
+    """Premier retour du donateur sur la page de statut (santé du lien de retour). Idempotent."""
+    if donation.returned_at is None:
+        now = timezone.now()
+        if Donation.objects.filter(pk=donation.pk, returned_at__isnull=True).update(returned_at=now):
+            donation.returned_at = now
+    return donation
+
+
 # --- Machine à états ------------------------------------------------------------------------
 
 
@@ -469,6 +517,9 @@ def donation_transition(
     if to == DonationStatus.CONFIRME:
         locked.confirmed_at = now
         fields.append("confirmed_at")
+        if locked.value_date is None:
+            locked.value_date = timezone.localdate(now)
+            fields.append("value_date")
         if locked.channel == DonationChannel.EN_LIGNE and not locked.receipt_number:
             fund_node = Fund.objects.select_related("node").get(pk=locked.fund_id).node
             locked.receipt_number = _receipt_number_next(node=fund_node, year=timezone.localdate().year)
@@ -506,17 +557,23 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
             return "doublon"
         if state.amount is not None and state.amount != donation.charged_amount:
             logger.warning("dons.montant_incoherent reference=%s", donation.reference)
+            _incident_record(attempt=attempt, donation=donation, kind=IncidentKind.AMOUNT_MISMATCH,
+                             reported_amount=state.amount)  # fmt: skip
             return "amount_mismatch"
         if donation.status not in (DonationStatus.INITIE, DonationStatus.EN_ATTENTE):
-            # Paiement réussi après expiration ou échec : incident à traiter (remboursement ou reprise).
+            # Paiement réussi après expiration ou échec : le fidèle est débité, le don n'est dans aucun
+            # total. Incident persisté, à régulariser par la paroisse (intégration ou remboursement).
             logger.warning("dons.paiement_tardif reference=%s", donation.reference)
+            _incident_record(attempt=attempt, donation=donation, kind=IncidentKind.LATE_PAYMENT,
+                             reported_amount=state.amount, method=state.method)  # fmt: skip
             return "late_payment"
         updates = ["payment_method", "updated_at"]
         donation.payment_method = state.method or PaymentMethod.INCONNU
         if state.fee_amount is not None:
             donation.fee_amount = state.fee_amount
             donation.net_amount = max(donation.charged_amount - state.fee_amount, 0)
-            updates += ["fee_amount", "net_amount"]
+            donation.fee_is_actual = True
+            updates += ["fee_amount", "net_amount", "fee_is_actual"]
         donation.save(update_fields=updates)
         if donation.status == DonationStatus.INITIE:
             donation_transition(donation=donation, to=DonationStatus.EN_ATTENTE, source=source)
@@ -543,6 +600,18 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
             return "expire"
         return "doublon"
     return "en_attente"
+
+
+def _incident_record(
+    *, attempt: PaymentAttempt, donation: Donation, kind: str, reported_amount: int | None, method: str = ""
+) -> PaymentIncident:
+    """Persiste un incident de paiement (idempotent : une notification rejouée ne le duplique pas)."""
+    incident, created = PaymentIncident.objects.get_or_create(
+        attempt=attempt, kind=kind, defaults={"donation": donation, "reported_amount": reported_amount}
+    )
+    if created and method and method != PaymentMethod.INCONNU and donation.payment_method == PaymentMethod.INCONNU:
+        Donation.objects.filter(pk=donation.pk).update(payment_method=method)
+    return incident
 
 
 def _receipt_email_queue(donation: Donation) -> None:
@@ -752,6 +821,59 @@ def payout_reconcile(*, payout: Payout) -> Payout:
     return payout
 
 
+def imperee_covers(*, fund: Fund, mass_date: datetime.date) -> bool:
+    """Une messe entre dans une quête impérée si elle tombe dans sa période, ou si c'est la messe
+    anticipée de la veille et que le diocèse l'a incluse."""
+    if fund.starts_on is None:
+        return True
+    last = fund.ends_on or fund.starts_on
+    if fund.starts_on <= mass_date <= last:
+        return True
+    return fund.messe_anticipee_incluse and mass_date == fund.starts_on - datetime.timedelta(days=1)
+
+
+# --- Anonymat partiel (décision de revue du 27/09/2026) --------------------------------------
+
+REVEAL_OFFICES = frozenset({"cure", "cure_in_solidum"})
+
+
+@transaction.atomic
+def donor_reveal(*, donation: Donation, actor: Any, reason: str) -> dict[str, Any]:
+    """Le curé consulte, en cas de besoin, le nom d'un donateur anonyme. Motif obligatoire ; chaque
+    consultation est journalisée (AuditEvent). Le nom reste masqué partout ailleurs."""
+    node = donation.fund.node
+    access.require_parish_level(actor, "dons.voir_donateurs", node)
+    if not any(
+        g.capability == "dons.voir_donateurs" and g.node_id == str(node.pk) and g.office in REVEAL_OFFICES
+        for g in authz.grants(actor)
+    ):
+        raise PermissionDeniedError("Réservé au curé de la paroisse.", code="dons_forbidden")
+    if donation.channel != DonationChannel.EN_LIGNE or not donation.anonymous:
+        raise ApplicationError("Ce don n'est pas anonyme.", code="not_anonymous")
+    motif = " ".join(reason.split())
+    if len(motif) < 10:
+        raise ApplicationError("Indiquez le motif de la consultation (10 caractères au moins).", code="reason_required")
+    audit_log(actor=actor, action="dons.anonymat_consultation", target=donation, node=node,
+              metadata={"reference": donation.reference, "motif": motif[:300]})  # fmt: skip
+    name = None
+    if donation.donor_id is not None:
+        profile = getattr(donation.donor, "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip() or None
+    return {"donation_id": donation.pk, "reference": donation.reference, "donateur": name,
+            "sans_compte": donation.donor_id is None}  # fmt: skip
+
+
+# --- Clôture mensuelle : verrou -------------------------------------------------------------
+
+
+def month_open_check(*, node: Node, day: datetime.date) -> None:
+    """Refuse une opération datée d'un mois clos (la correction passe par un ajustement)."""
+    if MonthClosing.objects.filter(node=node, month=day.replace(day=1)).exists():
+        raise ApplicationError(
+            "Ce mois est clos : passez une écriture d'ajustement.", {"mois": f"{day:%Y-%m}"}, code="month_closed"
+        )
+
+
 # --- Quêtes en espèces ----------------------------------------------------------------------
 
 
@@ -780,6 +902,12 @@ def cash_collection_create(
         raise ApplicationError("Montant invalide.", code="invalid_amount")
     if mass_date > timezone.localdate():
         raise ApplicationError("La messe ne peut pas être à venir.", code="future_mass")
+    month_open_check(node=node, day=mass_date)
+    if fund.kind == FundKind.QUETE_IMPEREE and not imperee_covers(fund=fund, mass_date=mass_date):
+        raise ApplicationError(
+            "Cette messe n'entre pas dans la quête impérée.", {"messe_anticipee_incluse": fund.messe_anticipee_incluse},
+            code="mass_outside_imperee",
+        )  # fmt: skip
     one, two = counter_one.strip(), counter_two.strip()
     if not one or not two or one.casefold() == two.casefold():
         raise ApplicationError("La quête est comptée par deux personnes distinctes.", code="two_counters_required")
@@ -816,6 +944,7 @@ def _require_cash_validator(collection: CashCollection, actor: Any) -> None:
 def cash_collection_validate(*, collection: CashCollection, actor: Any) -> CashCollection:
     collection = CashCollection.objects.select_for_update().select_related("node", "fund").get(pk=collection.pk)
     _require_cash_validator(collection, actor)
+    month_open_check(node=collection.node, day=collection.mass_date)
     now = timezone.now()
     collection.status = CashCollectionStatus.VALIDEE
     collection.validated_by = actor
@@ -834,6 +963,9 @@ def cash_collection_validate(*, collection: CashCollection, actor: Any) -> CashC
         status=DonationStatus.CONFIRME,
         status_changed_at=now,
         confirmed_at=now,
+        value_date=collection.mass_date,
+        place_id=collection.place_id,
+        source=None,
         cash_collection=collection,
     )
     DonationStatusChange.objects.create(
@@ -874,6 +1006,13 @@ def donation_refund(*, donation: Donation, actor: Any, note: str = "") -> Donati
     donation = donation_transition(
         donation=donation, to=DonationStatus.REMBOURSE, source=StatusSource.STAFF, actor=actor, note=note
     )
+    # Le mois du don reste figé : le remboursement est une ligne négative du mois courant.
+    DonationAdjustment.objects.create(
+        node=donation.fund.node, fund=donation.fund, donation=donation, kind=AdjustmentKind.REMBOURSEMENT,
+        channel=donation.channel, source=donation.source, payment_method=donation.payment_method,
+        place_id=donation.place_id, amount=-donation.amount, net_amount=-donation.net_amount,
+        value_date=timezone.localdate(), reason=(note or "Remboursement")[:300], created_by=actor,
+    )  # fmt: skip
     audit_log(actor=actor, action="dons.remboursement", target=donation, node=donation.fund.node,
               metadata={"reference": donation.reference})  # fmt: skip
     return donation

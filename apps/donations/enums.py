@@ -6,6 +6,8 @@ from django.utils.translation import gettext_lazy as _
 # Types de nœuds qui collectent (les dons vont toujours à une paroisse ; H1 : le diocèse encaisse).
 PARISH_TYPES: frozenset[str] = frozenset({"paroisse", "quasi_paroisse"})
 DIOCESE_TYPES: frozenset[str] = frozenset({"diocese"})
+# Nœuds dont on lit les agrégats (``dons.voir_agregats``) : au-dessus de la paroisse.
+AGGREGATE_TYPES: frozenset[str] = frozenset({"diocese", "doyenne"})
 
 
 class FundKind(models.TextChoices):
@@ -55,6 +57,17 @@ class DonationChannel(models.TextChoices):
     ESPECES = "especes", _("Espèces")
 
 
+class DonationSource(models.TextChoices):
+    """Canal d'entrée d'un don en ligne, déclaré par la page de don (``?src=``) : jamais déduit de
+    l'agent utilisateur, ni d'un identifiant d'appareil, ni de l'adresse IP. ``null`` pour les espèces."""
+
+    APP_IOS = "app_ios", _("App iOS")
+    APP_ANDROID = "app_android", _("App Android")
+    WEB = "web", _("Site")
+    QR = "qr", _("QR code")
+    INCONNU = "inconnu", _("Non précisé")
+
+
 class PaymentMethod(models.TextChoices):
     """Moyen constaté (choisi sur la page de l'agrégateur, jamais dans Jàngu Bi)."""
 
@@ -102,3 +115,36 @@ class PayoutStatus(models.TextChoices):
     RECU = "recu", _("Reçu, à rapprocher")
     RAPPROCHE = "rapproche", _("Rapproché")
     ECART = "ecart", _("Écart constaté")
+
+
+class RemittanceMode(models.TextChoices):
+    ESPECES = "especes", _("Espèces remises à la curie")
+    VIREMENT = "virement", _("Virement")
+    COMPENSATION = "compensation", _("Compensation sur la rétrocession de l'économat")
+
+
+class RemittanceStatus(models.TextChoices):
+    DECLAREE = "declaree", _("Déclarée par la paroisse")
+    CONFIRMEE = "confirmee", _("Réception confirmée par la curie")
+    CONTESTEE = "contestee", _("Contestée par la curie")
+
+
+class AdjustmentKind(models.TextChoices):
+    REMBOURSEMENT = "remboursement", _("Remboursement (ligne négative du mois du remboursement)")
+    CORRECTION = "correction", _("Correction d'un mois clos")
+
+
+class IncidentKind(models.TextChoices):
+    LATE_PAYMENT = "late_payment", _("Paiement réussi après expiration ou échec")
+    AMOUNT_MISMATCH = "amount_mismatch", _("Montant payé différent du montant attendu")
+
+
+class IncidentStatus(models.TextChoices):
+    OUVERT = "ouvert", _("À régulariser")
+    RESOLU = "resolu", _("Régularisé")
+
+
+class IncidentResolution(models.TextChoices):
+    INTEGRE = "integre", _("Paiement intégré au fonds (don confirmé)")
+    REMBOURSE = "rembourse", _("Remboursé chez l'agrégateur")
+    SANS_SUITE = "sans_suite", _("Sans suite (vérifié, rien à faire)")

@@ -13,15 +13,22 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
 from apps.donations.enums import (
+    AdjustmentKind,
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundDestination,
     FundKind,
     FundStatus,
+    IncidentKind,
+    IncidentResolution,
+    IncidentStatus,
     PaymentMethod,
     PayoutStatus,
+    RemittanceMode,
+    RemittanceStatus,
     StatusSource,
     WebhookStatus,
 )
@@ -78,6 +85,14 @@ class Fund(BaseModel):
     decided_by_office = models.CharField(_("office qui décide"), max_length=60, blank=True, default="")
     authorization_ref = models.CharField(_("référence de l'autorisation"), max_length=120, blank=True, default="")
     image = models.ForeignKey("files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    # Quête impérée : échéance de la remise des espèces à la curie (ex. le dimanche suivant).
+    remit_by = models.DateField(_("à remettre à la curie avant le"), null=True, blank=True)
+    # Quête impérée : la messe anticipée du samedi soir compte-t-elle ? Décidé par le diocèse, quête par quête.
+    messe_anticipee_incluse = models.BooleanField(_("messe anticipée incluse"), default=False)
+    # Lieu de culte propre au fonds (campagne de la chapelle) : repris sur les dons en ligne.
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     published_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
 
@@ -141,17 +156,80 @@ class CashCollection(BaseModel):
     )
     validated_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.CharField(max_length=300, blank=True, default="")
+    # Dépôt en banque qui inclut cette quête (une quête n'est déposée qu'une fois).
+    deposit = models.ForeignKey(
+        "donations.CashDeposit", on_delete=models.PROTECT, null=True, blank=True, related_name="collections"
+    )
 
     class Meta:
         verbose_name = _("quête en espèces")
         verbose_name_plural = _("quêtes en espèces")
         ordering = ["-mass_date", "-created_at"]
+        indexes = [
+            # « À traiter » et liste des quêtes (B2, docs/SCALING.md §4.2).
+            models.Index(fields=["node", "status", "-mass_date"], name="dons_cash_node_st_mass_idx"),
+        ]
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="dons_cash_amount_positive"),
             # La validation est faite par une autre personne que la saisie.
             models.CheckConstraint(
                 condition=Q(validated_by__isnull=True) | ~Q(validated_by=F("entered_by")),
                 name="dons_cash_four_eyes",
+            ),
+        ]
+
+
+class CashDeposit(BaseModel):
+    """Dépôt en banque d'espèces validées (bordereau). Le montant est la somme des quêtes incluses."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="cash_deposits")
+    deposited_on = models.DateField(_("date du dépôt"))
+    bank_label = models.CharField(_("banque et compte"), max_length=120)
+    slip_number = models.CharField(_("numéro de bordereau"), max_length=60)
+    amount = models.PositiveIntegerField(_("montant déposé (FCFA)"))
+    note = models.CharField(_("observation"), max_length=300, blank=True, default="")
+    declared_by = models.ForeignKey("users.BaseUser", on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        verbose_name = _("dépôt d'espèces")
+        verbose_name_plural = _("dépôts d'espèces")
+        ordering = ["-deposited_on", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="dons_deposit_amount_positive"),
+            models.UniqueConstraint(fields=["node", "slip_number"], name="dons_deposit_unique_slip"),
+        ]
+
+
+class CuriaRemittance(BaseModel):
+    """Remise à la curie des espèces d'une quête impérée (c. 1266). Ce n'est pas un don : aucun
+    ``Donation`` n'est créé au diocèse (pas de double compte). Déclarée par la paroisse, confirmée
+    par la curie (une autre personne)."""
+
+    fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="remittances")
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="curia_remittances")
+    amount = models.PositiveIntegerField(_("montant remis (FCFA)"))
+    remitted_on = models.DateField(_("date de la remise"))
+    mode = models.CharField(max_length=15, choices=RemittanceMode.choices, default=RemittanceMode.ESPECES)
+    reference = models.CharField(_("référence (reçu de la curie, virement)"), max_length=120, blank=True, default="")
+    status = models.CharField(
+        max_length=10, choices=RemittanceStatus.choices, default=RemittanceStatus.DECLAREE, db_index=True
+    )
+    declared_by = models.ForeignKey("users.BaseUser", on_delete=models.PROTECT, related_name="+")
+    confirmed_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.PROTECT, null=True, blank=True, related_name="+"
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.CharField(max_length=300, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("remise à la curie")
+        verbose_name_plural = _("remises à la curie")
+        ordering = ["-remitted_on", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount__gt=0), name="dons_remittance_amount_positive"),
+            models.CheckConstraint(
+                condition=Q(confirmed_by__isnull=True) | ~Q(confirmed_by=F("declared_by")),
+                name="dons_remittance_four_eyes",
             ),
         ]
 
@@ -215,6 +293,19 @@ class Donation(BaseModel):
     donor_email = models.EmailField(blank=True, default="")
     channel = models.CharField(max_length=10, choices=DonationChannel.choices, default=DonationChannel.EN_LIGNE)
     payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.INCONNU)
+    # Canal d'entrée déclaré (en ligne) ; ``null`` pour une quête en espèces.
+    source = models.CharField(max_length=12, choices=DonationSource.choices, null=True, blank=True)
+    # Lieu de culte : QR code du lieu, lieu du fonds, ou lieu de la quête en espèces.
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    # Date de fait : jour de la messe (espèces) ou date locale de confirmation (en ligne).
+    # Tous les agrégats analytiques se fondent sur elle, jamais sur ``confirmed_at``.
+    value_date = models.DateField(_("date de valeur"), null=True, blank=True)
+    # Frais réels transmis par l'agrégateur (sinon : estimation ``DONATIONS_FEE_RATE_BP``).
+    fee_is_actual = models.BooleanField(_("frais réels"), default=False)
+    # Premier retour du donateur sur la page de statut (santé du lien de retour, sans donnée personnelle).
+    returned_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=12, choices=DonationStatus.choices, default=DonationStatus.INITIE, db_index=True
     )
@@ -239,8 +330,11 @@ class Donation(BaseModel):
             ),
         ]
         indexes = [
-            models.Index(fields=["fund", "status"], name="dons_donation_fund_status_idx"),
+            # Synthèse et rapprochement (B2, docs/SCALING.md §4.2) : couvre aussi le préfixe (fund, status).
+            models.Index(fields=["fund", "status", "confirmed_at"], name="dons_donation_fund_st_conf_idx"),
+            models.Index(fields=["fund", "-created_at"], name="dons_donation_fund_created_idx"),
             models.Index(fields=["donor", "status"], name="dons_donation_donor_idx"),
+            models.Index(fields=["fund", "value_date"], name="dons_donation_fund_value_idx"),
         ]
 
     def __str__(self) -> str:
@@ -323,3 +417,86 @@ class PayoutLine(models.Model):
     class Meta:
         verbose_name = _("ligne de reversement")
         verbose_name_plural = _("lignes de reversement")
+
+
+class MonthClosing(BaseModel):
+    """Clôture mensuelle d'une paroisse : le mois est figé. Plus aucune quête ne s'y saisit ni ne s'y
+    valide ; une erreur se corrige par une écriture d'ajustement datée du mois courant."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="donation_closings")
+    month = models.DateField(_("mois (premier jour)"))
+    closed_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )  # null : clôture automatique
+    totals = models.JSONField(_("totaux figés"), default=dict)
+
+    class Meta:
+        verbose_name = _("clôture mensuelle")
+        verbose_name_plural = _("clôtures mensuelles")
+        ordering = ["-month"]
+        constraints = [
+            models.UniqueConstraint(fields=["node", "month"], name="dons_closing_unique_month"),
+            models.CheckConstraint(condition=Q(month__day=1), name="dons_closing_first_day"),
+        ]
+
+
+class DonationAdjustment(BaseModel):
+    """Écriture d'ajustement (montant signé) : remboursement, ou correction d'un mois clos. Même
+    vocabulaire de champs qu'un ``Donation`` pour s'agréger avec lui ; datée du jour où elle est passée."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="donation_adjustments")
+    fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="adjustments")
+    donation = models.ForeignKey(
+        Donation, on_delete=models.PROTECT, null=True, blank=True, related_name="adjustments"
+    )
+    kind = models.CharField(max_length=15, choices=AdjustmentKind.choices)
+    channel = models.CharField(max_length=10, choices=DonationChannel.choices)
+    source = models.CharField(max_length=12, choices=DonationSource.choices, null=True, blank=True)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, blank=True, default="")
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    amount = models.IntegerField(_("montant donné (signé)"))
+    net_amount = models.IntegerField(_("montant affecté (signé)"))
+    value_date = models.DateField(_("date de valeur"), db_index=True)
+    reason = models.CharField(_("motif"), max_length=300)
+    created_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        verbose_name = _("ajustement")
+        verbose_name_plural = _("ajustements")
+        ordering = ["-value_date", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=~Q(amount=0), name="dons_adjustment_non_zero"),
+            models.UniqueConstraint(
+                fields=["donation"], condition=Q(kind="remboursement"), name="dons_adjustment_one_refund"
+            ),
+        ]
+
+
+class PaymentIncident(BaseModel):
+    """Incident de paiement persisté (paiement tardif, montant incohérent) : jamais perdu, à régulariser."""
+
+    attempt = models.ForeignKey(PaymentAttempt, on_delete=models.CASCADE, related_name="incidents")
+    donation = models.ForeignKey(Donation, on_delete=models.CASCADE, related_name="incidents")
+    kind = models.CharField(max_length=20, choices=IncidentKind.choices)
+    status = models.CharField(
+        max_length=10, choices=IncidentStatus.choices, default=IncidentStatus.OUVERT, db_index=True
+    )
+    reported_amount = models.PositiveIntegerField(null=True, blank=True)
+    resolution = models.CharField(max_length=12, choices=IncidentResolution.choices, blank=True, default="")
+    note = models.CharField(max_length=300, blank=True, default="")
+    resolved_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("incident de paiement")
+        verbose_name_plural = _("incidents de paiement")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["attempt", "kind"], name="dons_incident_unique_attempt_kind"),
+        ]

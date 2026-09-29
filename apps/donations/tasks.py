@@ -31,3 +31,11 @@ def donations_donor_email_purge_task() -> int:
     from apps.donations.services import donor_emails_purge  # import local (HackSoft)
 
     return donor_emails_purge()
+
+
+@shared_task
+def donations_month_close_task() -> int:
+    """Chaque jour : à partir du 10, clôture du mois précédent des paroisses sans quête à confirmer."""
+    from apps.donations.services_cloture import months_auto_close  # import local (HackSoft)
+
+    return months_auto_close()

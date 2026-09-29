@@ -7,11 +7,28 @@ from rest_framework import serializers
 from apps.donations.enums import (
     CashCollectionStatus,
     DonationChannel,
+    DonationSource,
     DonationStatus,
     FundKind,
     FundStatus,
+    IncidentResolution,
+    IncidentStatus,
+    RemittanceMode,
+    RemittanceStatus,
 )
-from apps.donations.models import CashCollection, Donation, DonationActivation, Fund, FundUpdate, Payout
+from apps.donations.models import (
+    CashCollection,
+    CashDeposit,
+    CuriaRemittance,
+    Donation,
+    DonationActivation,
+    DonationAdjustment,
+    Fund,
+    FundUpdate,
+    MonthClosing,
+    PaymentIncident,
+    Payout,
+)
 from apps.donations.selectors import donor_label, fund_updates
 
 PARISH_KINDS = [c for c in FundKind.choices if c[0] != FundKind.QUETE_IMPEREE]
@@ -43,6 +60,14 @@ class CheckoutInputSerializer(serializers.Serializer):
     email = serializers.EmailField(
         required=False, allow_blank=True, default="", help_text="Sans compte seulement : envoi du reçu, effacé après 90 jours"
     )
+    source = serializers.ChoiceField(  # type: ignore[assignment]  # champ nommé « source » (API)
+        choices=DonationSource.choices, required=False, default=DonationSource.INCONNU,
+        help_text="Canal d'entrée relayé par la page de don (paramètre ?src= de l'URL ouverte par l'app)",
+    )  # fmt: skip
+    place_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None,
+        help_text="Lieu de culte (paramètre ?lieu= du QR code) ; sinon le lieu du fonds",
+    )  # fmt: skip
 
 
 class MyDonationsFilterSerializer(serializers.Serializer):
@@ -69,6 +94,9 @@ class FundCreateInputSerializer(serializers.Serializer):
     goal_amount = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1)
     authorization_ref = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
     image_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    place_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None, help_text="Lieu de culte propre au fonds (campagne d'une chapelle)"
+    )
 
 
 class FundUpdateInputSerializer(serializers.Serializer):
@@ -79,6 +107,7 @@ class FundUpdateInputSerializer(serializers.Serializer):
     goal_amount = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     authorization_ref = serializers.CharField(required=False, allow_blank=True, max_length=120)
     image_id = serializers.IntegerField(required=False, allow_null=True)
+    place_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class FundNewsInputSerializer(serializers.Serializer):
@@ -148,6 +177,70 @@ class ImpereeCreateInputSerializer(serializers.Serializer):
         help_text="Paroisses concernées (défaut : toutes les paroisses du diocèse où la collecte est active)",
     )  # fmt: skip
     authorization_ref = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
+    remit_by = serializers.DateField(
+        required=False, allow_null=True, default=None,
+        help_text="Échéance de remise des espèces à la curie (défaut : sept jours après la quête)",
+    )  # fmt: skip
+    messe_anticipee_incluse = serializers.BooleanField(
+        default=False, help_text="La quête de la messe anticipée de la veille au soir fait partie de la quête impérée"
+    )
+
+
+class MassFundsQuerySerializer(NodeQuerySerializer):
+    date = serializers.DateField(help_text="Date de la messe")
+
+
+class DonorRevealInputSerializer(serializers.Serializer):
+    motif = serializers.CharField(min_length=10, max_length=300, help_text="Obligatoire, journalisé")
+
+
+class DonorRevealSerializer(serializers.Serializer):
+    donation_id = serializers.UUIDField()
+    reference = serializers.CharField()
+    donateur = serializers.CharField(allow_null=True, help_text="null : don sans compte (aucun nom connu)")
+    sans_compte = serializers.BooleanField()
+
+
+class CashDepositInputSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+    collection_ids = serializers.ListField(child=serializers.IntegerField(), min_length=1,
+                                           help_text="Quêtes validées incluses dans le dépôt")  # fmt: skip
+    deposited_on = serializers.DateField()
+    bank_label = serializers.CharField(max_length=120, help_text="Banque et compte")
+    slip_number = serializers.CharField(max_length=60, help_text="Numéro de bordereau")
+    note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+
+class RemittanceInputSerializer(serializers.Serializer):
+    fund_id = serializers.UUIDField(help_text="Quête impérée de la paroisse (déclinaison paroissiale)")
+    amount = serializers.IntegerField(min_value=1)
+    remitted_on = serializers.DateField()
+    mode = serializers.ChoiceField(choices=RemittanceMode.choices, default=RemittanceMode.ESPECES)
+    reference = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+
+
+class RemittanceFilterSerializer(NodeQuerySerializer):
+    status = serializers.ChoiceField(choices=RemittanceStatus.choices, required=False)
+
+
+class MonthClosingInputSerializer(NodeQuerySerializer):
+    month = serializers.RegexField(r"^\d{4}-(0[1-9]|1[0-2])$", help_text="AAAA-MM, mois écoulé")
+
+
+class AdjustmentInputSerializer(serializers.Serializer):
+    fund_id = serializers.UUIDField()
+    channel = serializers.ChoiceField(choices=DonationChannel.choices)
+    amount = serializers.IntegerField(help_text="FCFA, signé : négatif pour retirer, jamais nul")
+    reason = serializers.CharField(max_length=300)
+
+
+class IncidentFilterSerializer(NodeQuerySerializer):
+    status = serializers.ChoiceField(choices=IncidentStatus.choices, required=False)
+
+
+class IncidentResolveInputSerializer(serializers.Serializer):
+    resolution = serializers.ChoiceField(choices=IncidentResolution.choices)
+    note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
 
 
 class ActivationInputSerializer(serializers.Serializer):
@@ -177,14 +270,20 @@ class FundBriefSerializer(serializers.Serializer):
     kind = serializers.CharField()
 
 
+class DonationPlaceSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
 class PublicFundSerializer(serializers.ModelSerializer):
     raised = serializers.IntegerField(read_only=True, help_text="Montant affecté (dons confirmés), FCFA")
     image_url = serializers.SerializerMethodField()
+    place = DonationPlaceSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Fund
         fields = ["id", "kind", "destination", "title", "description", "starts_on", "ends_on", "goal_amount",
-                  "raised", "status", "image_url"]  # fmt: skip
+                  "raised", "status", "image_url", "place", "messe_anticipee_incluse"]  # fmt: skip
 
     def get_image_url(self, obj: Fund) -> str | None:
         return obj.image.url if obj.image and obj.image.is_valid else None
@@ -317,6 +416,7 @@ class SummaryFundSerializer(serializers.Serializer):
     fund_id = serializers.UUIDField()
     title = serializers.CharField()
     kind = serializers.CharField()
+    destination = serializers.CharField(help_text="paroisse ou curie (quête impérée)")
     total = serializers.IntegerField()
     count = serializers.IntegerField()
 
@@ -328,19 +428,32 @@ class SummaryMethodSerializer(serializers.Serializer):
 
 
 class SummaryDaySerializer(serializers.Serializer):
-    date = serializers.DateField()
+    date = serializers.DateField(help_text="Date de valeur (jour de la messe pour les espèces)")
+    online = serializers.IntegerField()
+    cash = serializers.IntegerField()
     total = serializers.IntegerField()
+
+
+class SummaryDestinationSerializer(serializers.Serializer):
+    paroisse = serializers.IntegerField()
+    curie = serializers.IntegerField()
 
 
 class ParishSummarySerializer(serializers.Serializer):
     month = serializers.DateField()
-    total = serializers.IntegerField(help_text="Affecté ce mois (dons confirmés)")
+    total = serializers.IntegerField(help_text="Affecté ce mois (date de valeur), remboursements déduits")
     online = serializers.IntegerField()
     cash = serializers.IntegerField()
     fees = serializers.IntegerField()
-    count = serializers.IntegerField()
-    pending_count = serializers.IntegerField()
+    count = serializers.IntegerField(help_text="Obsolète : additionne dons en ligne et quêtes. Utiliser les deux champs suivants.")
+    online_count = serializers.IntegerField(help_text="Dons en ligne")
+    cash_collections_count = serializers.IntegerField(help_text="Quêtes en espèces validées")
+    pending_count = serializers.IntegerField(help_text="Paiements lancés ce mois encore en attente")
+    pending_oldest_at = serializers.DateTimeField(allow_null=True)
     cash_to_validate = serializers.IntegerField()
+    closed = serializers.BooleanField(help_text="Mois clos : aucune opération ne s'y ajoute plus")
+    closed_at = serializers.DateTimeField(allow_null=True)
+    by_destination = SummaryDestinationSerializer()
     by_fund = SummaryFundSerializer(many=True)
     by_method = SummaryMethodSerializer(many=True)
     daily = SummaryDaySerializer(many=True)
@@ -351,11 +464,13 @@ class OperationSerializer(serializers.ModelSerializer):
 
     fund = FundBriefSerializer()
     donor = serializers.SerializerMethodField()
+    place = DonationPlaceSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Donation
-        fields = ["id", "reference", "receipt_number", "fund", "amount", "fee_amount", "charged_amount", "net_amount", "channel",
-                  "payment_method", "status", "created_at", "confirmed_at", "donor"]  # fmt: skip
+        fields = ["id", "reference", "receipt_number", "fund", "amount", "fee_amount", "fee_is_actual", "charged_amount",
+                  "net_amount", "channel", "source", "payment_method", "place", "status", "created_at", "confirmed_at",
+                  "value_date", "anonymous", "donor"]  # fmt: skip
 
     def get_donor(self, obj: Donation) -> str:
         return donor_label(obj, with_names=bool(self.context.get("with_names")))
@@ -371,7 +486,7 @@ class CashCollectionSerializer(serializers.ModelSerializer):
         model = CashCollection
         fields = ["id", "fund", "place", "mass_date", "mass_label", "amount", "counter_one", "counter_two",
                   "observation", "status", "entered_by", "validated_by", "validated_at", "rejection_reason",
-                  "created_at"]  # fmt: skip
+                  "deposit_id", "created_at"]  # fmt: skip
 
     def get_entered_by(self, obj: CashCollection) -> str:
         return _full_name(obj.entered_by)
@@ -404,7 +519,8 @@ class ImpereeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Fund
-        fields = ["id", "title", "description", "starts_on", "ends_on", "status", "authorization_ref",
+        fields = ["id", "title", "description", "starts_on", "ends_on", "remit_by", "messe_anticipee_incluse", "status",
+                  "authorization_ref",
                   "decided_by_office", "raised", "parishes_count", "created_at"]  # fmt: skip
 
 
@@ -417,6 +533,83 @@ class ImpereeFollowRowSerializer(serializers.Serializer):
     cash = serializers.IntegerField()
     count = serializers.IntegerField()
     total = serializers.IntegerField()
+    remitted_confirmed = serializers.IntegerField(help_text="Espèces remises, réception confirmée par la curie")
+    remitted_declared = serializers.IntegerField(help_text="Remises déclarées, en attente de confirmation")
+    to_remit = serializers.IntegerField(help_text="Espèces restant à remettre")
+    remit_by = serializers.DateField(allow_null=True)
+
+
+class CashDepositSerializer(serializers.ModelSerializer):
+    collections_count = serializers.IntegerField(read_only=True)
+    declared_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CashDeposit
+        fields = ["id", "node_id", "deposited_on", "bank_label", "slip_number", "amount", "note", "collections_count",
+                  "declared_by", "created_at"]  # fmt: skip
+
+    def get_declared_by(self, obj: CashDeposit) -> str:
+        return _full_name(obj.declared_by)
+
+
+class RemittanceSerializer(serializers.ModelSerializer):
+    fund = FundBriefSerializer()
+    parish = serializers.CharField(source="node.name")
+    declared_by = serializers.SerializerMethodField()
+    confirmed_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CuriaRemittance
+        fields = ["id", "fund", "node_id", "parish", "amount", "remitted_on", "mode", "reference", "status",
+                  "declared_by", "confirmed_by", "confirmed_at", "rejection_reason", "created_at"]  # fmt: skip
+
+    def get_declared_by(self, obj: CuriaRemittance) -> str:
+        return _full_name(obj.declared_by)
+
+    def get_confirmed_by(self, obj: CuriaRemittance) -> str | None:
+        return _full_name(obj.confirmed_by) if obj.confirmed_by else None
+
+
+class MonthClosingSerializer(serializers.ModelSerializer):
+    closed_by = serializers.SerializerMethodField(help_text="Vide : clôture automatique")
+    totals = serializers.DictField(help_text="Totaux figés : collecte, en_ligne, especes, affecte, par_type_fonds")
+
+    class Meta:
+        model = MonthClosing
+        fields = ["id", "node_id", "month", "closed_by", "totals", "created_at"]
+
+    def get_closed_by(self, obj: MonthClosing) -> str:
+        return _full_name(obj.closed_by) if obj.closed_by else ""
+
+
+class AdjustmentSerializer(serializers.ModelSerializer):
+    fund = FundBriefSerializer()
+    donation_reference = serializers.CharField(source="donation.reference", allow_null=True, default=None)
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DonationAdjustment
+        fields = ["id", "fund", "kind", "channel", "amount", "net_amount", "value_date", "reason", "donation_reference",
+                  "created_by", "created_at"]  # fmt: skip
+
+    def get_created_by(self, obj: DonationAdjustment) -> str:
+        return _full_name(obj.created_by) if obj.created_by else ""
+
+
+class PaymentIncidentSerializer(serializers.ModelSerializer):
+    reference = serializers.CharField(source="donation.reference")
+    fund = FundBriefSerializer(source="donation.fund")
+    amount = serializers.IntegerField(source="donation.charged_amount", help_text="Montant attendu (payé)")
+    donation_status = serializers.CharField(source="donation.status")
+    resolved_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentIncident
+        fields = ["id", "kind", "status", "reference", "fund", "amount", "reported_amount", "donation_status",
+                  "resolution", "note", "resolved_by", "resolved_at", "created_at"]  # fmt: skip
+
+    def get_resolved_by(self, obj: PaymentIncident) -> str | None:
+        return _full_name(obj.resolved_by) if obj.resolved_by else None
 
 
 class PayoutSerializer(serializers.ModelSerializer):

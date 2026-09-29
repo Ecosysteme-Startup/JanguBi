@@ -9,7 +9,7 @@ from typing import Any
 from django.db.models import QuerySet
 
 from apps.core.exceptions import ApplicationError, PermissionDeniedError
-from apps.donations.enums import DIOCESE_TYPES, PARISH_TYPES
+from apps.donations.enums import AGGREGATE_TYPES, DIOCESE_TYPES, PARISH_TYPES
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
 
@@ -48,6 +48,15 @@ def require_diocese(user: Any, capability: str, node: Node) -> None:
         raise ApplicationError("Ce nœud n'est pas un diocèse.", code="not_a_diocese")
     if not authz.peut(user, capability, node):
         raise PermissionDeniedError("Vous n'avez pas ce droit sur ce diocèse.", code="dons_forbidden")
+    authz.mfa_check(user)
+
+
+def require_aggregates(user: Any, node: Node) -> None:
+    """Agrégats au-dessus de la paroisse : ``dons.voir_agregats`` sur un diocèse ou un doyenné."""
+    if node.type.code not in AGGREGATE_TYPES:
+        raise ApplicationError("Les agrégats se lisent sur un diocèse ou un doyenné.", code="not_an_aggregate_node")
+    if not authz.peut(user, "dons.voir_agregats", node):
+        raise PermissionDeniedError("Vous ne voyez pas les agrégats de ce nœud.", code="dons_forbidden")
     authz.mfa_check(user)
 
 
