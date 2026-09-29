@@ -1,10 +1,13 @@
+from django.db import transaction
 from django.urls import path
 
 from apps.audio import apis
+from apps.realtime.apis import AudioUploadFluxApi
 
 urlpatterns = [
     path("sources/", apis.SourceListCreateApi.as_view(), name="sources"),
     path("sources/<uuid:source_id>/", apis.SourceDetailApi.as_view(), name="source-detail"),
+    path("sources/<uuid:source_id>/signaler/", apis.SourceReportApi.as_view(), name="source-report"),
     path("albums/", apis.AlbumListCreateApi.as_view(), name="albums"),
     path("albums/<uuid:album_id>/", apis.AlbumDetailApi.as_view(), name="album-detail"),
     path("albums/<uuid:album_id>/publier/", apis.AlbumPublishApi.as_view(), name="album-publish"),
@@ -21,6 +24,12 @@ urlpatterns = [
     path("pistes/<uuid:track_id>/signaler/", apis.TrackReportApi.as_view(), name="track-report"),
     path("uploads/", apis.UploadStartApi.as_view(), name="uploads"),
     path("uploads/<uuid:track_id>/", apis.UploadDetailApi.as_view(), name="upload-detail"),
+    # Flux SSE de la progression (hors ATOMIC_REQUESTS : ni transaction ni connexion tenue).
+    path(
+        "uploads/<uuid:track_id>/flux/",
+        transaction.non_atomic_requests(AudioUploadFluxApi.as_view()),
+        name="upload-flux",
+    ),
     path("uploads/<uuid:track_id>/local/", apis.UploadLocalApi.as_view(), name="upload-local"),
     path("uploads/<uuid:track_id>/terminer/", apis.UploadFinishApi.as_view(), name="upload-finish"),
     path("lecture/etat/", apis.PlaybackStateApi.as_view(), name="playback-state"),

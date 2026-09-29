@@ -28,14 +28,38 @@ def _median_hours(deltas: list[datetime.timedelta]) -> float | None:
 
 
 def _fideles(node: Node, since: datetime.datetime) -> dict[str, int]:
+    """Fidèles rattachés au sous-arbre par une appartenance **principale ou secondaire**
+    (``ParishMembership`` active), comptés une seule fois chacun :
+
+    - ``primary`` : la paroisse principale est dans le sous-arbre ;
+    - ``secondary`` : membres d'au moins une paroisse du sous-arbre, principale ailleurs (ou aucune) ;
+    - ``attached`` = ``primary`` + ``secondary`` ; ``active`` et ``new`` portent sur ``attached``
+      (``new`` : appartenance au sous-arbre prise dans la fenêtre).
+
+    Un ``paroisse_suivie`` écrit hors des services (sans ligne d'appartenance pour ce nœud) compte
+    comme principal, comme dans ``selectors_memberships.memberships_of``. Nombres seulement (RG-11)."""
+    from django.db.models import Exists, OuterRef
+
+    from apps.hierarchy.models import ParishMembership
     from apps.users.models import BaseUser
 
-    qs = BaseUser.objects.filter(paroisse_suivie__path__startswith=node.path, is_active=True)
-    return qs.aggregate(
-        attached=Count("pk"),
-        active=Count("pk", filter=Q(last_seen_on__gte=since.date()) | Q(last_login__gte=since)),
-        new=Count("pk", filter=Q(created_at__gte=since)),
+    in_subtree = ParishMembership.objects.filter(
+        user=OuterRef("pk"), node__path__startswith=node.path, removed_by_parish_at__isnull=True
     )
+    legacy = Q(paroisse_suivie__path__startswith=node.path) & ~Exists(
+        ParishMembership.objects.filter(user=OuterRef("pk"), node=OuterRef("paroisse_suivie"))
+    )
+    primary = Q(Exists(in_subtree.filter(is_primary=True))) | legacy
+    qs = BaseUser.objects.filter(is_active=True).filter(Q(Exists(in_subtree)) | legacy)
+    joined = Q(Exists(in_subtree.filter(joined_at__gte=since))) | (legacy & Q(created_at__gte=since))
+    counts = qs.aggregate(
+        attached=Count("pk"),
+        primary=Count("pk", filter=primary),
+        active=Count("pk", filter=Q(last_seen_on__gte=since.date()) | Q(last_login__gte=since)),
+        new=Count("pk", filter=joined),
+    )
+    counts["secondary"] = counts["attached"] - counts["primary"]
+    return counts
 
 
 def _annonces(node: Node, since: datetime.datetime) -> dict[str, Any]:

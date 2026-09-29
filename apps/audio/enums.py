@@ -101,6 +101,7 @@ class ReportReason(models.TextChoices):
 class ReportTarget(models.TextChoices):
     PISTE = "piste", "Piste"
     ALBUM = "album", "Album"
+    SOURCE = "source", "Source"
 
 
 class ReportStatus(models.TextChoices):

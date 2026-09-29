@@ -79,7 +79,9 @@ def playlist_get(*, playlist_id: Any) -> Playlist:
 
 def report_get(*, report_id: Any) -> TrackReport:
     report = (
-        TrackReport.objects.select_related("track__source__node", "album__source__node").filter(pk=report_id).first()
+        TrackReport.objects.select_related("track__source__node", "album__source__node", "source__node")
+        .filter(pk=report_id)
+        .first()
     )
     if report is None:
         raise NotFoundError("Signalement introuvable.", code="signalement_introuvable")
@@ -649,7 +651,7 @@ def reports_open(*, user: Any) -> QuerySet[TrackReport]:
     nodes = authz.noeuds_autorises(user, access.MODERATE)
     return (
         TrackReport.objects.filter(status=ReportStatus.OUVERT)
-        .filter(Q(track__source__node__in=nodes) | Q(album__source__node__in=nodes))
-        .select_related("track__source", "track__album", "album__source", "album__cover")
+        .filter(Q(track__source__node__in=nodes) | Q(album__source__node__in=nodes) | Q(source__node__in=nodes))
+        .select_related("track__source", "track__album", "album__source", "album__cover", "source__node", "source__cover")
         .order_by("created_at")
     )
