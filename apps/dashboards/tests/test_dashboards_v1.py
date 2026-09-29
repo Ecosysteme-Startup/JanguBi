@@ -175,3 +175,48 @@ def test_activity_stamp_never_breaks_authentication(db, monkeypatch):
     monkeypatch.setattr(type(user).objects, "filter", boom)
     keycloak.activity_stamp(user, mfa=False)  # ne lève pas
     assert user.last_seen_on is None
+
+
+# --- Paroisses multiples : membres principaux et secondaires --------------------------------------
+
+
+@freeze_time(NOW)
+def test_fideles_count_primary_and_secondary_members(world):
+    from apps.hierarchy.services_memberships import membership_join, membership_remove_by_parish
+
+    sd, st = world.saint_dominique, world.sainte_therese
+    marie = person("mt.diouf@test.sn")
+    membership_join(user=marie, node=sd)  # principale
+    membership_join(user=marie, node=st)  # secondaire
+    membership_join(user=world.fatou, node=sd)  # Thiès principale, Saint-Dominique secondaire
+    retiree = person("retiree@test.sn")
+    membership_join(user=retiree, node=st)
+    membership_join(user=retiree, node=sd)
+    membership_remove_by_parish(actor=world.cure, node=sd, user=retiree)  # ne compte plus à SD
+
+    fideles = node_dashboard(node=sd)["fideles"]
+    # awa (paroisse_suivie historique) + Marie-Thérèse en principal ; Fatou en secondaire.
+    assert (fideles["attached"], fideles["primary"], fideles["secondary"]) == (3, 2, 1)
+    assert fideles["new"] == 3  # appartenances prises dans la fenêtre (awa : compte créé dans la fenêtre)
+
+    cache.clear()
+    fideles = node_dashboard(node=st)["fideles"]
+    # moussa + la retirée de SD (principale à ST) ; Marie-Thérèse en secondaire.
+    assert (fideles["attached"], fideles["primary"], fideles["secondary"]) == (3, 2, 1)
+
+    cache.clear()
+    fideles = node_dashboard(node=world.doyenne)["fideles"]
+    # Chaque personne une seule fois : Marie-Thérèse (SD + ST) n'est comptée qu'en principal.
+    assert (fideles["attached"], fideles["primary"], fideles["secondary"]) == (5, 4, 1)
+
+
+@freeze_time(NOW)
+def test_fideles_above_parish_are_numbers_only(world):
+    from apps.hierarchy.services_memberships import membership_join
+
+    membership_join(user=world.fatou, node=world.saint_dominique)
+    fideles = node_dashboard(node=world.doyenne)["fideles"]
+
+    assert set(fideles) == {"attached", "primary", "secondary", "active", "new"}
+    assert all(isinstance(v, int) for v in fideles.values())
+    assert "fatou@test.sn" not in str(node_dashboard(node=world.doyenne))

@@ -25,6 +25,11 @@ class NodeDashboardApi(V1ApiMixin, ApiAuthMixin, APIView):
     @extend_schema(
         tags=TAG,
         summary="Tableau de bord d'un nœud, agrégé sur son sous-arbre (aucune donnée nominative)",
+        description=(
+            "fideles : attached = primary + secondary (chaque fidèle compté une fois), membres des "
+            "paroisses du sous-arbre par une appartenance principale ou secondaire. Voir "
+            "docs/API-TABLEAUX-DE-BORD.md."
+        ),
         parameters=[PeriodSerializer],
         responses=OpenApiTypes.OBJECT,
     )
