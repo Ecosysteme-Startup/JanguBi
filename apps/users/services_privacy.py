@@ -155,6 +155,10 @@ def _forget_traces(user: Any) -> None:
     NotificationPreference.objects.filter(user=user).delete()
     MessagingAvailability.objects.filter(user=user).delete()
     ArticleRead.objects.filter(user=user).delete()
+    # Parole : historique de lecture, signets, recommandations, réglage (plan V2 §6).
+    from apps.bible.services.reading_signals import parole_data_forget
+
+    parole_data_forget(user=user)
 
 
 def _declaration_forget(user: Any) -> None:
@@ -178,13 +182,19 @@ def _anonymize_identity(user: Any) -> str | None:
     user.phone_number = None
     user.keycloak_sub = None
     user.paroisse_suivie = None
+    # Appartenances aux paroisses (décisions 6-8) : effacées, y compris les retraits par la paroisse.
+    from apps.hierarchy.models import ParishMembership
+
+    ParishMembership.objects.filter(user=user).delete()
     user.last_seen_on = None
     user.last_mfa_on = None
+    user.last_seen_at = None
+    user.montrer_presence = None
     user.set_unusable_password()
     user.save(
         update_fields=[
             "is_active", "email", "phone_number", "keycloak_sub", "paroisse_suivie", "last_seen_on",
-            "last_mfa_on", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
+            "last_mfa_on", "last_seen_at", "montrer_presence", "etat_de_vie", "degre_ordre", "incardination_node", "institut_node",
             "password", "updated_at",
         ]
     )  # fmt: skip

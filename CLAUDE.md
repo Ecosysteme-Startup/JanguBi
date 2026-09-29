@@ -11,7 +11,8 @@ Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (br
 
 - Refonte **sur place** (ADR-001), par lots L0 → L9 (`docs/v1/01-PLAN-BACKEND-V1.md`).
 - Périmètre V1 : Parole · Ma paroisse · Demandes d'actes · Parler à un prêtre (+ rendez-vous de confession) · tableaux de bord · conformité.
-- **Modules hors V1 supprimés** (ADR-016) : `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `org`, la messagerie inter-clergé (l'historique Git les conserve).
+- **Dons et quêtes** réintégrés (ADR-017) : nouvelle app `donations`, collecte activée par paroisse, aucun paiement dans Jàngu Bi (agrégateur agréé BCEAO). Cadrage : `docs/v1/conception/DONS-00-cadrage.md`.
+- **Modules hors V1 supprimés** (ADR-016) : l'ancien `donations`, `mass_intentions`, `transfers`, `spiritual`, `tv`, `rag`, `clergy_accounts`, `org`, la messagerie inter-clergé (l'historique Git les conserve).
 - **Sous-modules gelés** (ADR-006, réglage `JANGUBI_MODULES`) : la Lectio et les plans de lecture (`bible.avance`), la Liturgie des Heures (`liturgy.heures`), le chapelet communautaire (`rosary.communautaire`). **Ne pas les réactiver** sans décision écrite.
 
 ## 2. Architecture — HackSoft Styleguide (CRITIQUE)
@@ -61,6 +62,7 @@ tasks.py       → Tâches Celery. Import des services dans le corps de la fonct
 - **Aucun accès administrateur au contenu des messages** (RG-09). Messagerie réservée aux majeurs (RG-13).
 - Tableaux de bord au-dessus de la paroisse : agrégats uniquement (RG-11).
 - Données religieuses = sensibles (loi 2008-12) : jamais dans les logs.
+- **Dons** : un don ne change jamais de fonds (c. 1267 §3) ; aucun appel au don dans les demandes d'actes, la messagerie ou la confession (c. 848) ; confirmation par le serveur seulement ; noms des donateurs visibles du curé et de l'économe seulement.
 
 ## 6. Vérification AVANT push — CI locale OBLIGATOIRE (ADR-010)
 

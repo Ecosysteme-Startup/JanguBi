@@ -83,12 +83,31 @@ def article_get_published(*, article_id: Any, viewer: Any = None) -> Article:
 
 
 def feed_for(*, user: Any) -> QuerySet[Article]:
-    """Flux du fidèle (EF-PAROI-04) : global + paroisse suivie et ses ancêtres (diocèse…)."""
+    """Flux du fidèle (EF-PAROI-04) : global + paroisse principale et ses ancêtres (diocèse…).
+    Les paroisses secondaires ont leur propre fil (``feed_secondary_for``)."""
     scope = Q(scope_node__isnull=True)
     parish = getattr(user, "paroisse_suivie", None)
     if parish is not None:
         lineage = [parish.pk, *node_ancestors(node=parish).values_list("pk", flat=True)]
         scope |= Q(scope_node_id__in=lineage)
+    qs = Article.objects.filter(scope, status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED)
+    return annotate_reactions(qs, viewer=user).order_by("-published_at")
+
+
+def feed_secondary_for(*, user: Any, parish_id: Any = None) -> QuerySet[Article]:
+    """Fil séparé des paroisses secondaires (décisions 6-8) : annonces publiées de ces paroisses et
+    de leur sous-arbre (CEB, mouvements), sans les contenus globaux ni diocésains (déjà dans le
+    fil principal). ``parish_id`` : une seule de ces paroisses."""
+    from apps.hierarchy.selectors_memberships import secondary_parishes
+
+    parishes = secondary_parishes(user=user)
+    if parish_id is not None:
+        parishes = [p for p in parishes if str(p.pk) == str(parish_id)]
+    if not parishes:
+        return Article.objects.none()
+    scope = Q()
+    for parish in parishes:
+        scope |= Q(scope_node__path__startswith=parish.path)
     qs = Article.objects.filter(scope, status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED)
     return annotate_reactions(qs, viewer=user).order_by("-published_at")
 

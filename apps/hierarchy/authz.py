@@ -120,6 +120,12 @@ def _grants_compute(user: Any) -> list[Grant]:
     return grants
 
 
+def user_version(user_id: Any) -> int:
+    """Version des droits d'un utilisateur : change à chaque nomination ou appartenance à une
+    paroisse modifiée (``invalidate_user``). Les caches dérivés (sonothèque) l'incluent dans leur clé."""
+    return int(cache.get_or_set(f"authz:uv:{user_id}", 1, None) or 1)
+
+
 def _cache_key(user: Any) -> str:
     global_version = cache.get_or_set(_GLOBAL_VERSION_KEY, 1, None)
     user_version = cache.get_or_set(f"authz:uv:{user.pk}", 1, None)

@@ -77,3 +77,15 @@ def import_file_task(self, file_path: str, source: str):
     except Exception as e:
         logger.error(f"Import failed for {file_path}: {str(e)}")
         raise
+
+
+@shared_task(bind=True, queue="reco", acks_late=True, max_retries=1)
+def bible_reco_recompute_task(self):
+    """« Pour vous aujourd'hui » précalculé pour les fidèles actifs (plan V2 §6).
+
+    File `reco` (plan §3.5) ; idempotente : une ligne par fidèle et par jour, réécrite si la
+    tâche est livrée deux fois.
+    """
+    from apps.bible.services.recommendation_service import daily_recommendations_recompute
+
+    return daily_recommendations_recompute()

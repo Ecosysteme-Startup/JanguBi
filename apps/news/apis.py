@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -23,6 +24,7 @@ from apps.news.serializers import (
     ArticleUnpublishInputSerializer,
     ArticleUpdateInputSerializer,
     CategoryOutputSerializer,
+    MeFeedSecondaryFilterSerializer,
     ReactionInputSerializer,
     ReadOutputSerializer,
     StaffArticleFilterSerializer,
@@ -138,7 +140,7 @@ class MeFeedApi(_AuthedApi):
     @extend_schema(
         tags=["me"],
         operation_id="me_feed",
-        summary="Mon flux : contenus globaux, de ma paroisse suivie et de ses ancêtres",
+        summary="Mon flux : contenus globaux, de ma paroisse principale et de ses ancêtres",
         parameters=_PAGINATION,
         responses=paginated_response_serializer(ArticleListOutputSerializer),
     )
@@ -147,6 +149,29 @@ class MeFeedApi(_AuthedApi):
             pagination_class=LimitOffsetPagination,
             serializer_class=ArticleListOutputSerializer,
             queryset=selectors.feed_for(user=request.user),
+            request=request,
+            view=self,
+        )
+
+
+class MeFeedSecondaryApi(_AuthedApi):
+    @extend_schema(
+        tags=["me"],
+        operation_id="me_feed_secondaires",
+        summary="Fil de mes paroisses secondaires (séparé du fil principal)",
+        parameters=[
+            OpenApiParameter("paroisse", OpenApiTypes.UUID, description="Une seule de mes paroisses secondaires"),
+            *_PAGINATION,
+        ],
+        responses=paginated_response_serializer(ArticleListOutputSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = MeFeedSecondaryFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=ArticleListOutputSerializer,
+            queryset=selectors.feed_secondary_for(user=request.user, parish_id=filters.validated_data.get("paroisse")),
             request=request,
             view=self,
         )

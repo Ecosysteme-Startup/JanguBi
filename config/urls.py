@@ -20,12 +20,16 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
+from apps.core.metrics import metrics_view
+
 router = DefaultRouter()
 
 urlpatterns = [
     path("", include(router.urls)),
     path("api-auth/", include("rest_framework.urls")),
     path("api/", include(("apps.api.urls", "api"))),
+    # Prometheus (django-prometheus) : réservé au collecteur (liste d'adresses ou jeton).
+    path("metrics", metrics_view, name="prometheus-metrics"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 # L'admin Django se connecte par mot de passe seul, sans MFA : désactivée par défaut en

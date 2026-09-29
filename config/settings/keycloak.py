@@ -20,7 +20,8 @@ KEYCLOAK_JWKS_URL = env.str(
     "KEYCLOAK_JWKS_URL", default=f"{KEYCLOAK_INTERNAL_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/certs"
 )
 KEYCLOAK_AUDIENCE = env.str("KEYCLOAK_AUDIENCE", default="jangubi-api")
-KEYCLOAK_ALLOWED_CLIENTS = env.list("KEYCLOAK_ALLOWED_CLIENTS", default=["jangubi-web"])
+# Clients dont l'API accepte les jetons (claim ``azp``) : le web (Auth.js) et l'app mobile (PKCE natif).
+KEYCLOAK_ALLOWED_CLIENTS = env.list("KEYCLOAK_ALLOWED_CLIENTS", default=["jangubi-web", "jangubi-mobile"])
 KEYCLOAK_JWKS_CACHE_SECONDS = env.int("KEYCLOAK_JWKS_CACHE_SECONDS", default=3600)
 KEYCLOAK_LEEWAY_SECONDS = env.int("KEYCLOAK_LEEWAY_SECONDS", default=30)
 

@@ -18,7 +18,6 @@ from apps.hierarchy.enums import (
     Cardinality,
     DegreOrdre,
     EtatDeVie,
-    NodeStatus,
     RequiredOrder,
     StatutVerification,
 )
@@ -494,21 +493,6 @@ def person_declaration_forget(*, person: Any) -> list[Any]:
     person.declared_at = None
     person.save(update_fields=["verification_note", "declared_at"])
     return [a.file for a in attachments]
-
-
-# --- Paroisse suivie (RG-01) ----------------------------------------------------------
-
-
-@transaction.atomic
-def paroisse_suivie_set(*, person: Any, node: Node | None) -> Any:
-    """Choix libre, sans validation ni « transfert » (RG-01). ``None`` : ne plus suivre."""
-    if node is not None and not node.type.holds_registers:
-        raise ApplicationError("Choisissez une paroisse.", code="not_a_parish")
-    if node is not None and node.status == NodeStatus.SUPPRIME:
-        raise ApplicationError("Cette paroisse n'existe plus.", code="parish_deleted")
-    person.paroisse_suivie = node
-    person.save(update_fields=["paroisse_suivie"])
-    return person
 
 
 # --- Retraits de capacités (EF-PER-09) ---------------------------------------------------

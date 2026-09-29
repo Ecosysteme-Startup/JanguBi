@@ -29,6 +29,8 @@ mineur|Fatou|Sène
 chancelier|Théodore|Diatta
 admin_paroissial|Robert|Sagna
 plateforme|Mariama|Ba
+econome|Anne|Mendy
+econome_dio|Bernard|Coly
 LIST
 
 kc add-roles -r jangubi --uusername plateforme@demo.jangubi.sn --rolename platform_admin

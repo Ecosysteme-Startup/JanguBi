@@ -87,7 +87,8 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "redirectUris": [
-        "${KC_WEB_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}"
+        "${KC_WEB_REDIRECT_URI:http://localhost:3000/auth/callback}",
+        "${KC_WEB_LEGACY_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}"
       ],
       "webOrigins": [
         "${KC_WEB_ORIGIN:http://localhost:3000}"
@@ -149,6 +150,79 @@
         }
       ],
       "baseUrl": "${KC_WEB_ORIGIN:http://localhost:3000}"
+    },
+    {
+      "clientId": "jangubi-mobile",
+      "name": "Jàngu Bi (app iOS et Android)",
+      "description": "Client public natif : Authorization Code + PKCE S256, redirection exacte par schéma d'app (RFC 8252).",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "${KC_MOBILE_REDIRECT_URI:sn.numerisen.jangubi://oauth}"
+      ],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${KC_MOBILE_REDIRECT_URI:sn.numerisen.jangubi://oauth}",
+        "use.refresh.tokens": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience jangubi-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "jangubi-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "amr",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-amr-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "phone_number",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "phone",
+            "claim.name": "phone_number",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true",
+            "multivalued": "false"
+          }
+        },
+        {
+          "name": "birthdate",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "birthdate",
+            "claim.name": "birthdate",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true",
+            "multivalued": "false"
+          }
+        }
+      ]
     },
     {
       "clientId": "jangubi-api",

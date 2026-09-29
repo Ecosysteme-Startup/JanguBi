@@ -426,6 +426,8 @@ def conversation_export_request(
 def notification_send(
     *, user: BaseUser, event_type: str, payload: dict
 ) -> Notification:
+    from apps.messaging.services_push import push_for_notification
+
     notification = Notification.objects.create(
         user=user,
         event_type=event_type,
@@ -433,6 +435,10 @@ def notification_send(
     )
 
     transaction.on_commit(lambda: _fanout_notification(user, event_type, payload))
+    # Push hors de l'app (préférence « push » et plage de silence respectées).
+    push_for_notification(
+        user_id=user.pk, event_type=event_type, payload=payload, notification_id=notification.pk
+    )
 
     return notification
 
@@ -457,10 +463,11 @@ def push_device_register(*, user: BaseUser, platform: str, token: str) -> "PushD
         token=token,
         defaults={"user": user, "platform": platform},
     )
-    if not created and (device.user_id != user.id or device.platform != platform):
+    if not created and (device.user_id != user.id or device.platform != platform or device.disabled_at):
         device.user = user
         device.platform = platform
-        device.save(update_fields=["user", "platform", "updated_at"])
+        device.disabled_at = None  # un jeton ré-enregistré par l'app est de nouveau valable
+        device.save(update_fields=["user", "platform", "disabled_at", "updated_at"])
     return device
 
 

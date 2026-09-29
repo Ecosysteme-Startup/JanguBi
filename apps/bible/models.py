@@ -299,3 +299,112 @@ class ReadingPlanPassage(BaseModel):
 
     def __str__(self) -> str:
         return f"PlanPassage(plan={self.plan_id}, day={self.day_number})"
+
+
+# ─── « Pour vous aujourd'hui » : signaux de lecture et recommandations (plan V2 §6) ───
+#
+# Données religieuses sensibles (loi 2008-12) : jamais dans les logs, pas d'admin Django,
+# effacées avec le compte, exportées avec les données personnelles.
+
+
+class ReadingEvent(models.Model):
+    """Signal de lecture envoyé par l'app (par lots, idempotent par ``client_event_id``).
+
+    Porte sur un verset, une plage de versets du même chapitre, ou un chapitre entier.
+    Aucun texte libre n'est stocké (pas de requête de recherche : on garde seulement le
+    verset ouvert depuis les résultats).
+    """
+
+    class Kind(models.TextChoices):
+        LU = "lu", "Lu"
+        SIGNET = "signet", "Signet"
+        SURLIGNE = "surligne", "Surligné"
+        RECHERCHE = "recherche", "Ouvert depuis une recherche"
+        LECTIO = "lectio", "Lectio divina"
+
+    user = models.ForeignKey("users.BaseUser", on_delete=models.CASCADE, related_name="reading_events")
+    client_event_id = models.CharField(max_length=64)
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name="reading_events")
+    verse_start = models.ForeignKey(
+        Verse, null=True, blank=True, on_delete=models.CASCADE, related_name="reading_events_start"
+    )
+    verse_end = models.ForeignKey(
+        Verse, null=True, blank=True, on_delete=models.CASCADE, related_name="reading_events_end"
+    )
+    # Chapitre lu jusqu'au bout (sert à « lecture à continuer »).
+    finished = models.BooleanField(default=False)
+    occurred_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-occurred_at"]
+        verbose_name = "Signal de lecture"
+        verbose_name_plural = "Signaux de lecture"
+        constraints = [
+            models.UniqueConstraint(fields=["user", "client_event_id"], name="uniq_reading_event_client_id"),
+        ]
+        indexes = [models.Index(fields=["user", "-occurred_at"], name="idx_reading_event_user_time")]
+
+    def __str__(self) -> str:
+        return f"ReadingEvent({self.user_id}, {self.kind}, ch{self.chapter_id})"
+
+
+class Bookmark(BaseModel):
+    """Signet (sans couleur) ou surlignage (avec couleur) d'un verset, avec une note facultative."""
+
+    class Color(models.TextChoices):
+        AUCUNE = "", "Aucune (signet)"
+        JAUNE = "jaune", "Jaune"
+        VERT = "vert", "Vert"
+        BLEU = "bleu", "Bleu"
+        ROSE = "rose", "Rose"
+        VIOLET = "violet", "Violet"
+
+    user = models.ForeignKey("users.BaseUser", on_delete=models.CASCADE, related_name="bible_bookmarks")
+    verse = models.ForeignKey(Verse, on_delete=models.CASCADE, related_name="bookmarks")
+    color = models.CharField(max_length=16, choices=Color.choices, blank=True, default="")
+    note = models.TextField(blank=True, default="", max_length=2000)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "Signet"
+        verbose_name_plural = "Signets"
+        constraints = [models.UniqueConstraint(fields=["user", "verse"], name="uniq_bookmark_user_verse")]
+
+    def __str__(self) -> str:
+        return f"Bookmark({self.user_id}, v{self.verse_id})"
+
+
+class ParolePreference(BaseModel):
+    """Réglages de la Parole propres au fidèle. Absent = valeurs par défaut."""
+
+    user = models.OneToOneField("users.BaseUser", on_delete=models.CASCADE, related_name="parole_preference")
+    # « Pour vous aujourd'hui » personnalisé à partir de ses lectures. Désactivé : aucun signal
+    # n'est plus enregistré ni utilisé, et on sert le verset des lectures du jour.
+    personnalisation_parole = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "Réglages de la Parole"
+        verbose_name_plural = "Réglages de la Parole"
+
+    def __str__(self) -> str:
+        return f"ParolePreference({self.user_id})"
+
+
+class DailyRecommendation(models.Model):
+    """« Pour vous aujourd'hui » précalculé la nuit (tâche ``bible_reco_recompute_task``)."""
+
+    user = models.ForeignKey("users.BaseUser", on_delete=models.CASCADE, related_name="daily_recommendations")
+    date = models.DateField()
+    payload = models.JSONField(default=dict)
+    computed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "Recommandation du jour"
+        verbose_name_plural = "Recommandations du jour"
+        constraints = [models.UniqueConstraint(fields=["user", "date"], name="uniq_daily_reco_user_date")]
+
+    def __str__(self) -> str:
+        return f"DailyRecommendation({self.user_id}, {self.date})"

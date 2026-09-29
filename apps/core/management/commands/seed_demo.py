@@ -29,12 +29,16 @@ PEOPLE = [
     ("admin_paroissial", "Robert", "Sagna", "clerc", "pretre", datetime.date(1978, 10, 4)),
     # Administrateur plateforme : rôle de realm Keycloak `platform_admin`, aucune nomination.
     ("plateforme", "Mariama", "Ba", "laic", "aucun", datetime.date(1988, 2, 14)),
+    # Dons et quêtes (ADR-017) : économe de la paroisse pilote et économe diocésain.
+    ("econome", "Anne", "Mendy", "laic", "aucun", datetime.date(1983, 4, 12)),
+    ("econome_dio", "Bernard", "Coly", "laic", "aucun", datetime.date(1972, 7, 3)),
 ]
 # (personne, office, où, qualité)
 OFFICES = [("cure", "cure", "parish", "cure"), ("vicaire", "vicaire_paroissial", "parish", ""),
            ("secretaire", "secretaire_paroissial", "parish", ""), ("doyen", "doyen", "deanery", ""),
            ("chancelier", "chancelier", "diocese", ""),
-           ("admin_paroissial", "cure", "parish2", "administrateur")]  # fmt: skip
+           ("admin_paroissial", "cure", "parish2", "administrateur"),
+           ("econome", "econome_paroissial", "parish", ""), ("econome_dio", "econome_diocesain", "diocese", "")]  # fmt: skip
 SECOND_PARISH_CODE = "DEMO-STE-THERESE"
 
 
@@ -56,8 +60,10 @@ class Command(BaseCommand):
             raise CommandError("Paroisse pilote absente : lancez d'abord seed_hierarchy_profile senegal.")
         with transaction.atomic():
             people = self._people(parish)
+            self._memberships(people, parish)
             self._offices(people, parish)
             self._content(people, parish)
+            self._donations(people, parish)
         self.stdout.write(self.style.SUCCESS(f"Démo prête : comptes *@{DOMAIN} (connexion par Keycloak)."))
 
     def _people(self, parish: Any) -> dict[str, Any]:
@@ -106,6 +112,16 @@ class Command(BaseCommand):
                 },
             )
             authz.invalidate_user(people[key].pk)
+
+    def _memberships(self, people: dict[str, Any], parish: Any) -> None:
+        """Paroisses multiples (décisions 6-8) : la paroisse pilote est la principale de chacun ;
+        la fidèle de démo suit aussi Sainte-Thérèse de Grand-Dakar en paroisse secondaire."""
+        from apps.hierarchy.services_memberships import membership_join
+
+        for user in people.values():
+            if user.paroisse_suivie_id:
+                membership_join(user=user, node=user.paroisse_suivie)
+        membership_join(user=people["fidele"], node=self._second_parish(parish.get_parent()))
 
     def _second_parish(self, deanery: Any) -> Any:
         from apps.hierarchy.models import Node, NodeType
@@ -198,6 +214,53 @@ class Command(BaseCommand):
                 },
             )
 
+    def _donations(self, people: dict[str, Any], parish: Any) -> None:
+        """Pilote Saint-Dominique : collecte activée, fonds du 27 septembre 2026, quête impérée de Brin."""
+        from apps.donations import services as dons
+        from apps.donations.models import DonationActivation, Fund
+
+        DonationActivation.objects.update_or_create(
+            node=parish,
+            defaults={
+                "enabled": True,
+                "authorization_ref": "DEMO-ARCH-DAK-2026",
+                "authorization_date": datetime.date(2026, 9, 1),
+                "authorization_text": "Collecte autorisée par l'Archevêché de Dakar (démonstration).",
+                "allocation_key": "DEMO-SD",
+                "receipt_prefix": "SD",
+            },
+        )
+        cure = people["cure"]
+        if Fund.objects.filter(node=parish, decided_by=cure).exists():
+            return
+        funds = [
+            ("quete_dominicale", "Quête du dimanche 27 septembre", "Vie de la paroisse et entretien des lieux.",
+             datetime.date(2026, 9, 27), datetime.date(2026, 10, 4), None),
+            ("campagne", "Toiture de la chapelle de la Cité universitaire",
+             "Remplacement des tôles et de la charpente avant l'hivernage.", datetime.date(2026, 9, 1),
+             datetime.date(2026, 12, 31), 4_500_000),
+            ("contribution_annuelle", "Contribution annuelle 2026", "Participation des fidèles à la vie de l'Église.",
+             datetime.date(2026, 1, 1), datetime.date(2026, 12, 31), None),
+        ]  # fmt: skip
+        for kind, title, description, starts_on, ends_on, goal in funds:
+            fund = dons.fund_create(
+                actor=cure, node=parish, kind=kind, title=title, description=description,
+                starts_on=starts_on, ends_on=ends_on, goal_amount=goal,
+            )  # fmt: skip
+            dons.fund_publish(fund=fund, actor=cure)
+        diocese = next(n for n in reversed(parish.get_ancestors()) if n.type.code == "diocese")
+        if not Fund.objects.filter(node=diocese, kind="quete_imperee").exists():
+            dons.imperee_create(
+                actor=people["econome_dio"],
+                diocese=diocese,
+                title="Quête impérée pour le Grand Séminaire de Brin",
+                description="Formation des séminaristes (reversée à la curie).",
+                starts_on=datetime.date(2026, 9, 27),
+                ends_on=datetime.date(2026, 10, 4),
+                parishes=[parish],
+                authorization_ref="DEMO-ARCH-DAK-2026",
+            )
+
     def _reset(self) -> None:
         from apps.agenda.models import Event
         from apps.confessions.models import ConfessionSlot, ConfessionSlotRule
@@ -213,6 +276,14 @@ class Command(BaseCommand):
             Event.objects.filter(organizer__in=people).delete()
             Article.objects.filter(author__in=people).delete()
             DocumentRequest.objects.filter(requester__in=people).delete()
+            from apps.donations.models import CashCollection, Donation, DonationActivation, Fund
+
+            demo_funds = Fund.objects.filter(decided_by__in=people)
+            Donation.objects.filter(fund__in=demo_funds).delete()
+            CashCollection.objects.filter(fund__in=demo_funds).delete()
+            Fund.objects.filter(parent__in=demo_funds).delete()
+            demo_funds.delete()
+            DonationActivation.objects.filter(authorization_ref="DEMO-ARCH-DAK-2026").delete()
             OfficeAssignment.objects.filter(person__in=people).delete()
             Node.objects.filter(code=SECOND_PARISH_CODE).delete()
             count = people.count()

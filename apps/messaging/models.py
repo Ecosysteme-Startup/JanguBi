@@ -174,6 +174,13 @@ class Message(BaseModel):
                 fields=["conversation", "-created_at"],
                 name="msg_conv_created_idx",
             ),
+            # Non lus d'une conversation (liste des conversations, marquage « lu ») : ne couvre
+            # que les messages en attente de lecture, donc reste petit (docs/SCALING.md).
+            models.Index(
+                fields=["conversation", "sender"],
+                condition=models.Q(read_at__isnull=True, deleted_at__isnull=True),
+                name="msg_conv_unread_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -291,6 +298,7 @@ class NotificationPreference(BaseModel):
     user = models.OneToOneField(BaseUser, on_delete=models.CASCADE, related_name="notification_preference")
     in_app = models.BooleanField(_("dans l'application"), default=True)
     email = models.BooleanField(_("par e-mail"), default=True)
+    push = models.BooleanField(_("sur le téléphone (push)"), default=True, db_default=True)
     topic_annonces = models.BooleanField(_("annonces de ma paroisse"), default=True)
     topic_evenements = models.BooleanField(_("rappels d'événements"), default=True)
     quiet_start = models.TimeField(_("début du silence"), default=datetime.time(22, 0))
@@ -307,9 +315,10 @@ class NotificationPreference(BaseModel):
 class PushDevice(BaseModel):
     """
     Token d'appareil pour les notifications push (app mobile React Native).
-    On enregistre les tokens dès maintenant ; l'envoi FCM/APNs viendra avec
-    l'app. Un token est unique et se réassigne au dernier utilisateur connecté
-    sur l'appareil.
+    Envoi par FCM HTTP v1 ou APNs (``apps.messaging.push``). Un token est unique et
+    se réassigne au dernier utilisateur connecté sur l'appareil. Un token refusé par
+    le fournisseur (appareil désinstallé, jeton expiré) est désactivé, pas supprimé :
+    un nouvel enregistrement le réactive.
     """
 
     class Platform(models.TextChoices):
@@ -324,6 +333,7 @@ class PushDevice(BaseModel):
     )
     platform = models.CharField(max_length=10, choices=Platform.choices)
     token = models.CharField(max_length=512, unique=True)
+    disabled_at = models.DateTimeField(_("désactivé le"), null=True, blank=True)
 
     class Meta:
         verbose_name = _("Appareil push")

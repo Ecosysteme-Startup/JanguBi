@@ -1,8 +1,10 @@
 from django.core.exceptions import ImproperlyConfigured
 
+from apps.core.modules import filter_beat_schedule
 from config.env import env
 
 from .base import *  # noqa
+from .base import _CELERY_BEAT_SCHEDULE_ALL
 
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 
@@ -11,6 +13,12 @@ DJANGO_ADMIN_ENABLED = env.bool("DJANGO_ADMIN_ENABLED", default=False)
 
 
 SECRET_KEY = env("SECRET_KEY")
+
+# Dons (ADR-017) : jamais d'agrégateur factice en production. Sans agrégateur réel configuré,
+# le module est retiré (routes et tâches), plutôt que d'empêcher tout le déploiement.
+if "donations" in JANGUBI_MODULES and DONATIONS_PROVIDER == "fake":  # noqa: F405
+    JANGUBI_MODULES = [m for m in JANGUBI_MODULES if m != "donations"]  # noqa: F405
+    CELERY_BEAT_SCHEDULE = filter_beat_schedule(_CELERY_BEAT_SCHEDULE_ALL, active=JANGUBI_MODULES)
 
 # Chiffrement des conversations pastorales (apps/messaging/fields.py).
 #

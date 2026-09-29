@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Gabarit web app</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FFFFFF;color:#0E1A2B;font-family:'Libre Franklin',sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:#0A6BA3;text-decoration:none}a:hover{color:#085887}
+button,input,select,textarea{font-family:inherit}
+:focus-visible{outline:2px solid #0A6BA3;outline-offset:2px}
+.jb-btn-p:hover{background:#085887 !important}
+.jb-btn-o:hover{background:#F7FAFD !important;border-color:#8391A4 !important}
+.jb-side:hover{background:#EDF3F9 !important;color:#0E1A2B !important}
+.jb-card:hover{border-color:#B3D8F0 !important}
+.jb-row:hover{background:#F7FAFD}
+.jb-icon:hover{background:#EDF3F9 !important}
+</style>
+</helmet>
+<!-- RACINE 1440 : ajuster height et $preview. Barre latérale 264 (pleine hauteur), contenu à droite. -->
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; overflow: hidden; position: relative; display: grid; grid-template-columns: 264px minmax(0, 1fr); background: #FFFFFF; color: #0E1A2B; font-family: 'Libre Franklin', sans-serif; font-size: 16px; line-height: 24px;">
+
+  <!-- ===== BARRE LATÉRALE FIDÈLE =====
+       Entrée active : background #EEF6FC; color #06466C; font-weight 600; aria-current="page" ; icône color #0A6BA3.
+       Inactive : color #3A4859 ; icône #586677.
+       VARIANTE ESPACE PAROISSE : remplacer le bloc logo+recherche par un sélecteur de contexte
+         (carte 232×56 fond #FFFFFF bordure #DDE5EE rayon 12 : pastille 32 b100 avec icône church b700, « Saint-Dominique » 15/600, « Espace paroisse » 13 ink3, chevron-down),
+         puis groupes « Aujourd'hui », « Demandes d'actes » (compteur 4), « Messagerie » (3), « Confessions », « Annonces », « Horaires et lieux », « Agenda », séparateur, « Équipe », « Paramètres » ;
+         en bas : Mme Germaine Faye, Secrétaire paroissiale, lien « Revenir à mon espace fidèle ». -->
+  <aside style="display: flex; flex-direction: column; background: #F7FAFD; border-right: 1px solid #DDE5EE; padding: 20px 16px; box-sizing: border-box;">
+    <a href="WEB-FID-Accueil.dc.html" aria-label="Jàngu Bi, accueil" style="display: inline-flex; align-items: center; gap: 10px; padding: 0 8px; height: 40px; color: #0E1A2B;">
+      <span style="width: 30px; height: 30px; border-radius: 8px; background: #0A6BA3; display: inline-flex; align-items: center; justify-content: center; color: #FFFFFF;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></span>
+      <span style="font-family: 'Source Serif 4', Georgia, serif; font-size: 20px; font-weight: 600;">Jàngu Bi</span>
+    </a>
+    <label style="margin-top: 16px; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border-radius: 10px; background: #FFFFFF; border: 1px solid #DDE5EE; color: #586677; font-size: 14px;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+      <input type="search" placeholder="Rechercher" aria-label="Rechercher" style="flex: 1; min-width: 0; border: 0; background: transparent; font-size: 14px; color: #0E1A2B; outline: none;">
+      <span style="font-size: 12px; color: #586677; border: 1px solid #DDE5EE; border-radius: 6px; padding: 0 6px; line-height: 20px;">Ctrl K</span>
+    </label>
+
+    <nav aria-label="Navigation principale" style="margin-top: 20px; display: flex; flex-direction: column; gap: 2px;">
+      <a href="WEB-FID-Accueil.dc.html" aria-current="page" style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; background: #EEF6FC; color: #06466C; font-size: 15px; font-weight: 600;">
+        <span style="display: inline-flex; color: #0A6BA3;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"></path><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg></span>Accueil
+      </a>
+      <a href="WEB-Parole-du-jour.dc.html" class="jb-side" style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; color: #3A4859; font-size: 15px;">
+        <span style="display: inline-flex; color: #586677;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg></span>La Parole
+      </a>
+      <a href="WEB-Fiche-Paroisse.dc.html" class="jb-side" style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; color: #3A4859; font-size: 15px;">
+        <span style="display: inline-flex; color: #586677;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 9h4"></path><path d="M12 7v5"></path><path d="M14 22v-4a2 2 0 0 0-4 0v4"></path><path d="M18 22V5.618a1 1 0 0 0-.553-.894l-4.553-2.277a2 2 0 0 0-1.788 0L6.553 4.724A1 1 0 0 0 6 5.618V22"></path><path d="m18 7 3.447 1.724a1 1 0 0 1 .553.894V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-10.382a1 1 0 0 1 .553-.894L6 7"></path></svg></span>Ma paroisse
+      </a>
+      <a href="WEB-FID-Demande-Nouvelle.dc.html" class="jb-side" style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; color: #3A4859; font-size: 15px;">
+        <span style="display: inline-flex; color: #586677;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path></svg></span><span style="flex: 1;">Mes demandes</span><span style="min-width: 22px; height: 22px; border-radius: 11px; background: #D9EBF7; color: #06466C; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">1</span>
+      </a>
+      <a href="WEB-FID-Conversation.dc.html" class="jb-side" style="display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-radius: 10px; color: #3A4859; font-size: 15px;">
+        <span style="display: inline-flex; color: #586677;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg></span><span style="flex: 1;">Parler à un prêtre</span><span style="min-width: 22px; height: 22px; border-radius: 11px; background: #0A6BA3; color: #FFFFFF; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">1</span>
+      </a>
+    </nav>
+
+    <div style="flex: 1;"></div>
+
+    <!-- Bas de barre : paroisse suivie + utilisateur -->
+    <a href="WEB-Fiche-Paroisse.dc.html" class="jb-card" style="display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: #FFFFFF; border: 1px solid #DDE5EE; color: #0E1A2B;">
+      <span style="font-size: 12px; color: #586677;">Paroisse suivie</span>
+      <span style="font-size: 15px; font-weight: 600;">Saint-Dominique</span>
+      <span style="font-size: 13px; color: #3A4859;">Prochaine messe aujourd'hui à 18 h 30</span>
+    </a>
+    <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px; padding: 0 4px;">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #D9EBF7; color: #06466C; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">MD</span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column;"><span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Marie-Thérèse Diouf</span><span style="font-size: 12px; color: #586677; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">mt.diouf@orange.sn</span></span>
+      <a href="#" class="jb-icon" aria-label="Réglages du compte" style="width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: #3A4859;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg></a>
+    </div>
+  </aside>
+
+  <!-- ===== CONTENU ===== -->
+  <div style="display: flex; flex-direction: column; min-width: 0;">
+    <!-- Barre supérieure 64px : fil d'Ariane ou vide à gauche ; notifications + action à droite -->
+    <div style="height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; border-bottom: 1px solid #DDE5EE;">
+      <span style="font-size: 14px; color: #586677;">Jeudi 24 septembre 2026</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <a href="#" class="jb-icon" aria-label="Notifications, 3 non lues" style="position: relative; width: 40px; height: 40px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; color: #0E1A2B;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+          <span style="position: absolute; top: 8px; right: 9px; width: 8px; height: 8px; border-radius: 50%; background: #0A6BA3; border: 2px solid #FFFFFF;"></span>
+        </a>
+      </div>
+    </div>
+    <main style="padding: 32px 40px 48px; max-width: 1120px; box-sizing: border-box; width: 100%;">
+      <!-- Titre de page : h1 Libre Franklin 32/40 600, lettrage -0.01em ; sous-titre 16/24 ink2. Puis contenu. -->
+    </main>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

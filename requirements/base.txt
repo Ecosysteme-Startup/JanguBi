@@ -12,6 +12,8 @@ whitenoise==6.11.0
 pgvector==0.4.2
 # Embeddings locaux gratuits (ONNX, sans torch) pour la recherche sémantique.
 fastembed==0.8.0
+# Sonothèque : forme d'onde et calculs des recommandations (déjà tiré par pgvector et fastembed).
+numpy==2.4.6
 
 django-filter==25.2
 django-treebeard==4.8.0
@@ -32,6 +34,8 @@ sentry-sdk==2.42.0
 
 requests==2.34.2
 httpx==0.28.1
+# HTTP/2 pour APNs (push iOS, apps/messaging/push_providers.py).
+h2>=4.1,<5
 PyYAML==6.0.3
 Pillow>=12.2.0,<13
 tenacity==9.1.4
@@ -55,3 +59,6 @@ channels_redis==4.3.0
 cryptography>=48.0.1,<49
 reportlab==4.4.1
 nh3==0.2.*
+
+# Exploitation (lot B2) : /metrics Prometheus.
+django-prometheus==2.4.1
