@@ -44,6 +44,9 @@ class AudioSource(BaseModel):
     description = models.TextField(_("présentation"), blank=True, default="")
     cover = models.ForeignKey("files.File", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     is_active = models.BooleanField(_("active"), default=True)
+    # Retrait par la modération (signalement) : la source est aussi désactivée, et seul
+    # ``audio.moderer`` peut la réactiver.
+    hidden_at = models.DateTimeField(_("retirée par la modération le"), null=True, blank=True)
     created_by = models.ForeignKey("users.BaseUser", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
     class Meta:
@@ -336,11 +339,12 @@ class ListenerSettings(models.Model):
 
 
 class TrackReport(BaseModel):
-    """Signalement d'un contenu (droits d'auteur, contenu inapproprié) : une piste **ou** un album.
-    Traité par ``audio.moderer`` sur le nœud de la source."""
+    """Signalement d'un contenu (droits d'auteur, contenu inapproprié) : une piste, un album **ou**
+    une source (exactement une cible). Traité par ``audio.moderer`` sur le nœud de la source."""
 
     track = models.ForeignKey(Track, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
     album = models.ForeignKey(Album, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
+    source = models.ForeignKey(AudioSource, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
     reporter = models.ForeignKey("users.BaseUser", null=True, on_delete=models.SET_NULL, related_name="+")
     reason = models.CharField(max_length=12, choices=ReportReason.choices)
     comment = models.TextField(blank=True, default="")
@@ -352,8 +356,9 @@ class TrackReport(BaseModel):
         indexes = [models.Index(fields=["status", "-created_at"], name="audio_report_status")]
         constraints = [
             models.CheckConstraint(
-                name="audio_report_track_xor_album",
-                condition=(Q(track__isnull=False) & Q(album__isnull=True))
-                | (Q(track__isnull=True) & Q(album__isnull=False)),
+                name="audio_report_one_target",
+                condition=(Q(track__isnull=False) & Q(album__isnull=True) & Q(source__isnull=True))
+                | (Q(track__isnull=True) & Q(album__isnull=False) & Q(source__isnull=True))
+                | (Q(track__isnull=True) & Q(album__isnull=True) & Q(source__isnull=False)),
             ),
         ]

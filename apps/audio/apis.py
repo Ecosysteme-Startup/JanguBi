@@ -883,6 +883,25 @@ class AlbumReportApi(_Api):
         return Response(AudioReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
 
+class SourceReportApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_sources_report",
+        summary="Signaler une source (nom, présentation, image, ensemble de ses contenus)",
+        request=AudioReportInputSerializer,
+        responses={201: AudioReportSerializer, 404: _NOT_FOUND},
+    )
+    def post(self, request: Request, source_id: str) -> Response:
+        data = _body(AudioReportInputSerializer, request)
+        report = services.source_report_create(
+            user=request.user,
+            source=selectors.source_get(source_id=source_id),
+            reason=data["motif"],
+            comment=data["comment"],
+        )
+        return Response(AudioReportSerializer(report).data, status=status.HTTP_201_CREATED)
+
+
 class ReportListApi(_Api):
     @extend_schema(
         tags=TAG, operation_id="audio_reports_list", summary="Signalements ouverts (audio.moderer)",

@@ -343,15 +343,18 @@ class AudioReportSerializer(serializers.ModelSerializer):
     cible = serializers.SerializerMethodField()
     track = AudioTrackSerializer(allow_null=True)
     album = AudioAlbumSerializer(allow_null=True)
+    source = AudioSourceSerializer(allow_null=True)  # type: ignore[assignment]  # champ déclaré, pas Field.source
     motif = serializers.ChoiceField(source="reason", choices=ReportReason.choices)
 
     class Meta:
         model = TrackReport
-        fields = ("id", "cible", "track", "album", "motif", "comment", "status", "created_at", "handled_at")
+        fields = ("id", "cible", "track", "album", "source", "motif", "comment", "status", "created_at", "handled_at")
 
     @extend_schema_field(serializers.ChoiceField(choices=ReportTarget.choices))
     def get_cible(self, obj: TrackReport) -> str:
-        return ReportTarget.PISTE if obj.track_id else ReportTarget.ALBUM
+        if obj.track_id:
+            return ReportTarget.PISTE
+        return ReportTarget.ALBUM if obj.album_id else ReportTarget.SOURCE
 
 
 class AudioCoverUploadOutputSerializer(serializers.Serializer):

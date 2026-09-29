@@ -8,6 +8,7 @@ Il sert aux équipes web (`JanguBiUI`) et mobile (`JanguBIMobileApp`).
 | Messages, lu, réactions, « écrit… » | WebSocket | `wss://…/ws/messaging/conversations/<id>/` |
 | Notifications dans l'app, présence | WebSocket | `wss://…/ws/notifications/` |
 | Tableaux de bord des dons | SSE (`text/event-stream`) | `GET /api/v1/staff/dons/flux/?noeud=<id>` |
+| Progression d'encodage d'un envoi audio | SSE (`text/event-stream`) | `GET /api/v1/audio/uploads/<id>/flux/` (contrat : `docs/API-AUDIO.md` §2) |
 | App fermée | Push FCM et APNs | enregistrement : `POST /api/v1/notifications/devices/` |
 
 Le serveur tourne sous **Daphne (ASGI)**. gunicorn (WSGI) ne sert ni les WebSocket ni les flux SSE.
@@ -223,6 +224,9 @@ premier plan.
   n'importe quel code serveur, appeler `apps.realtime.sse.sse_publish(stream=…, event=…, data=…)`
   dans un `transaction.on_commit`.
 - Un flux ne garde **ni transaction ni connexion Postgres** pendant qu'il est ouvert.
+- Même infrastructure pour la progression d'encodage de la sonothèque (`apps/realtime/audio.py`,
+  groupe `sse.audio.upload.<uuid>`, événement `audio.encodage`) : même format, même reprise, même
+  ticket ; le flux se ferme de lui-même après l'événement `"final": true`.
 
 ## 4. Notifications push
 

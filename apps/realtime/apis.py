@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin
 from apps.api.v1 import V1ApiMixin
 from apps.hierarchy import selectors as hierarchy_selectors
+from apps.realtime import audio as realtime_audio
 from apps.realtime.dons import dons_flux_check, dons_resync, stream_for
 from apps.realtime.sse import sse_release_db_connection, sse_response, sse_stream
 
@@ -90,3 +91,50 @@ class DonsFluxApi(V1ApiMixin, ApiAuthMixin, APIView):
         return sse_response(
             sse_stream(stream=stream_for(node.pk), last_event_id=last_event_id, resync=lambda: dons_resync(node_id))
         )
+
+
+class AudioUploadFluxApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """Progression d'encodage d'un envoi (complément du polling de ``GET audio/uploads/<id>/``).
+    Hors ATOMIC_REQUESTS : lectures seules, et la connexion est rendue avant le flux."""
+
+    authentication_classes = [*ApiAuthMixin.authentication_classes, SseTicketAuthentication]
+    permission_classes = (IsAuthenticated,)
+    renderer_classes = [EventStreamRenderer, JSONRenderer]
+
+    @extend_schema(
+        tags=["audio"],
+        operation_id="audio_uploads_flux",
+        summary="Flux SSE de la progression d'encodage (audio.encodage)",
+        description=(
+            "text/event-stream. À l'ouverture : l'état courant (événement sans id). Puis un "
+            "événement audio.encodage à chaque étape ; final=true (pret ou echec) : le serveur ferme "
+            "le flux et le client ferme son EventSource. Battement « : ping », reprise par "
+            "Last-Event-ID. Contrat : docs/API-AUDIO.md, protocole : docs/TEMPS-REEL.md."
+        ),
+        parameters=[
+            OpenApiParameter("ticket", str, description="Ticket à usage unique (EventSource natif)"),
+            OpenApiParameter("Last-Event-ID", str, location=OpenApiParameter.HEADER, required=False),
+        ],
+        responses={
+            200: OpenApiResponse(response=OpenApiTypes.STR, description="text/event-stream"),
+            403: OpenApiResponse(description="Ni l'auteur de l'envoi, ni audio.publier sur la source"),
+            404: OpenApiResponse(description="Piste introuvable"),
+        },
+    )
+    def get(self, request: Request, track_id: str) -> Any:
+        from apps.audio import selectors as audio_selectors
+
+        track = audio_selectors.track_get(track_id=track_id)
+        realtime_audio.upload_flux_check(user=request.user, track=track)
+        last_event_id = request.META.get("HTTP_LAST_EVENT_ID") or request.query_params.get("lastEventId")
+        current = {**realtime_audio.track_progress_data(track), "resync": True}
+        # Reprise : le rejeu suffit (l'état courant le précéderait) ; un envoi terminé envoie son état.
+        snapshot = None if last_event_id and not current["final"] else current
+        track_pk = track.pk
+        sse_release_db_connection()
+        stream = sse_stream(
+            stream=realtime_audio.stream_for(track_pk),
+            last_event_id=last_event_id,
+            resync=lambda: realtime_audio.upload_resync(track_pk),
+        )
+        return sse_response(realtime_audio.upload_stream(stream=stream, snapshot=snapshot))

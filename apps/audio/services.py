@@ -47,11 +47,12 @@ from apps.audio.models import (
     TrackRendition,
     TrackReport,
 )
-from apps.core.exceptions import ApplicationError, ConflictError, NotFoundError
+from apps.core.exceptions import ApplicationError, ConflictError, NotFoundError, PermissionDeniedError
 from apps.files.models import File
 from apps.files.utils import file_generate_name
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node
+from apps.realtime import audio as realtime_audio
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,14 @@ def source_create(
 @transaction.atomic
 def source_update(*, actor: Any, source: AudioSource, data: dict[str, Any]) -> AudioSource:
     access.require_publish(actor, source.node)
+    if source.hidden_at is not None and data.get("is_active"):
+        # Source retirée par la modération : seul ``audio.moderer`` la rétablit.
+        if not access.can_moderate(actor, source.node):
+            raise PermissionDeniedError(
+                "Cette source a été retirée par la modération. Adressez-vous au diocèse pour la rétablir.",
+                code="source_retiree",
+            )
+        source.hidden_at = None
     for name in SOURCE_FIELDS:
         if name in data:
             setattr(source, name, data[name])
@@ -477,6 +486,7 @@ def upload_finish(*, actor: Any, track: Track) -> Track:
     track.failure_reason = ""
     track.encoding_step, track.encoding_percent = "", 0
     track.save(update_fields=["version", "status", "failure_reason", "encoding_step", "encoding_percent", "updated_at"])
+    realtime_audio.upload_progress_on_commit(track)
     _enqueue_transcode(track)
     return track
 
@@ -495,6 +505,7 @@ def track_reencode(*, actor: Any, track: Track) -> Track:
     track.failure_reason = ""
     track.encoding_step, track.encoding_percent = "", 0
     track.save(update_fields=["version", "status", "failure_reason", "encoding_step", "encoding_percent", "updated_at"])
+    realtime_audio.upload_progress_on_commit(track)
     _enqueue_transcode(track)
     return track
 
@@ -538,18 +549,27 @@ def _mark_failed(*, track_id: Any, version: int, reason: str) -> None:
     track.status = TrackStatus.ECHEC
     track.failure_reason = reason[:1000]
     track.save(update_fields=["status", "failure_reason", "updated_at"])
+    realtime_audio.upload_progress_on_commit(track)
     _notify_uploader(track, event_type="audio.encodage_echec")
 
 
 @transaction.atomic
 def _mark_retrying(*, track_id: Any, version: int, reason: str) -> None:
-    Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
+    updated = Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
         status=TrackStatus.EN_FILE,
         failure_reason=reason[:1000],
         encoding_step="",
         encoding_percent=0,
         updated_at=timezone.now(),
     )
+    if updated:
+        transaction.on_commit(
+            partial(
+                realtime_audio.upload_progress_publish,
+                track_id=track_id, version=version, status=TrackStatus.EN_FILE, step="", percent=0,
+                failure_reason=reason[:1000],
+            )  # fmt: skip
+        )
 
 
 @transaction.atomic
@@ -587,6 +607,7 @@ def _mark_ready(*, track_id: Any, version: int, result: transcode.TranscodeResul
     track.probe_tags = result.tags
     track.waveform = result.waveform
     track.save()
+    realtime_audio.upload_progress_on_commit(track)
     _notify_uploader(track, event_type="audio.encodage_termine")
     if track.published_at is not None:
         _on_commit_invalidate()
@@ -599,12 +620,18 @@ def _progress_recorder(track_id: Any, version: int) -> transcode.ProgressCallbac
     jamais l'encodage."""
 
     def record(step: str, percent: int) -> None:
+        percent = max(0, min(100, int(percent)))
         try:
-            Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
-                encoding_step=step, encoding_percent=max(0, min(100, int(percent)))
+            updated = Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
+                encoding_step=step, encoding_percent=percent
             )
         except Exception:  # noqa: BLE001
             logger.warning("audio.transcode.progress_failed", extra={"track_id": str(track_id)})
+            return
+        if updated:  # flux SSE : une panne du transport est journalisée, jamais levée
+            realtime_audio.upload_progress_publish(
+                track_id=track_id, version=version, status=TrackStatus.ENCODAGE, step=step, percent=percent
+            )
 
     return record
 
@@ -636,6 +663,7 @@ def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) 
                 track.status = TrackStatus.ECHEC
                 track.failure_reason = "Fichier source absent."
                 track.save(update_fields=["status", "failure_reason", "updated_at"])
+                realtime_audio.upload_progress_on_commit(track)
                 _notify_uploader(track, event_type="audio.encodage_echec")
                 return "echec"
             track.status = TrackStatus.ENCODAGE
@@ -650,6 +678,10 @@ def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) 
             )  # fmt: skip
             raw_key = raw.file.name
             title, artist = track.title, ", ".join(track.performers)
+        # Hors du bloc : l'état « encodage » est validé ; publié avant les étapes qui suivent.
+        realtime_audio.upload_progress_publish(
+            track_id=track_id, version=version, status=TrackStatus.ENCODAGE, step=EncodingStep.ANALYSE, percent=0
+        )
 
         try:
             with tempfile.TemporaryDirectory(prefix="jangubi-audio-") as tmp:
@@ -1062,31 +1094,54 @@ def album_report_create(*, user: Any, album: Album, reason: str, comment: str = 
 
 
 @transaction.atomic
+def source_report_create(*, user: Any, source: AudioSource, reason: str, comment: str = "") -> TrackReport:
+    """Signalement d'une source (nom, présentation, image, ensemble de ses contenus). Toute source
+    active est signalable par un compte connecté : les sources sont publiques."""
+    if not source.is_active:
+        raise NotFoundError("Source introuvable.", code="source_introuvable")
+    return TrackReport.objects.create(source=source, reporter=user, reason=reason, comment=comment[:2000])
+
+
+def _report_target(report: TrackReport) -> Track | Album | AudioSource:
+    if report.track_id:
+        return report.track  # type: ignore[return-value]
+    if report.album_id:
+        return report.album  # type: ignore[return-value]
+    return report.source  # type: ignore[return-value]
+
+
+@transaction.atomic
 def report_handle(*, actor: Any, report: TrackReport, decision: str) -> TrackReport:
     """``retire`` : la piste (ou l'album et toutes ses pistes) disparaît du catalogue
-    (``hidden_at``) ; ``rejete`` : sans suite. Tous les signalements ouverts de la même cible sont
-    clos ensemble."""
-    target: Track | Album = report.track if report.track_id else report.album  # type: ignore[assignment]
-    node = target.source.node
+    (``hidden_at``) ; une source retirée est désactivée (``is_active``) et marquée ``hidden_at`` :
+    elle disparaît avec tous ses contenus, et seul ``audio.moderer`` peut la rétablir.
+    ``rejete`` : sans suite. Tous les signalements ouverts de la même cible sont clos ensemble."""
+    target = _report_target(report)
+    node = target.node if isinstance(target, AudioSource) else target.source.node
     access.require_moderate(actor, node)
     if report.status != ReportStatus.OUVERT:
         raise ConflictError("Ce signalement a déjà été traité.", code="signalement_traite")
     if decision not in (ReportStatus.RETIRE, ReportStatus.REJETE):
         raise ApplicationError("Décision inconnue.", code="decision_invalide")
     now = timezone.now()
-    same_target: dict[str, Track | Album] = {"track": target} if isinstance(target, Track) else {"album": target}
+    kind = "piste" if isinstance(target, Track) else "album" if isinstance(target, Album) else "source"
+    same_target = {{"piste": "track"}.get(kind, kind): target}
     TrackReport.objects.filter(status=ReportStatus.OUVERT, **same_target).update(
         status=decision, handled_by=actor, handled_at=now, updated_at=now
     )
     if decision == ReportStatus.RETIRE:
         target.hidden_at = now
-        target.save(update_fields=["hidden_at", "updated_at"])
+        if isinstance(target, AudioSource):
+            target.is_active = False
+            target.save(update_fields=["hidden_at", "is_active", "updated_at"])
+        else:
+            target.save(update_fields=["hidden_at", "updated_at"])
         if isinstance(target, Album):
             target.tracks.filter(hidden_at__isnull=True).update(hidden_at=now, updated_at=now)
         _on_commit_invalidate()
     audit_log(
         actor=actor, action=f"audio.signalement.{decision}", target=target, node=node,
-        metadata={"signalement": report.pk, "cible": "album" if isinstance(target, Album) else "piste"},
+        metadata={"signalement": report.pk, "cible": kind},
     )  # fmt: skip
     report.refresh_from_db()
     return report

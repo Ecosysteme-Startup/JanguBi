@@ -3,7 +3,8 @@
 Contrat JSON de la sonothèque (plan suite V2, §5). Lot B3, 27/09/2026 ; compléments B3b
 (espace staff, progression de l'encodage, pochettes, accueil, signalement d'album, limite de débit
 des événements), 29/09/2026 ; décisions validées du 29/09/2026 (album réservé visible verrouillé,
-téléchargement hors ligne, paroisses multiples, une lecture à la fois). Le schéma OpenAPI
+téléchargement hors ligne, paroisses multiples, une lecture à la fois) ; finitions du 29/09/2026
+(signalement d'une source, progression de l'encodage en SSE). Le schéma OpenAPI
 (`schema.yml`, tag `audio`) fait foi pour les types ; ce document donne le sens et des exemples.
 
 ## Conventions
@@ -274,7 +275,7 @@ tout de suite) :
 
 En cas d'échec, `status: "echec"` et l'étape atteinte restent affichées (`failure_reason` dit
 pourquoi). Interroger toutes les 2 à 3 s pendant l'encodage suffit ; la notification
-`audio.encodage_termine` arrive de toute façon à la fin.
+`audio.encodage_termine` arrive de toute façon à la fin. Le flux SSE ci-dessous évite ce polling.
 
 Exemple d'échec :
 
@@ -286,6 +287,45 @@ Exemple d'échec :
 À la fin de l'encodage, l'auteur reçoit une notification (`audio.encodage_termine` ou
 `audio.encodage_echec`, payload `{track_id, title, status, failure_reason}`) dans la liste des
 notifications et sur son WebSocket `ws/notifications/`.
+
+### `GET /audio/uploads/<id>/flux/` — progression de l'encodage en SSE
+
+Même droits que `GET /audio/uploads/<id>/` (l'auteur de l'envoi, ou `audio.publier` sur le nœud de
+la source) ; `401` sans compte, `403` sinon, `404` piste inconnue. Réponse `text/event-stream`,
+servie par Daphne (ASGI) avec l'infrastructure commune d'`apps/realtime` (battement `: ping` toutes
+les 15 s, champ `retry`, reprise par `Last-Event-ID`) : protocole détaillé dans `docs/TEMPS-REEL.md`.
+Authentification : en-tête `Authorization: Bearer` (polyfill `EventSource` du web, `fetch` en
+flux sur mobile) ou `?ticket=` à usage unique (`POST /api/v1/me/ws-ticket/`, un ticket par
+connexion) pour l'`EventSource` natif. Le polling reste disponible et fait foi.
+
+Un seul événement, `audio.encodage` (identifiants et état seulement, jamais le titre) :
+
+```text
+retry: 5000
+: flux audio.upload.f7a2c9e4-…
+
+event: audio.encodage
+data: {"track_id":"f7a2c9e4-…","version":1,"status":"encodage","encoding_step":"normalisation","encoding_percent":15,"failure_reason":"","final":false,"resync":true}
+
+id: 4
+event: audio.encodage
+data: {"track_id":"f7a2c9e4-…","version":1,"status":"encodage","encoding_step":"qualites","encoding_percent":30,"failure_reason":"","final":false}
+
+id: 9
+event: audio.encodage
+data: {"track_id":"f7a2c9e4-…","version":1,"status":"pret","encoding_step":"termine","encoding_percent":100,"failure_reason":"","final":true}
+```
+
+- À l'ouverture (sans `Last-Event-ID`), l'**état courant** arrive tout de suite, sans `id:` (le
+  point de reprise ne bouge pas), marqué `"resync": true`. Avec `Last-Event-ID`, les événements
+  manqués sont rejoués ; si c'est impossible, l'état courant est renvoyé (`"resync": true`).
+- Publication : `en_file` (fin d'envoi, réencodage, relance après une erreur technique), puis
+  `encodage` à chaque étape du tableau ci-dessus, puis `pret` ou `echec`.
+- `"final": true` (`pret` ou `echec`) : le serveur ferme le flux ; le client **ferme son
+  `EventSource`** (sinon il se reconnecterait) et recharge la piste. Un flux ouvert sur un envoi
+  déjà terminé envoie l'état et se ferme.
+- Le flux dure au plus 30 min (`SSE_MAX_CONNECTION_SECONDS`) ; le client se reconnecte alors avec
+  `Last-Event-ID`.
 
 ### `GET /audio/staff/sources/` et `GET /audio/staff/pistes/?source=<id>&status=<etat>`
 
@@ -676,6 +716,9 @@ Désactiver efface tout de suite les recommandations calculées de la personne.
   (`motif` : `droits`, `inapproprie`, `qualite`, `autre`) → `201`.
 - `POST /audio/albums/<id>/signaler/` : même corps, pour un album entier (pochette, présentation,
   ensemble des pistes) → `201`. `404 album_introuvable` si l'album n'est pas visible.
+- `POST /audio/sources/<id>/signaler/` : même corps, pour une source (nom, présentation, image,
+  ensemble de ses contenus) → `201`. Compte requis ; toute source active est signalable (les
+  sources sont publiques). `404 source_introuvable` si la source est inconnue ou inactive.
 - Objet signalement :
 
 ```json
@@ -685,11 +728,15 @@ Désactiver efface tout de suite les recommandations calculées de la personne.
  "created_at": "2026-09-28T08:00:00Z", "handled_at": null}
 ```
 
-  `cible` : `piste` (alors `track` rempli, `album: null`) ou `album` (l'inverse).
-- `GET /audio/moderation/signalements/` (`audio.moderer`) : signalements ouverts (pistes et albums)
-  du sous-arbre.
+  `cible` : `piste` (alors `track` rempli), `album` (`album` rempli) ou `source` (`source` rempli,
+  objet `Source` de `GET /audio/sources/`) ; les deux autres champs valent `null`.
+- `GET /audio/moderation/signalements/` (`audio.moderer`) : signalements ouverts (pistes, albums et
+  sources) du sous-arbre.
 - `POST /audio/moderation/signalements/<id>/traiter/` : `{"resolution": "retire"}` (la piste
-  disparaît du catalogue, `hidden_at` ; pour un album : l'album **et toutes ses pistes**) ou
+  disparaît du catalogue, `hidden_at` ; pour un album : l'album **et toutes ses pistes** ; pour une
+  source : elle est désactivée, `is_active: false` et `hidden_at`, et disparaît avec tous ses
+  contenus. Seul `audio.moderer` la rétablit, par `PATCH /audio/sources/<id>/ {"is_active": true}` ;
+  `audio.publier` seul reçoit `403 source_retiree`) ou
   `{"resolution": "rejete"}`. Tous les signalements ouverts de la même cible sont clos ensemble ;
   l'action est journalisée (`AuditEvent`).
 

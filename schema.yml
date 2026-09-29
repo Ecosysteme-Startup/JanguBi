@@ -1248,6 +1248,43 @@ paths:
           description: ''
         '403':
           description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/sources/{source_id}/signaler/:
+    post:
+      operationId: audio_sources_report
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Signaler une source (nom, présentation, image, ensemble de ses contenus)
+      parameters:
+      - in: path
+        name: source_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioReport'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
   /api/v1/audio/staff/albums/:
     get:
       operationId: audio_staff_albums_list
@@ -1639,6 +1676,57 @@ paths:
           description: ''
         '404':
           description: Introuvable, ou non visible pour vous
+  /api/v1/audio/uploads/{track_id}/flux/:
+    get:
+      operationId: audio_uploads_flux
+      description: 'text/event-stream. À l''ouverture : l''état courant (événement
+        sans id). Puis un événement audio.encodage à chaque étape ; final=true (pret
+        ou echec) : le serveur ferme le flux et le client ferme son EventSource. Battement
+        « : ping », reprise par Last-Event-ID. Contrat : docs/API-AUDIO.md, protocole
+        : docs/TEMPS-REEL.md.'
+      summary: Flux SSE de la progression d'encodage (audio.encodage)
+      parameters:
+      - in: header
+        name: Last-Event-ID
+        schema:
+          type: string
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - sse
+      - in: query
+        name: ticket
+        schema:
+          type: string
+        description: Ticket à usage unique (EventSource natif)
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - sseTicket: []
+      responses:
+        '200':
+          content:
+            text/event-stream:
+              schema:
+                type: string
+            application/json:
+              schema:
+                type: string
+          description: text/event-stream
+        '403':
+          description: Ni l'auteur de l'envoi, ni audio.publier sur la source
+        '404':
+          description: Piste introuvable
   /api/v1/audio/uploads/{track_id}/local/:
     post:
       operationId: audio_uploads_local
@@ -2682,7 +2770,9 @@ paths:
   /api/v1/dashboards/nodes/{node_id}/:
     get:
       operationId: v1_dashboards_nodes_retrieve
-      description: À placer en premier dans les bases des vues V1.
+      description: 'fideles : attached = primary + secondary (chaque fidèle compté
+        une fois), membres des paroisses du sous-arbre par une appartenance principale
+        ou secondaire. Voir docs/API-TABLEAUX-DE-BORD.md.'
       summary: Tableau de bord d'un nœud, agrégé sur son sous-arbre (aucune donnée
         nominative)
       parameters:
@@ -11202,6 +11292,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/AudioAlbum'
           nullable: true
+        source:
+          allOf:
+          - $ref: '#/components/schemas/AudioSource'
+          nullable: true
         motif:
           $ref: '#/components/schemas/AudioReportReasonEnum'
         comment:
@@ -11220,6 +11314,7 @@ components:
       - cible
       - id
       - motif
+      - source
       - track
     AudioReportDecisionEnum:
       enum:
@@ -12593,10 +12688,12 @@ components:
       enum:
       - piste
       - album
+      - source
       type: string
       description: |-
         * `piste` - Piste
         * `album` - Album
+        * `source` - Source
     CommunityRosaryInput:
       type: object
       properties:
