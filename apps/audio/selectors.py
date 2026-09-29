@@ -19,7 +19,7 @@ from django.db.models.functions import Cast, Coalesce
 from django.utils import timezone
 
 from apps.audio import access, signing, storage
-from apps.audio.enums import PlayEventKind, ReportStatus, TrackStatus
+from apps.audio.enums import PlayEventKind, ReportStatus, TrackStatus, Visibility
 from apps.audio.models import (
     Album,
     AudioSource,
@@ -99,8 +99,19 @@ def source_list(*, node_id: Any = None, kind: str = "") -> QuerySet[AudioSource]
     return qs.order_by("name")
 
 
-def source_albums(*, user: Any, source: AudioSource) -> QuerySet[Album]:
-    return access.visible_albums(access.membership(user)).filter(source=source).order_by("-recorded_on", "-published_at")
+def _mark_locked(m: access.Membership, albums: Any) -> list[Album]:
+    """Pose ``verrouille`` sur chaque album : réservé aux paroissiens et ``m`` n'en est pas (décision 4)."""
+    out = list(albums)
+    for album in out:
+        album.verrouille = access.locked(m, album.source.node, album.visibility)  # type: ignore[attr-defined]
+    return out
+
+
+def source_albums(*, user: Any, source: AudioSource) -> list[Album]:
+    """Albums de la source, y compris les albums réservés montrés verrouillés aux non-membres."""
+    m = access.membership(user)
+    qs = access.previewable_albums(m).filter(source=source).select_related("source__node", "cover")
+    return _mark_locked(m, qs.order_by("-recorded_on", "-published_at"))
 
 
 def source_top_tracks(*, user: Any, source: AudioSource, limit: int = 10) -> QuerySet[Track]:
@@ -126,29 +137,44 @@ def source_playlists(*, user: Any, source: AudioSource) -> QuerySet[Playlist]:
     return access.visible_editorial_playlists(access.membership(user)).filter(source=source).order_by("title")
 
 
-def album_list(*, user: Any, source_id: Any = None, kind: str = "") -> QuerySet[Album]:
-    qs = access.visible_albums(access.membership(user)).select_related("source", "cover")
+def album_list(*, user: Any, source_id: Any = None, kind: str = "", limit: int = 100) -> list[Album]:
+    m = access.membership(user)
+    qs = access.previewable_albums(m).select_related("source__node", "cover")
     if source_id:
         qs = qs.filter(source_id=source_id)
     if kind:
         qs = qs.filter(kind=kind)
-    return qs.order_by("-published_at")
+    return _mark_locked(m, qs.order_by("-published_at")[:limit])
 
 
 def album_require_visible(*, user: Any, album: Album) -> None:
-    if access.can_publish(user, album.source.node):
-        return
-    if not access.visible_albums(access.membership(user)).filter(pk=album.pk).exists():
+    """404 pour un brouillon, un album retiré ou privé ; un album réservé aux paroissiens reste
+    visible (verrouillé) pour un non-membre (décision 4)."""
+    if not access.can_preview_album(user, album):
         raise NotFoundError("Album introuvable.", code="album_introuvable")
 
 
-def album_tracks(*, user: Any, album: Album) -> QuerySet[Track]:
-    return (
-        access.listenable_tracks(access.membership(user))
-        .filter(album=album)
+def album_detail(*, user: Any, album: Album) -> dict[str, Any]:
+    """Page d'album. Un non-membre d'un album réservé reçoit les métadonnées et la liste des pistes
+    (titre, durée, position…) avec ``verrouille: true`` : aucune URL n'est jamais dans cette
+    réponse, la lecture passe par ``lecture/`` qui répond alors ``403 reserve_paroissiens``."""
+    m = access.membership(user)
+    node = album.source.node
+    mine = access.listenable_tracks(m).filter(album=album)
+    as_member = access.listenable_tracks(access.parish_follower(node)).filter(album=album)
+    allowed = set(mine.values_list("pk", flat=True))
+    tracks = list(
+        Track.objects.filter(Q(pk__in=mine.values("pk")) | Q(pk__in=as_member.values("pk")))
         .select_related("source", "album")
         .order_by("position", "created_at")
     )
+    for track in tracks:
+        track.verrouille = track.pk not in allowed  # type: ignore[attr-defined]
+    album.verrouille = access.locked(m, node, album.visibility)  # type: ignore[attr-defined]
+    reserved = album.visibility == Visibility.PAROISSE or any(
+        t.effective_visibility == Visibility.PAROISSE for t in tracks
+    )
+    return {"album": album, "tracks": tracks, "paroisse_requise": access.parish_of(node) if reserved else None}
 
 
 def playlist_tracks(*, user: Any, playlist: Playlist) -> list[Track]:
@@ -217,10 +243,10 @@ def track_search(*, user: Any, q: str, cursor: str = "", limit: int = 20) -> dic
 # --- Lecture ---------------------------------------------------------------------------------
 
 
-def stream_urls(*, track: Track, now: datetime.datetime | None = None) -> dict[str, Any]:
+def stream_urls(*, track: Track, now: datetime.datetime | None = None, ttl: int | None = None) -> dict[str, Any]:
     """URL du ``master.m3u8`` (et du MP3 hors ligne) : CDN signé, sinon MinIO présigné, sinon local."""
     now = now or timezone.now()
-    ttl = settings.AUDIO_SIGNED_URL_TTL_SECONDS
+    ttl = ttl or settings.AUDIO_SIGNED_URL_TTL_SECONDS
     prefix = hls_prefix(track.pk, track.encoded_version or 0)
     master_key, mp3_key = f"{prefix}/master.m3u8", f"{prefix}/audio.mp3"
     expires_at = now + datetime.timedelta(seconds=ttl)
@@ -249,7 +275,7 @@ def resume_position(*, user: Any, track: Track) -> PlaybackPosition | None:
 
 def playback_info(*, user: Any, track: Track) -> dict[str, Any]:
     """« Qui es-tu, as-tu le droit, où t'es-tu arrêté ? » en un seul aller-retour."""
-    access.require_play(user, track)
+    access.require_listen(user, track)
     if track.status != TrackStatus.PRET or track.encoded_version is None:
         raise ConflictError("Cette piste n'est pas encore prête.", code="piste_pas_prete")
     return {
@@ -258,6 +284,86 @@ def playback_info(*, user: Any, track: Track) -> dict[str, Any]:
         "resume": resume_position(user=user, track=track),
         "waveform": track.waveform,
     }
+
+
+# --- Téléchargement hors ligne (décision 5) ----------------------------------------------------
+
+
+def _license(*, track: Track, now: datetime.datetime) -> dict[str, Any]:
+    node = track.source.node
+    reserved = track.effective_visibility == Visibility.PAROISSE
+    return {
+        "delivree_le": now,
+        "expire_le": now + datetime.timedelta(days=settings.AUDIO_OFFLINE_LICENSE_DAYS),
+        "paroisse_requise": access.parish_of(node) if reserved else None,
+    }
+
+
+def offline_download(*, user: Any, track: Track, now: datetime.datetime | None = None) -> dict[str, Any]:
+    """URL signée courte du MP3 et licence hors ligne de 30 jours. Mêmes droits que l'écoute : un
+    album réservé se télécharge si l'on est membre de la paroisse (principale ou secondaire)."""
+    access.require_listen(user, track)
+    if track.status != TrackStatus.PRET or track.encoded_version is None:
+        raise ConflictError("Cette piste n'est pas encore prête.", code="piste_pas_prete")
+    now = now or timezone.now()
+    urls = stream_urls(track=track, now=now, ttl=settings.AUDIO_DOWNLOAD_URL_TTL_SECONDS)
+    return {
+        "track": track,
+        "mp3_url": urls["mp3_url"],
+        "url_expire_le": urls["expires_at"],
+        "version": track.encoded_version,
+        "licence": _license(track=track, now=now),
+    }
+
+
+def _removal_reason(track: Track) -> str:
+    published = (
+        track.source.is_active
+        and track.status == TrackStatus.PRET
+        and track.hidden_at is None
+        and track.published_at is not None
+        and track.published_at <= timezone.now()
+    )
+    if not published:
+        return "retiree"
+    if track.effective_visibility == Visibility.PRIVE:
+        return "privee"
+    if track.effective_visibility == Visibility.PAROISSE:
+        return "plus_membre"
+    return "retiree"
+
+
+def offline_verify(*, user: Any, track_ids: list[Any], now: datetime.datetime | None = None) -> dict[str, Any]:
+    """Vérification des téléchargements (à chaque connexion) : pour chaque piste, ``valide`` avec
+    une licence renouvelée de 30 jours, ou ``a_supprimer`` avec le motif (``plus_membre``,
+    ``retiree``, ``privee``, ``introuvable``). Aucune écriture : la licence vit dans l'app."""
+    now = now or timezone.now()
+    wanted = list(dict.fromkeys(str(t) for t in track_ids))
+    tracks = {
+        str(t.pk): t
+        for t in Track.objects.filter(pk__in=wanted).select_related("source__node__type", "album")
+    }
+    results = []
+    for track_id in wanted:
+        track = tracks.get(track_id)
+        row: dict[str, Any] = {"track_id": track_id, "version": None, "expire_le": None, "paroisse_requise": None}
+        if track is None:
+            results.append({**row, "statut": "a_supprimer", "motif": "introuvable"})
+        elif track.encoded_version is not None and access.can_play(user, track):
+            licence = _license(track=track, now=now)
+            results.append(
+                {
+                    **row,
+                    "statut": "valide",
+                    "motif": "",
+                    "version": track.encoded_version,
+                    "expire_le": licence["expire_le"],
+                    "paroisse_requise": licence["paroisse_requise"],
+                }
+            )
+        else:
+            results.append({**row, "statut": "a_supprimer", "motif": _removal_reason(track)})
+    return {"verifie_le": now, "results": results}
 
 
 def playback_state_get(*, user: Any) -> PlaybackState | None:

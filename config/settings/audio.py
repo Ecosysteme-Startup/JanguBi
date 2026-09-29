@@ -78,6 +78,15 @@ AUDIO_EVENTS_PARTITIONS_AHEAD = 2  # mois créés d'avance
 AUDIO_EVENTS_THROTTLE_RATE_ANON = env.str("AUDIO_EVENTS_THROTTLE_RATE_ANON", default="30/min") or None
 AUDIO_EVENTS_THROTTLE_RATE_USER = env.str("AUDIO_EVENTS_THROTTLE_RATE_USER", default="60/min") or None
 
+# --- Téléchargement hors ligne (décision 5) --------------------------------------------------
+# URL signée courte du MP3 (le téléchargement démarre tout de suite) ; licence gardée dans l'app,
+# renouvelée à chaque vérification en ligne. Limites de débit par compte (None désactive).
+AUDIO_DOWNLOAD_URL_TTL_SECONDS = env.int("AUDIO_DOWNLOAD_URL_TTL_SECONDS", default=15 * 60)
+AUDIO_OFFLINE_LICENSE_DAYS = env.int("AUDIO_OFFLINE_LICENSE_DAYS", default=30)
+AUDIO_OFFLINE_VERIFY_MAX_BATCH = 500
+AUDIO_DOWNLOAD_THROTTLE_RATE = env.str("AUDIO_DOWNLOAD_THROTTLE_RATE", default="60/hour") or None
+AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE = env.str("AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE", default="30/hour") or None
+
 # --- Recommandations (précalculées chaque nuit, file Celery « reco ») ------------------------
 AUDIO_RECO_ENABLED = env.bool("AUDIO_RECO_ENABLED", default=True)  # interrupteur global
 AUDIO_RECO_WINDOW_DAYS = env.int("AUDIO_RECO_WINDOW_DAYS", default=90)

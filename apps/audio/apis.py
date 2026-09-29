@@ -31,6 +31,9 @@ from apps.audio.serializers import (
     AudioListenerSettingsSerializer,
     AudioLocalUploadInputSerializer,
     AudioNodeRefSerializer,
+    AudioOfflineDownloadSerializer,
+    AudioOfflineVerifyInputSerializer,
+    AudioOfflineVerifySerializer,
     AudioPlaybackSerializer,
     AudioPlaybackStateInputSerializer,
     AudioPlaybackStateSerializer,
@@ -63,13 +66,21 @@ from apps.audio.serializers import (
     AudioUploadInputSerializer,
     AudioUploadOutputSerializer,
 )
-from apps.audio.throttling import AudioEventsAnonThrottle, AudioEventsUserThrottle
+from apps.audio.throttling import (
+    AudioDownloadThrottle,
+    AudioDownloadVerifyThrottle,
+    AudioEventsAnonThrottle,
+    AudioEventsUserThrottle,
+)
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.hierarchy import selectors as hierarchy_selectors
 
 TAG = ["audio"]
 _NOT_FOUND = OpenApiResponse(description="Introuvable, ou non visible pour vous")
 _FORBIDDEN = OpenApiResponse(description="Capacité audio.publier / audio.moderer requise sur le nœud")
+_RESERVED = OpenApiResponse(
+    description="reserve_paroissiens : réservé aux paroissiens ; details.paroisse = paroisse à ajouter"
+)
 
 
 def _body(serializer_class: type[drf_serializers.Serializer], request: Request, **kw: Any) -> dict[str, Any]:
@@ -188,7 +199,7 @@ class AlbumListCreateApi(_Api):
     def get(self, request: Request) -> Response:
         f = _query(AudioAlbumListFilterSerializer, request)
         albums = selectors.album_list(user=request.user, source_id=f.get("source"), kind=f.get("kind", ""))
-        return Response(AudioAlbumSerializer(albums[:100], many=True).data)
+        return Response(AudioAlbumSerializer(albums, many=True).data)
 
     @extend_schema(
         tags=TAG,
@@ -211,7 +222,7 @@ class AlbumDetailApi(_Api):
     @extend_schema(
         tags=TAG,
         operation_id="audio_albums_retrieve",
-        summary="Page d'album et ses pistes",
+        summary="Page d'album et ses pistes (verrouillées pour un non-membre d'un album réservé)",
         responses={200: AudioAlbumDetailSerializer, 404: _NOT_FOUND},
     )
     def get(self, request: Request, album_id: str) -> Response:
@@ -221,9 +232,7 @@ class AlbumDetailApi(_Api):
         level = access.access_level(access.membership(user), album.source.node)
 
         def build() -> dict[str, Any]:
-            return AudioAlbumDetailSerializer(
-                {"album": album, "tracks": selectors.album_tracks(user=user, album=album)}
-            ).data
+            return AudioAlbumDetailSerializer(selectors.album_detail(user=user, album=album)).data
 
         return Response(selectors.catalog_cached(("album", album.pk, level), build))
 
@@ -335,6 +344,7 @@ class TrackPlaybackApi(_PublicApi):
         request=None,
         responses={
             200: AudioPlaybackSerializer,
+            403: _RESERVED,
             404: _NOT_FOUND,
             409: OpenApiResponse(description="Piste pas encore prête"),
         },
@@ -342,6 +352,46 @@ class TrackPlaybackApi(_PublicApi):
     def post(self, request: Request, track_id: str) -> Response:
         track = selectors.track_get(track_id=track_id)
         return Response(AudioPlaybackSerializer(selectors.playback_info(user=request.user, track=track)).data)
+
+
+class TrackDownloadApi(_Api):
+    throttle_classes = (AudioDownloadThrottle,)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_tracks_download",
+        summary="Téléchargement hors ligne : URL signée courte du MP3 et licence de 30 jours",
+        request=None,
+        responses={
+            200: AudioOfflineDownloadSerializer,
+            403: _RESERVED,
+            404: _NOT_FOUND,
+            409: OpenApiResponse(description="Piste pas encore prête"),
+            429: OpenApiResponse(description="Trop de téléchargements : réessayer plus tard"),
+        },
+    )
+    def post(self, request: Request, track_id: str) -> Response:
+        track = selectors.track_get(track_id=track_id)
+        return Response(AudioOfflineDownloadSerializer(selectors.offline_download(user=request.user, track=track)).data)
+
+
+class OfflineVerifyApi(_Api):
+    throttle_classes = (AudioDownloadVerifyThrottle,)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_downloads_verify",
+        summary="Vérifier les téléchargements (à chaque connexion) : valides (licence renouvelée) ou à supprimer",
+        request=AudioOfflineVerifyInputSerializer,
+        responses={
+            200: AudioOfflineVerifySerializer,
+            429: OpenApiResponse(description="Trop de vérifications : réessayer plus tard"),
+        },
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(AudioOfflineVerifyInputSerializer, request)
+        result = selectors.offline_verify(user=request.user, track_ids=data["track_ids"])
+        return Response(AudioOfflineVerifySerializer(result).data)
 
 
 class TrackLikeApi(_Api):
@@ -470,7 +520,8 @@ class PlaybackStateApi(_Api):
     @extend_schema(
         tags=TAG,
         operation_id="audio_playback_state_put",
-        summary="Position courante (toutes les 15 s, à la pause, à la fermeture) ; dernière écriture gagnante",
+        summary="Position courante (toutes les 15 s, à la pause, à la fermeture) ; dernière écriture gagnante ; "
+        "playing=true met en pause les autres appareils",
         request=AudioPlaybackStateInputSerializer,
         responses=AudioPlaybackStateWriteOutputSerializer,
     )

@@ -182,6 +182,10 @@ def _anonymize_identity(user: Any) -> str | None:
     user.phone_number = None
     user.keycloak_sub = None
     user.paroisse_suivie = None
+    # Appartenances aux paroisses (décisions 6-8) : effacées, y compris les retraits par la paroisse.
+    from apps.hierarchy.models import ParishMembership
+
+    ParishMembership.objects.filter(user=user).delete()
     user.last_seen_on = None
     user.last_mfa_on = None
     user.last_seen_at = None

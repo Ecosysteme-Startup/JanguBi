@@ -47,3 +47,26 @@ class AudioEventsUserThrottle(_EventsThrottle):
         if not getattr(request.user, "is_authenticated", False):
             return None
         return self.cache_format % {"scope": self.scope, "ident": request.user.pk}
+
+
+class _UserThrottle(_EventsThrottle):
+    """Par compte ; ces routes exigent une connexion."""
+
+    def get_cache_key(self, request: Any, view: Any) -> str | None:
+        if not getattr(request.user, "is_authenticated", False):
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": request.user.pk}
+
+
+class AudioDownloadThrottle(_UserThrottle):
+    """``POST /audio/pistes/<id>/telechargement/`` (``AUDIO_DOWNLOAD_THROTTLE_RATE``)."""
+
+    scope = "audio_download"
+    setting_name = "AUDIO_DOWNLOAD_THROTTLE_RATE"
+
+
+class AudioDownloadVerifyThrottle(_UserThrottle):
+    """``POST /audio/telechargements/verifier/`` (``AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE``)."""
+
+    scope = "audio_download_verify"
+    setting_name = "AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE"

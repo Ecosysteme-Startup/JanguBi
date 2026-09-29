@@ -233,7 +233,8 @@ paths:
     get:
       operationId: audio_albums_retrieve
       description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
-      summary: Page d'album et ses pistes
+      summary: Page d'album et ses pistes (verrouillées pour un non-membre d'un album
+        réservé)
       parameters:
       - in: path
         name: album_id
@@ -422,7 +423,7 @@ paths:
       operationId: audio_playback_state_put
       description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
       summary: Position courante (toutes les 15 s, à la pause, à la fermeture) ; dernière
-        écriture gagnante
+        écriture gagnante ; playing=true met en pause les autres appareils
       tags:
       - audio
       requestBody:
@@ -639,6 +640,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/AudioPlayback'
           description: ''
+        '403':
+          description: 'reserve_paroissiens : réservé aux paroissiens ; details.paroisse
+            = paroisse à ajouter'
         '404':
           description: Introuvable, ou non visible pour vous
         '409':
@@ -767,6 +771,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/AudioReport'
           description: ''
+  /api/v1/audio/pistes/{track_id}/telechargement/:
+    post:
+      operationId: audio_tracks_download
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Téléchargement hors ligne : URL signée courte du MP3 et licence de
+        30 jours'
+      parameters:
+      - in: path
+        name: track_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioOfflineDownload'
+          description: ''
+        '403':
+          description: 'reserve_paroissiens : réservé aux paroissiens ; details.paroisse
+            = paroisse à ajouter'
+        '404':
+          description: Introuvable, ou non visible pour vous
+        '409':
+          description: Piste pas encore prête
+        '429':
+          description: 'Trop de téléchargements : réessayer plus tard'
   /api/v1/audio/playlists/:
     get:
       operationId: audio_playlists_list
@@ -1514,6 +1551,37 @@ paths:
                 items:
                   $ref: '#/components/schemas/AudioSource'
           description: ''
+  /api/v1/audio/telechargements/verifier/:
+    post:
+      operationId: audio_downloads_verify
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Vérifier les téléchargements (à chaque connexion) : valides (licence
+        renouvelée) ou à supprimer'
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioOfflineVerifyInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioOfflineVerifyInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioOfflineVerifyInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioOfflineVerify'
+          description: ''
+        '429':
+          description: 'Trop de vérifications : réessayer plus tard'
   /api/v1/audio/uploads/:
     post:
       operationId: audio_uploads_create
@@ -3635,6 +3703,107 @@ paths:
                 items:
                   $ref: '#/components/schemas/NodeOutput'
           description: ''
+  /api/v1/hierarchy/nodes/{node_id}/membres/:
+    get:
+      operationId: hierarchy_membres_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Membres de la paroisse (paroissiens.gerer), les plus récents d'abord
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: Nom ou e-mail
+      - in: query
+        name: retires
+        schema:
+          type: boolean
+        description: Inclure les membres retirés par la paroisse
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMembreList'
+          description: ''
+  /api/v1/hierarchy/nodes/{node_id}/membres/{user_id}/:
+    delete:
+      operationId: hierarchy_membres_remove
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retirer un membre de la paroisse (il ne peut plus s'y réinscrire seul)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          description: membre_introuvable
+  /api/v1/hierarchy/nodes/{node_id}/membres/{user_id}/retablir/:
+    post:
+      operationId: hierarchy_membres_restore
+      description: À placer en premier dans les bases des vues V1.
+      summary: Rétablir un membre retiré
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: user_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - hierarchy
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Membre'
+          description: ''
+        '404':
+          description: membre_introuvable
   /api/v1/hierarchy/nodes/{node_id}/places/:
     get:
       operationId: v1_hierarchy_nodes_places_list
@@ -4677,7 +4846,7 @@ paths:
     get:
       operationId: me_feed
       description: À placer en premier dans les bases des vues V1.
-      summary: 'Mon flux : contenus globaux, de ma paroisse suivie et de ses ancêtres'
+      summary: 'Mon flux : contenus globaux, de ma paroisse principale et de ses ancêtres'
       parameters:
       - in: query
         name: limit
@@ -4689,6 +4858,39 @@ paths:
         schema:
           type: integer
         description: Décalage
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedArticleListOutputList'
+          description: ''
+  /api/v1/me/feed/secondaires/:
+    get:
+      operationId: me_feed_secondaires
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fil de mes paroisses secondaires (séparé du fil principal)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: paroisse
+        schema:
+          type: string
+          format: uuid
+        description: Une seule de mes paroisses secondaires
       tags:
       - me
       security:
@@ -4761,7 +4963,7 @@ paths:
     put:
       operationId: v1_me_paroisse_suivie_update
       description: À placer en premier dans les bases des vues V1.
-      summary: Changer de paroisse suivie (libre, sans validation — RG-01)
+      summary: Remplacer ma paroisse principale (historique ; voir me/paroisses/)
       tags:
       - me
       requestBody:
@@ -4785,6 +4987,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/ParoisseSuivieOutput'
           description: ''
+  /api/v1/me/paroisses/:
+    get:
+      operationId: me_paroisses_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Mes paroisses : la principale d''abord, puis les secondaires'
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaParoisse'
+          description: ''
+    post:
+      operationId: me_paroisses_add
+      description: À placer en premier dans les bases des vues V1.
+      summary: Ajouter une paroisse (adhésion libre, idempotent)
+      tags:
+      - me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaParoisseInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MaParoisseInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MaParoisseInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaParoisse'
+          description: ''
+        '400':
+          description: not_a_parish, parish_deleted
+        '403':
+          description: retire_par_la_paroisse
+  /api/v1/me/paroisses/{node_id}/:
+    delete:
+      operationId: me_paroisses_remove
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retirer une de mes paroisses (la plus ancienne secondaire remplace
+        la principale)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          description: membre_introuvable
+  /api/v1/me/paroisses/{node_id}/principale/:
+    put:
+      operationId: me_paroisses_set_primary
+      description: À placer en premier dans les bases des vues V1.
+      summary: En faire ma paroisse principale (une seule ; l'ancienne devient secondaire)
+      parameters:
+      - in: path
+        name: node_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - me
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaParoisse'
+          description: ''
+        '404':
+          description: membre_introuvable
   /api/v1/me/presence/:
     get:
       operationId: me_presence_get
@@ -5359,7 +5661,7 @@ paths:
       operationId: messaging_presence
       description: À placer en premier dans les bases des vues V1.
       summary: Présence de mes interlocuteurs (en ligne, vu à) ; les autres identifiants
-        sont ignorés
+        sont ignorés ; tout est « inconnu » si je masque ma propre présence
       parameters:
       - in: query
         name: users
@@ -10139,11 +10441,16 @@ components:
           format: date-time
           nullable: true
           title: Publié le
+        verrouille:
+          type: boolean
+          description: 'Réservé aux paroissiens et vous n''en êtes pas : écoute impossible'
+          readOnly: true
       required:
       - cover_url
       - id
       - source
       - title
+      - verrouille
     AudioAlbumDetail:
       type: object
       properties:
@@ -10152,9 +10459,17 @@ components:
         tracks:
           type: array
           items:
-            $ref: '#/components/schemas/AudioTrack'
+            $ref: '#/components/schemas/AudioLockedTrack'
+        paroisse_requise:
+          allOf:
+          - $ref: '#/components/schemas/AudioNodeRef'
+          nullable: true
+          description: Paroisse à rejoindre pour écouter les contenus réservés («
+            Ajouter cette paroisse ») ; null si rien n'est réservé ou au-dessus de
+            la paroisse
       required:
       - album
+      - paroisse_requise
       - tracks
     AudioAlbumInput:
       type: object
@@ -10463,6 +10778,80 @@ components:
           format: uri
       required:
       - file
+    AudioLockedTrack:
+      type: object
+      description: |-
+        Piste d'une page d'album : ``verrouille`` vrai quand elle est réservée aux paroissiens et que
+        l'auditeur n'en est pas (titre, durée, position visibles ; jamais d'URL).
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        title:
+          type: string
+          title: Titre
+          maxLength: 250
+        performers:
+          type: array
+          items:
+            type: string
+            maxLength: 150
+          title: Interprètes
+        composer:
+          type: string
+          title: Compositeur
+          maxLength: 200
+        language:
+          allOf:
+          - $ref: '#/components/schemas/AudioLanguageEnum'
+          title: Langue
+        liturgical_season:
+          title: Temps liturgique
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 60
+          title: Mots-clés
+        description:
+          type: string
+        duration_seconds:
+          type: number
+          format: double
+          nullable: true
+          title: Durée (s)
+        source:
+          $ref: '#/components/schemas/AudioSourceRef'
+        album:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumRef'
+          nullable: true
+        position:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Position dans l'album
+        visibility:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publiée le
+        verrouille:
+          type: boolean
+          readOnly: true
+      required:
+      - album
+      - id
+      - source
+      - title
+      - verrouille
+      - visibility
     AudioNodeRef:
       type: object
       properties:
@@ -10474,6 +10863,119 @@ components:
       required:
       - id
       - name
+    AudioOfflineDownload:
+      type: object
+      properties:
+        track:
+          $ref: '#/components/schemas/AudioTrack'
+        mp3_url:
+          type: string
+          format: uri
+          description: 'MP3 128 kb/s, URL signée courte (15 min) : télécharger tout
+            de suite'
+        url_expire_le:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          description: Version d'encodage téléchargée (re-télécharger si elle change)
+        licence:
+          $ref: '#/components/schemas/AudioOfflineLicense'
+      required:
+      - licence
+      - mp3_url
+      - track
+      - url_expire_le
+      - version
+    AudioOfflineLicense:
+      type: object
+      properties:
+        delivree_le:
+          type: string
+          format: date-time
+        expire_le:
+          type: string
+          format: date-time
+          description: 30 jours ; renouvelée à chaque vérification en ligne
+        paroisse_requise:
+          allOf:
+          - $ref: '#/components/schemas/AudioNodeRef'
+          nullable: true
+          description: Paroisse dont il faut rester membre (contenu réservé) ; null
+            si public
+      required:
+      - delivree_le
+      - expire_le
+      - paroisse_requise
+    AudioOfflineVerify:
+      type: object
+      properties:
+        verifie_le:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioOfflineVerifyRow'
+      required:
+      - results
+      - verifie_le
+    AudioOfflineVerifyInput:
+      type: object
+      properties:
+        track_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 500
+      required:
+      - track_ids
+    AudioOfflineVerifyRow:
+      type: object
+      properties:
+        track_id:
+          type: string
+          format: uuid
+        statut:
+          $ref: '#/components/schemas/StatutEnum'
+        motif:
+          oneOf:
+          - $ref: '#/components/schemas/AudioOfflineVerifyRowMotifEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        expire_le:
+          type: string
+          format: date-time
+          nullable: true
+          description: Nouvelle expiration de la licence si valide
+        version:
+          type: integer
+          nullable: true
+          description: Version d'encodage courante
+        paroisse_requise:
+          allOf:
+          - $ref: '#/components/schemas/AudioNodeRef'
+          nullable: true
+      required:
+      - expire_le
+      - motif
+      - paroisse_requise
+      - statut
+      - track_id
+      - version
+    AudioOfflineVerifyRowMotifEnum:
+      enum:
+      - plus_membre
+      - retiree
+      - privee
+      - introuvable
+      type: string
+      description: |-
+        * `` - —
+        * `plus_membre` - Plus membre de la paroisse
+        * `retiree` - Retirée ou dépubliée
+        * `privee` - Devenue privée
+        * `introuvable` - Introuvable
     AudioPlayEventKindEnum:
       enum:
       - start
@@ -10545,6 +11047,12 @@ components:
           type: string
           format: date-time
           description: Horodatage de l'appareil (borné par le serveur)
+        playing:
+          type: boolean
+          default: false
+          description: 'Vrai quand cet appareil lit (lecture lancée, « Reprendre sur
+            cet appareil ») : les autres appareils du compte reçoivent playback.state
+            action « pause »'
       required:
       - client_updated_at
       - device_id
@@ -10940,6 +11448,10 @@ components:
           format: date-time
           nullable: true
           title: Publié le
+        verrouille:
+          type: boolean
+          description: 'Réservé aux paroissiens et vous n''en êtes pas : écoute impossible'
+          readOnly: true
         track_count:
           type: integer
           readOnly: true
@@ -10962,6 +11474,7 @@ components:
       - title
       - track_count
       - updated_at
+      - verrouille
     AudioStaffAlbumDetail:
       type: object
       properties:
@@ -13481,6 +13994,33 @@ components:
       - nombre
       - part
       - total
+    MaParoisse:
+      type: object
+      properties:
+        paroisse:
+          $ref: '#/components/schemas/NodeRef'
+        principale:
+          type: boolean
+        membre_depuis:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - membre_depuis
+      - paroisse
+      - principale
+    MaParoisseInput:
+      type: object
+      properties:
+        paroisse_id:
+          type: string
+          format: uuid
+        principale:
+          type: boolean
+          default: false
+          description: En faire la paroisse principale (la première l'est d'office)
+      required:
+      - paroisse_id
     MeNodeRef:
       type: object
       properties:
@@ -13539,6 +14079,35 @@ components:
       - paroisse_suivie
       - profile
       - statut_verification
+    Membre:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+          readOnly: true
+        last_name:
+          type: string
+          readOnly: true
+        principale:
+          type: boolean
+          description: Cette paroisse est sa paroisse principale
+        membre_depuis:
+          type: string
+          format: date-time
+        retire_le:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - first_name
+      - last_name
+      - membre_depuis
+      - principale
+      - retire_le
+      - user_id
     MessageAttachmentOutput:
       type: object
       properties:
@@ -14758,6 +15327,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/IntentionOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedMembreList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Membre'
       required:
       - count
       - limit
@@ -16218,7 +16813,8 @@ components:
           type: boolean
           nullable: true
           description: 'null : revenir au réglage par défaut (oui pour le clergé et
-            le staff).'
+            le staff). Réciproque : si vous masquez votre présence, vous ne verrez
+            plus celle des autres.'
         effective:
           type: boolean
           readOnly: true
@@ -18369,6 +18965,14 @@ components:
       description: |-
         * `ouverte` - Collecte ouverte
         * `en_preparation` - En préparation
+    StatutEnum:
+      enum:
+      - valide
+      - a_supprimer
+      type: string
+      description: |-
+        * `valide` - Valide
+        * `a_supprimer` - À supprimer
     StatutVerificationEnum:
       enum:
       - declare

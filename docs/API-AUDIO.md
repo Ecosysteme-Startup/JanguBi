@@ -2,7 +2,8 @@
 
 Contrat JSON de la sonothèque (plan suite V2, §5). Lot B3, 27/09/2026 ; compléments B3b
 (espace staff, progression de l'encodage, pochettes, accueil, signalement d'album, limite de débit
-des événements), 29/09/2026. Le schéma OpenAPI
+des événements), 29/09/2026 ; décisions validées du 29/09/2026 (album réservé visible verrouillé,
+téléchargement hors ligne, paroisses multiples, une lecture à la fois). Le schéma OpenAPI
 (`schema.yml`, tag `audio`) fait foi pour les types ; ce document donne le sens et des exemples.
 
 ## Conventions
@@ -11,8 +12,11 @@ des événements), 29/09/2026. Le schéma OpenAPI
   « compte facultatif » acceptent aussi un appel anonyme (contenus `public` seulement).
 - **Erreurs** : format V1 `{"error": {"code", "message", "details"}}`. Une piste, un album ou une
   playlist que vous n'avez pas le droit de voir répond **404** (on ne dit pas qu'elle existe).
+  Exception (décision 4) : un contenu `paroisse` **publié** est visible des non-membres, verrouillé ;
+  l'écouter ou le télécharger répond **403 `reserve_paroissiens`** (voir §3).
 - **Visibilité** : `public` (tout le monde), `paroisse` (membres rattachés au nœud de la source :
-  paroisse suivie dans le sous-arbre, ou office sur ce nœud, au-dessus ou en dessous), `prive`
+  membre — paroisse principale **ou secondaire** — de ce nœud ou d'une paroisse de son sous-arbre,
+  ou office sur ce nœud, au-dessus ou en dessous ; voir `GET /me/paroisses/`), `prive`
   (brouillon, visible de ceux qui ont `audio.publier` sur le nœud). La visibilité d'une piste est la
   plus fermée de la sienne et de celle de son album.
 - **Droits staff** : `audio.publier` (sources, albums, envois, publication, playlists éditoriales) et
@@ -41,10 +45,10 @@ Objet **piste** (auditeur), repris partout sous le nom `Track` :
   "title": "Kyrie",
   "performers": ["Chorale Sainte-Cécile"],
   "composer": "Abbé Joseph Faye",
-  "language": "wo",
+  "language": "fr",
   "liturgical_season": "ordinaire",
   "tags": ["messe", "chant d'entrée"],
-  "description": "Kyrie en wolof, messe du 26e dimanche du temps ordinaire.",
+  "description": "Kyrie de la messe du 26e dimanche du temps ordinaire.",
   "duration_seconds": 214.6,
   "source": {"id": "0f6a9c2d-3b1e-4d7a-8c5f-6e2b1a9d4c10", "name": "Chorale Sainte-Cécile", "kind": "chorale"},
   "album": {"id": "a3d9e7f1-2c4b-4e8a-9f1d-6b2c8e4a7d30", "title": "Messe du 27 septembre 2026", "kind": "messe"},
@@ -54,7 +58,8 @@ Objet **piste** (auditeur), repris partout sous le nom `Track` :
 }
 ```
 
-`language` : `fr`, `wo`, `la`, `srr`, `dyo`, `en`, `autre`. `liturgical_season` : `avent`, `noel`,
+`language` : `fr`, `wo`, `la`, `srr`, `dyo`, `en`, `autre` (les données de démonstration sont en
+`fr`, décision 16). `liturgical_season` : `avent`, `noel`,
 `careme`, `triduum`, `paques`, `ordinaire` ou `""`.
 
 Objet **piste staff** (`StaffTrack`) : `Track` plus `own_visibility`, `status` (`brouillon`,
@@ -127,7 +132,10 @@ Page d'une source. `most_played` : les plus écoutés **de cette source seulemen
 
 ### `GET /audio/albums/` — compte facultatif
 
-Filtres : `source`, `kind` (`album`, `messe`, `homelies`, `retraite`). Albums publiés et visibles.
+Filtres : `source`, `kind` (`album`, `messe`, `homelies`, `retraite`). Albums publiés et visibles,
+**y compris** les albums `paroisse` des paroisses dont on n'est pas membre, avec `"verrouille": true`
+(100 au plus). Tout objet album des listes d'auditeur porte `verrouille` (booléen) ; il vaut `false`
+dans l'espace staff.
 
 ### `POST /audio/albums/` — `audio.publier`
 
@@ -142,10 +150,32 @@ Un album naît non publié (`published_at: null`).
 ### `GET /audio/albums/<id>/` — compte facultatif, cache 10 min
 
 ```json
-{"album": {"id": "a3d9e7f1-…", "title": "Messe du 27 septembre 2026", "kind": "messe", "…": "…"},
- "tracks": [{"id": "c4f1a8e2-…", "title": "Kyrie", "position": 1, "…": "…"},
-            {"id": "d2b7e9c4-…", "title": "Gloria", "position": 2, "…": "…"}]}
+{"album": {"id": "a3d9e7f1-…", "title": "Messe du 27 septembre 2026", "kind": "messe", "verrouille": false, "…": "…"},
+ "tracks": [{"id": "c4f1a8e2-…", "title": "Kyrie", "position": 1, "verrouille": false, "…": "…"},
+            {"id": "d2b7e9c4-…", "title": "Gloria", "position": 2, "verrouille": false, "…": "…"}],
+ "paroisse_requise": null}
 ```
+
+**Album réservé, vu par un non-membre** (décision 4 ; anonyme compris) : pochette, titre, source
+**et** liste des pistes (`Track` complet : titre, durée, position…) avec `verrouille: true`. Cette
+réponse ne contient **jamais d'URL** de lecture ; `paroisse_requise` donne la paroisse à ajouter
+(« Ajouter cette paroisse » → `POST /me/paroisses/`). Les pistes `prive` n'y figurent pas ; un album
+`prive`, brouillon ou retiré répond `404`.
+
+```json
+{"album": {"id": "b8e2f4a6-1d3c-4b9e-8a7f-5c2d9e1b6a40", "title": "Homélies du Père Emmanuel Tine",
+           "kind": "homelies", "visibility": "paroisse", "cover_url": null,
+           "source": {"id": "7c1e4b2a-…", "name": "Paroisse Saint-Dominique", "kind": "paroisse"},
+           "verrouille": true, "…": "…"},
+ "tracks": [{"id": "9a1e…", "title": "Homélie du 26e dimanche du temps ordinaire", "duration_seconds": 812.0,
+             "position": 1, "visibility": "paroisse", "verrouille": true, "…": "…"}],
+ "paroisse_requise": {"id": "5b7d2c1e-8a41-4f0b-9d7e-2c3f1a6b9e01", "name": "Saint-Dominique"}}
+```
+
+`paroisse_requise` : la paroisse du nœud de la source (ou sa plus proche paroisse ancêtre pour un
+mouvement, une CEB) dès que l'album ou l'une de ses pistes est `paroisse` ; `null` sinon, ou si la
+source est au-dessus de la paroisse (diocèse, doyenné). Dans un album `public`, une piste `paroisse`
+est de même montrée verrouillée aux non-membres.
 
 `PATCH /audio/albums/<id>/` : `kind`, `title`, `description`, `visibility`, `recorded_on`,
 `liturgical_season`. Changer la visibilité recalcule celle de toutes ses pistes.
@@ -162,7 +192,7 @@ Publie l'album et ses pistes prêtes non encore publiées ; invalide le cache du
 
 ```json
 {"title": "Kyrie", "performers": ["Chorale Sainte-Cécile"], "composer": "Abbé Joseph Faye",
- "language": "wo", "liturgical_season": "ordinaire", "tags": ["messe"], "description": "…",
+ "language": "fr", "liturgical_season": "ordinaire", "tags": ["messe"], "description": "…",
  "visibility": "public", "position": 1, "album_id": "a3d9e7f1-2c4b-4e8a-9f1d-6b2c8e4a7d30"}
 ```
 
@@ -364,7 +394,16 @@ Un seul aller-retour : droit d'écoute (cache 5 min), URL signée, reprise, form
 - Signature valable 6 h sur le **préfixe versionné** : le même `verify` ouvre les manifestes de
   débit et les segments (voir `AUDIO-ARCHITECTURE.md`). Sans CDN : URL MinIO présignée, ou URL
   du média local en développement.
-- `404 piste_introuvable` (pas le droit), `409 piste_pas_prete` (encodage en cours).
+- `404 piste_introuvable` (piste privée, brouillon, retirée, inconnue), `409 piste_pas_prete`
+  (encodage en cours).
+- `403 reserve_paroissiens` (décision 4) : piste publiée réservée aux paroissiens, et vous n'êtes
+  membre ni en principale ni en secondaire. `details.paroisse` sert au bouton « Ajouter cette
+  paroisse » (`null` si le contenu relève d'un nœud au-dessus de la paroisse) :
+
+```json
+{"error": {"code": "reserve_paroissiens", "message": "Réservé aux paroissiens de Saint-Dominique.",
+           "details": {"paroisse": {"id": "5b7d2c1e-8a41-4f0b-9d7e-2c3f1a6b9e01", "name": "Saint-Dominique"}}}}
+```
 - Le client peut appeler `lecture/` dès que la piste est à l'écran pour précharger.
 
 ### `GET /audio/lecture/etat/` — reprise multi-appareils
@@ -380,12 +419,16 @@ Un seul aller-retour : droit d'écoute (cache 5 min), URL signée, reprise, form
 
 ### `PUT /audio/lecture/etat/`
 
-Toutes les 15 s, à la pause et à la fermeture :
+Toutes les 15 s, à la pause et à la fermeture, **et au lancement de la lecture** :
 
 ```json
 {"track_id": "c4f1a8e2-7b3d-4c9a-a1e6-3f8d2b7c5e50", "position_seconds": 88.0,
- "device_id": "web-mt-diouf", "client_updated_at": "2026-09-27T10:43:02Z"}
+ "device_id": "web-mt-diouf", "client_updated_at": "2026-09-27T10:43:02Z", "playing": true}
 ```
+
+`playing` (facultatif, `false` par défaut) : `true` quand cet appareil lit (lecture lancée,
+« Reprendre sur cet appareil ») ; `false` à la pause et pour les sauvegardes périodiques d'un
+lecteur à l'arrêt.
 
 ```json
 {"applied": true, "state": {"track": {"…": "…"}, "position_seconds": 88.0, "device_id": "web-mt-diouf",
@@ -400,13 +443,74 @@ Toutes les 15 s, à la pause et à la fermeture :
   (groupe `user_<id>`) :
 
 ```json
-{"type": "notification", "event_type": "playback.state",
+{"type": "notification", "event_type": "playback.state", "action": "etat", "playing": true,
  "track_id": "c4f1a8e2-…", "position_seconds": 88.0, "device_id": "web-mt-diouf",
  "updated_at": "2026-09-27T10:43:02Z"}
 ```
 
   L'appareil qui a écrit reconnaît son `device_id` et ignore le message ; les autres proposent
   « Reprendre sur cet appareil ». Aucun enregistrement dans la liste des notifications.
+- **Une lecture à la fois par compte** (décision 10) : quand `playing` vaut `true`, le serveur
+  envoie aussi, **même si l'écriture n'a pas gagné** (c'est l'appareil qu'on vient de toucher) :
+
+```json
+{"type": "notification", "event_type": "playback.state", "action": "pause",
+ "sauf_device_id": "web-mt-diouf", "track_id": "c4f1a8e2-…", "device_id": "web-mt-diouf"}
+```
+
+  Tout appareil dont le `device_id` diffère de `sauf_device_id` met sa lecture en pause
+  (sans afficher d'erreur) ; celui qui a écrit l'ignore. « Reprendre sur cet appareil » = lancer la
+  lecture localement puis `PUT` avec `playing: true`.
+
+### `POST /audio/pistes/<id>/telechargement/` — compte requis (décision 5)
+
+Écoute hors ligne, y compris d'un album réservé si l'on est membre de la paroisse. Mêmes droits que
+`lecture/` (`403 reserve_paroissiens`, `404`, `409 piste_pas_prete`). Le fichier reste **dans
+l'app** (stockage privé, non exportable).
+
+```json
+{"track": {"id": "9a1e…", "title": "Homélie du 26e dimanche du temps ordinaire", "…": "…"},
+ "mp3_url": "https://audio.jangubi.sn/audio-hls/9a1e…/1/audio.mp3?verify=1790497800-…",
+ "url_expire_le": "2026-09-29T10:30:00Z",
+ "version": 1,
+ "licence": {"delivree_le": "2026-09-29T10:15:00Z", "expire_le": "2026-10-29T10:15:00Z",
+             "paroisse_requise": {"id": "5b7d2c1e-8a41-4f0b-9d7e-2c3f1a6b9e01", "name": "Saint-Dominique"}}}
+```
+
+- `mp3_url` : MP3 128 kb/s, URL signée **courte** (15 min, `AUDIO_DOWNLOAD_URL_TTL_SECONDS`) :
+  télécharger tout de suite.
+- `licence.expire_le` : 30 jours (`AUDIO_OFFLINE_LICENSE_DAYS`), renouvelée par la vérification
+  ci-dessous. Au-delà sans renouvellement, l'app supprime le fichier. `paroisse_requise` : `null`
+  pour un contenu public.
+- `version` : version d'encodage ; si la vérification renvoie une autre version, re-télécharger.
+- Limite de débit : 60 par heure et par compte (`AUDIO_DOWNLOAD_THROTTLE_RATE`) → `429`.
+
+### `POST /audio/telechargements/verifier/` — compte requis (décision 5)
+
+À chaque connexion (et au moins une fois par jour en ligne), avec **toutes** les pistes gardées :
+
+```json
+{"track_ids": ["9a1e…", "c4f1a8e2-7b3d-4c9a-a1e6-3f8d2b7c5e50", "d2b7e9c4-6a1f-4d8b-b3e5-9c1a4f7d2e60"]}
+```
+
+```json
+{"verifie_le": "2026-09-29T10:15:00Z",
+ "results": [
+   {"track_id": "9a1e…", "statut": "a_supprimer", "motif": "plus_membre", "expire_le": null,
+    "version": null, "paroisse_requise": null},
+   {"track_id": "c4f1a8e2-…", "statut": "valide", "motif": "", "expire_le": "2026-10-29T10:15:00Z",
+    "version": 1, "paroisse_requise": null},
+   {"track_id": "d2b7e9c4-…", "statut": "a_supprimer", "motif": "retiree", "expire_le": null,
+    "version": null, "paroisse_requise": null}
+ ]}
+```
+
+- `statut` : `valide` (nouvelle `expire_le`, 30 jours) ou `a_supprimer` : l'app efface le fichier.
+- `motif` : `plus_membre` (retiré de la paroisse par lui-même ou par la paroisse), `retiree`
+  (dépubliée, retirée par la modération, source désactivée), `privee` (devenue privée),
+  `introuvable`.
+- 500 identifiants au plus (`400` au-delà ou liste vide). Aucune écriture côté serveur : la licence
+  vit dans l'app. Limite : 30 par heure et par compte (`AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE`).
 
 ---
 
@@ -433,11 +537,11 @@ Toutes les sections de l'écran d'accueil en un seul appel (10 éléments au plu
 
 - `reprendre` : pistes commencées et pas finies (reprise par piste), les plus récentes d'abord.
   Toujours calculé à l'appel (jamais en cache). `[]` sans compte.
-- `nouveautes_ma_paroisse` : dernières publications des sources de la paroisse suivie (et de son
+- `nouveautes_ma_paroisse` : dernières publications des sources de la paroisse principale (et de son
   sous-arbre). `[]` sans compte ou sans paroisse (`paroisse: null`).
 - `pour_vous` : les 10 premières recommandations de `GET /audio/pour-vous/` (cache par
   utilisateur) ; sans compte, la liste de démarrage à froid publique.
-- `playlists_paroisse` : playlists éditoriales publiées des sources de la paroisse suivie.
+- `playlists_paroisse` : playlists éditoriales publiées des sources de la paroisse principale.
 - `temps_liturgique` : pistes dont le temps liturgique (ou celui de l'album) est le temps du jour
   (`apps.liturgy`).
 - `nouveautes_ma_paroisse`, `playlists_paroisse` et `temps_liturgique` sont **mis en cache 10 min
@@ -588,3 +692,41 @@ Désactiver efface tout de suite les recommandations calculées de la personne.
   disparaît du catalogue, `hidden_at` ; pour un album : l'album **et toutes ses pistes**) ou
   `{"resolution": "rejete"}`. Tous les signalements ouverts de la même cible sont clos ensemble ;
   l'action est journalisée (`AuditEvent`).
+
+---
+
+## 9. Paroisses multiples (décisions 6-8) — hors `/audio/`, utile à la sonothèque
+
+Une paroisse **principale** (accueil, annonces, horaires, dons proposés) et des paroisses
+**secondaires** ; principale ou secondaire, l'appartenance ouvre les contenus `paroisse`.
+Adhésion libre. `paroisse_suivie` (profil, `GET/PUT /me/paroisse-suivie/`) reste la copie de la
+principale.
+
+| Méthode et route | Corps | Réponse |
+|---|---|---|
+| `GET /me/paroisses/` | | `MaParoisse[]`, la principale d'abord |
+| `POST /me/paroisses/` | `{"paroisse_id": "…", "principale": false}` (idempotent ; la première est principale) | `201` `MaParoisse[]` ; `400 not_a_parish` ; `403 retire_par_la_paroisse` |
+| `DELETE /me/paroisses/<paroisse_id>/` | | `204` ; la plus ancienne secondaire devient principale ; `404 membre_introuvable` |
+| `PUT /me/paroisses/<paroisse_id>/principale/` | | `200` `MaParoisse[]` (une seule principale) ; `404 membre_introuvable` |
+
+```json
+[{"paroisse": {"id": "5b7d2c1e-…", "name": "Saint-Dominique", "code": "DAK-P-SAINT-DOMINIQUE", "type": "paroisse"},
+  "principale": true, "membre_depuis": "2026-09-01T09:00:00Z"},
+ {"paroisse": {"id": "…", "name": "Sainte-Thérèse de Grand-Dakar", "code": "…", "type": "paroisse"},
+  "principale": false, "membre_depuis": "2026-09-29T10:00:00Z"}]
+```
+
+Côté paroisse (capacité `paroissiens.gerer` : curé, curé in solidum, secrétaire paroissial ; pas
+l'évêque — donnée nominative ; MFA) :
+
+- `GET /hierarchy/nodes/<paroisse_id>/membres/?q=&retires=false&limit=&offset=` →
+  `{"limit", "offset", "count", "next", "previous", "results": [{"user_id", "first_name", "last_name", "principale",
+  "membre_depuis", "retire_le"}]}` ;
+- `DELETE /hierarchy/nodes/<paroisse_id>/membres/<user_id>/` → `204` : retrait (journalisé) ; le
+  fidèle ne peut plus s'y réinscrire seul (`403 retire_par_la_paroisse`) et ses téléchargements de
+  cette paroisse passent `a_supprimer` / `plus_membre` à la vérification suivante ;
+- `POST /hierarchy/nodes/<paroisse_id>/membres/<user_id>/retablir/` → `200` membre.
+
+Annonces : `GET /me/feed/` reste le fil de la principale (et des contenus globaux, diocésains) ;
+`GET /me/feed/secondaires/?paroisse=<id>` est le **fil séparé** des paroisses secondaires (même
+format paginé, articles de ces paroisses et de leur sous-arbre seulement).

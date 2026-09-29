@@ -309,16 +309,22 @@ def test_album_report_and_removal_hides_the_album_and_its_tracks(world):
     report = created.json()
     assert report["cible"] == "album" and report["track"] is None and report["album"]["id"] == str(world.messe.pk)
 
-    # Album réservé aux membres : 404 pour une autre paroisse (on ne dit pas qu'il existe).
+    # Album réservé aux membres : visible (verrouillé) pour une autre paroisse, donc signalable
+    # (décision 4) ; un album brouillon reste introuvable.
     assert client_for(world.autre).post(
         f"{API}/albums/{world.homelies.pk}/signaler/", {"motif": "autre"}, format="json"
+    ).status_code == 201
+    draft = Album.objects.create(source=world.paroisse, kind="homelies", title="Brouillon", visibility="paroisse")
+    assert client_for(world.autre).post(
+        f"{API}/albums/{draft.pk}/signaler/", {"motif": "autre"}, format="json"
     ).status_code == 404
     assert client_for().post(f"{API}/albums/{world.messe.pk}/signaler/", {"motif": "autre"}, format="json").status_code in (
         401, 403,
     )  # fmt: skip
 
     listed = client_for(world.cure).get(f"{API}/moderation/signalements/").json()
-    assert [(r["id"], r["cible"]) for r in listed] == [(report["id"], "album")]
+    messe_reports = [(r["id"], r["cible"]) for r in listed if r["album"]["id"] == str(world.messe.pk)]
+    assert messe_reports == [(report["id"], "album")]
     assert client_for(world.cure_st).get(f"{API}/moderation/signalements/").json() == []
     done = client_for(world.cure).post(
         f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json"

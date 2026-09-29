@@ -10,11 +10,16 @@ def presence_for(*, viewer: BaseUser, user_ids: list[Any]) -> list[dict[str, Any
     """État de présence des ``user_ids`` qui sont des interlocuteurs de ``viewer``.
 
     Les autres identifiants sont ignorés sans le dire (on ne confirme même pas qu'ils
-    existent). Une présence masquée est rendue sans « en ligne » ni « vu à »."""
+    existent). Une présence masquée est rendue sans « en ligne » ni « vu à ».
+
+    Réciprocité (décision 2 du 29/09/2026) : qui masque sa présence ne voit plus celle des
+    autres ; toutes ses lignes sont « inconnues » (``visible: false``)."""
     contacts = {str(c) for c in presence_contacts(user=viewer)}
     wanted = [u for u in dict.fromkeys(str(u) for u in user_ids) if u in contacts]
     if not wanted:
         return []
+    if not presence_visible(viewer):
+        return [{"user_id": u, "visible": False, "online": None, "last_seen_at": None} for u in wanted]
     users = list(
         BaseUser.objects.filter(pk__in=wanted, is_active=True).only(
             "pk", "is_staff", "degre_ordre", "montrer_presence", "last_seen_at"

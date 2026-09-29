@@ -193,6 +193,9 @@ CAPABILITIES: list[CapabilitySpec] = [
     {"code": "audio.moderer", "label": "Modérer la sonothèque (signalements, retrait)", "domain": "audio"},
     # V2 : agrégats au-dessus de la paroisse (arrondis au millier, aucun nom, ordre alphabétique).
     {"code": "dons.voir_agregats", "label": "Voir les agrégats des dons des paroisses (arrondis, sans nom)", "domain": "dons"},
+    # V2, décisions 6-8 (29/09/2026) : adhésion libre, mais la paroisse peut retirer un membre.
+    # Donnée personnelle : réservée à la paroisse même (pas à l'évêque, RG-11).
+    {"code": "paroissiens.gerer", "label": "Voir les membres de la paroisse et en retirer", "domain": "paroisse"},
 ]
 
 # Capacités « dons » par office (ADR-017). Séparées pour que la migration de données
@@ -225,12 +228,20 @@ AUDIO_OFFICE_CAPABILITIES: dict[str, list[str]] = {
     "delegue_numerique_diocesain": ["audio.publier", "audio.moderer"],
 }
 
+# Membres de la paroisse (décisions 6-8) : la migration 0013 l'ajoute aux offices déjà chargés.
+MEMBRES_OFFICE_CAPABILITIES: dict[str, list[str]] = {
+    "cure": ["paroissiens.gerer"],
+    "cure_in_solidum": ["paroissiens.gerer"],
+    "secretaire_paroissial": ["paroissiens.gerer"],
+}
+
 # L'évêque n'a des dons que la définition des quêtes impérées (ADR-017) : ni les noms des
 # donateurs ni la gestion des fonds paroissiaux.
 _ALL_BUT_PLATFORM_AND_MESSAGING = [
     c["code"]
     for c in CAPABILITIES
-    if c["code"] not in {"plateforme.admin", "messagerie.recevoir_fideles"} and c["domain"] != "dons"
+    if c["code"] not in {"plateforme.admin", "messagerie.recevoir_fideles", "paroissiens.gerer"}
+    and c["domain"] != "dons"
 ] + ["dons.definir_quete_imperee", "dons.voir_agregats"]
 _CURE_CAPABILITIES = [
     "horaires.gerer",
@@ -245,6 +256,7 @@ _CURE_CAPABILITIES = [
     "audit.voir",
     *DONS_PAROISSE_CAPABILITIES,
     *AUDIO_OFFICE_CAPABILITIES["cure"],
+    *MEMBRES_OFFICE_CAPABILITIES["cure"],
 ]
 
 OFFICES: list[OfficeSpec] = [
@@ -261,7 +273,7 @@ OFFICES: list[OfficeSpec] = [
     {"code": "vicaire_paroissial", "label": "Vicaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["annonces.publier", "evenements.gerer", "actes.traiter", "messagerie.recevoir_fideles", "confessions.gerer", "audio.publier"]},
     {"code": "aumonier", "label": "Aumônier", "node_types": ["aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["annonces.publier", "evenements.gerer", "messagerie.recevoir_fideles", "confessions.gerer", "audio.publier"]},
     {"code": "recteur", "label": "Recteur de sanctuaire / d'église", "node_types": ["paroisse", "quasi_paroisse", "aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["horaires.gerer", "annonces.publier", "confessions.gerer"]},
-    {"code": "secretaire_paroissial", "label": "Secrétaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "actes.traiter", "confessions.voir_planning", "tableau_bord.voir", "dons.voir_fonds", "dons.saisir_quete", "audio.publier"]},
+    {"code": "secretaire_paroissial", "label": "Secrétaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "actes.traiter", "confessions.voir_planning", "tableau_bord.voir", "dons.voir_fonds", "dons.saisir_quete", "audio.publier", "paroissiens.gerer"]},
     {"code": "econome_paroissial", "label": "Économe paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", *DONS_PAROISSE_CAPABILITIES]},
     {"code": "referent_numerique", "label": "Référent numérique paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "tableau_bord.voir", "audio.publier"]},
     {"code": "catechiste", "label": "Catéchiste", "node_types": ["paroisse", "quasi_paroisse", "ceb"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["evenements.gerer"]},

@@ -763,10 +763,18 @@ def playback_state_update(
     position_seconds: float,
     device_id: str,
     client_updated_at: datetime.datetime,
+    playing: bool = False,
     now: datetime.datetime | None = None,
 ) -> tuple[PlaybackState, bool]:
-    """Dernière écriture gagnante. Renvoie l'état courant et ``True`` si cette écriture a gagné."""
+    """Dernière écriture gagnante. Renvoie l'état courant et ``True`` si cette écriture a gagné.
+
+    Une lecture à la fois par compte (décision 10) : ``playing=True`` (lecture lancée sur cet
+    appareil, « Reprendre sur cet appareil ») envoie ``playback.state`` action ``pause`` aux autres
+    appareils, même si l'horodatage de cet appareil est en retard (c'est lui qu'on vient de toucher)."""
     access.require_play(user, track)
+    if playing:
+        pause = {"action": "pause", "sauf_device_id": device_id, "track_id": str(track.pk), "device_id": device_id}
+        transaction.on_commit(partial(_playback_push, user.pk, pause))
     now = now or timezone.now()
     stamp = _bounded(client_updated_at, now)
     position = max(0.0, float(position_seconds))
@@ -790,6 +798,8 @@ def playback_state_update(
     state.track, state.position_seconds, state.device_id, state.client_updated_at = track, position, device_id, stamp
     state.save()
     payload = {
+        "action": "etat",
+        "playing": playing,
         "track_id": str(track.pk),
         "position_seconds": position,
         "device_id": device_id,
@@ -1046,7 +1056,7 @@ def report_create(*, user: Any, track: Track, reason: str, comment: str = "") ->
 @transaction.atomic
 def album_report_create(*, user: Any, album: Album, reason: str, comment: str = "") -> TrackReport:
     """Signalement d'un album entier (pochette, présentation, ensemble des pistes)."""
-    if not access.can_view_album(user, album):
+    if not access.can_preview_album(user, album):
         raise NotFoundError("Album introuvable.", code="album_introuvable")
     return TrackReport.objects.create(album=album, reporter=user, reason=reason, comment=comment[:2000])
 

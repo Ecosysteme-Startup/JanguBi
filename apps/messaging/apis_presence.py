@@ -39,7 +39,9 @@ class PresenceOutputSerializer(serializers.Serializer):
 
 class PresenceSettingSerializer(serializers.Serializer):
     montrer_presence = serializers.BooleanField(
-        allow_null=True, help_text="null : revenir au réglage par défaut (oui pour le clergé et le staff)."
+        allow_null=True,
+        help_text="null : revenir au réglage par défaut (oui pour le clergé et le staff). Réciproque : "
+        "si vous masquez votre présence, vous ne verrez plus celle des autres.",
     )
     effective = serializers.BooleanField(read_only=True)
     default = serializers.BooleanField(read_only=True)
@@ -59,7 +61,8 @@ class PresenceApi(V1ApiMixin, ApiAuthMixin, APIView):
     @extend_schema(
         tags=["messaging"],
         operation_id="messaging_presence",
-        summary="Présence de mes interlocuteurs (en ligne, vu à) ; les autres identifiants sont ignorés",
+        summary="Présence de mes interlocuteurs (en ligne, vu à) ; les autres identifiants sont ignorés ; "
+        "tout est « inconnu » si je masque ma propre présence",
         parameters=[OpenApiParameter("users", str, required=True, description="UUID séparés par des virgules")],
         responses=PresenceOutputSerializer(many=True),
     )

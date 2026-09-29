@@ -56,9 +56,12 @@ def layer(monkeypatch) -> FakeLayer:
 
 @pytest.fixture
 def world(db):
-    """Le Père Emmanuel Tine échange avec Marie-Thérèse Diouf ; Awa n'a aucune conversation avec lui."""
+    """Le Père Emmanuel Tine échange avec Marie-Thérèse Diouf ; Awa n'a aucune conversation avec lui.
+    Marie montre sa présence : sans cela, elle ne verrait pas celle du Père (réciprocité, décision 2)."""
     pere = priest("emmanuel.tine@sd.sn")
     marie = person("marie.therese.diouf@test.sn")
+    marie.montrer_presence = True
+    marie.save(update_fields=["montrer_presence"])
     awa = person("awa@test.sn")
     ConversationFactory(participant_a=pere, participant_b=marie)
     return SimpleNamespace(pere=pere, marie=marie, awa=awa)
@@ -66,7 +69,7 @@ def world(db):
 
 def _client(user) -> APIClient:
     client = APIClient()
-    client.force_authenticate(user=user)
+    client.force_authenticate(user=BaseUser.objects.get(pk=user.pk))  # comme une vraie requête
     return client
 
 
@@ -76,13 +79,15 @@ def _client(user) -> APIClient:
 def test_default_is_on_for_clergy_and_off_for_faithful(world):
     assert presence_default_for(world.pere) is True
     assert presence_default_for(world.marie) is False
+    assert presence_default_for(world.awa) is False
     assert presence_visible(world.pere) is True
-    assert presence_visible(world.marie) is False
+    assert presence_visible(world.awa) is False
 
 
 def test_explicit_setting_overrides_default(world):
     world.marie.montrer_presence = True
     world.pere.montrer_presence = False
+    world.awa.montrer_presence = None
 
     assert presence_visible(world.marie) is True
     assert presence_visible(world.pere) is False
@@ -143,7 +148,9 @@ def test_heartbeat_refreshes_and_recovers_after_expiry(world, layer):
 
 
 def test_hidden_presence_is_never_broadcast(world, layer):
-    # Marie ne montre pas sa présence (défaut d'un fidèle) : ses connexions ne se devinent pas.
+    # Marie ne montre pas sa présence : ses connexions ne se devinent pas.
+    BaseUser.objects.filter(pk=world.marie.pk).update(montrer_presence=None)
+    world.marie.montrer_presence = None
     presence_connect(user=world.marie)
     presence_disconnect(user=world.marie)
 
@@ -199,7 +206,7 @@ def test_api_shows_last_seen_when_offline(world, layer):
 
 def test_api_hides_presence_of_someone_who_does_not_show_it(world, layer):
     presence_connect(user=world.marie)
-    BaseUser.objects.filter(pk=world.marie.pk).update(last_seen_at=timezone.now())
+    BaseUser.objects.filter(pk=world.marie.pk).update(last_seen_at=timezone.now(), montrer_presence=False)
 
     rows = _client(world.pere).get(PRESENCE_URL, {"users": str(world.marie.pk)}).json()
 
@@ -226,7 +233,7 @@ def test_api_validates_the_list(world):
 
 
 def test_api_setting_get_and_update(world, layer):
-    client = _client(world.marie)
+    client = _client(world.awa)
 
     assert client.get(SETTING_URL).json() == {"montrer_presence": None, "effective": False, "default": False}
 
@@ -234,7 +241,53 @@ def test_api_setting_get_and_update(world, layer):
 
     assert response.status_code == 200
     assert response.json() == {"montrer_presence": True, "effective": True, "default": False}
-    assert BaseUser.objects.get(pk=world.marie.pk).montrer_presence is True
+    assert BaseUser.objects.get(pk=world.awa.pk).montrer_presence is True
+
+
+# --- Réciprocité (décision 2 du 29/09/2026) -------------------------------------------------------
+
+
+def test_reciprocity_hidden_viewer_reads_only_unknown(world, layer):
+    """Qui masque sa présence ne voit plus celle des autres : ni « en ligne » ni « vu à »."""
+    presence_connect(user=world.pere)
+    BaseUser.objects.filter(pk=world.marie.pk).update(montrer_presence=False)
+
+    rows = _client(world.marie).get(PRESENCE_URL, {"users": f"{world.pere.pk},{world.awa.pk}"}).json()
+
+    assert rows == [{"user_id": str(world.pere.pk), "visible": False, "online": None, "last_seen_at": None}]
+
+
+def test_reciprocity_default_faithful_sees_nothing(world, layer):
+    """Un fidèle au réglage par défaut (présence non montrée) ne voit pas celle du Père."""
+    presence_connect(user=world.pere)
+    BaseUser.objects.filter(pk=world.marie.pk).update(montrer_presence=None)
+
+    rows = _client(world.marie).get(PRESENCE_URL, {"users": str(world.pere.pk)}).json()
+
+    assert rows[0]["visible"] is False and rows[0]["online"] is None
+
+
+def test_reciprocity_no_event_sent_to_a_hidden_viewer(world, layer):
+    BaseUser.objects.filter(pk=world.marie.pk).update(montrer_presence=False)
+
+    presence_connect(user=world.pere)
+    presence_disconnect(user=world.pere)
+
+    assert layer.sent == []
+
+
+def test_reciprocity_showing_again_restores_events(world, layer, django_capture_on_commit_callbacks):
+    marie = BaseUser.objects.get(pk=world.marie.pk)
+    with django_capture_on_commit_callbacks(execute=True):
+        presence_setting_update(user=marie, montrer_presence=False)
+    presence_connect(user=world.pere)
+    assert [g for g, m in layer.sent if m["user_id"] == str(world.pere.pk)] == []
+
+    with django_capture_on_commit_callbacks(execute=True):
+        presence_setting_update(user=marie, montrer_presence=True)
+    presence_disconnect(user=world.pere)
+
+    assert [g for g, m in layer.sent if m["user_id"] == str(world.pere.pk)] == [f"user_{marie.pk}"]
 
 
 # --- WebSocket ------------------------------------------------------------------------------------------
@@ -256,6 +309,8 @@ def _socket(user) -> WebsocketCommunicator:
 def test_websocket_presence_flow(in_memory_layer):
     pere = priest("pere.ws@sd.sn")
     marie = person("marie.ws@test.sn")
+    BaseUser.objects.filter(pk=marie.pk).update(montrer_presence=True)
+    marie.montrer_presence = True
     ConversationFactory(participant_a=pere, participant_b=marie)
 
     async def scenario():
@@ -277,7 +332,7 @@ def test_websocket_presence_flow(in_memory_layer):
         assert offline["online"] is False
         assert offline["last_seen_at"]
 
-        # Marie (fidèle, présence masquée par défaut) : le Père ne reçoit rien d'elle.
+        # Marie se déconnecte à son tour (le Père est déjà parti : rien à recevoir).
         await marie_socket.disconnect()
 
     asyncio.run(scenario())

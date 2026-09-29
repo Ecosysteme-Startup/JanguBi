@@ -60,6 +60,7 @@ class Command(BaseCommand):
             raise CommandError("Paroisse pilote absente : lancez d'abord seed_hierarchy_profile senegal.")
         with transaction.atomic():
             people = self._people(parish)
+            self._memberships(people, parish)
             self._offices(people, parish)
             self._content(people, parish)
             self._donations(people, parish)
@@ -111,6 +112,16 @@ class Command(BaseCommand):
                 },
             )
             authz.invalidate_user(people[key].pk)
+
+    def _memberships(self, people: dict[str, Any], parish: Any) -> None:
+        """Paroisses multiples (décisions 6-8) : la paroisse pilote est la principale de chacun ;
+        la fidèle de démo suit aussi Sainte-Thérèse de Grand-Dakar en paroisse secondaire."""
+        from apps.hierarchy.services_memberships import membership_join
+
+        for user in people.values():
+            if user.paroisse_suivie_id:
+                membership_join(user=user, node=user.paroisse_suivie)
+        membership_join(user=people["fidele"], node=self._second_parish(parish.get_parent()))
 
     def _second_parish(self, deanery: Any) -> Any:
         from apps.hierarchy.models import Node, NodeType

@@ -9,7 +9,9 @@ Principe :
   en base) est diffusé en ``presence.changed`` aux seuls interlocuteurs : les personnes avec
   qui l'on a une conversation, hors blocage ;
 - la présence n'est visible que si la personne l'a choisi (``montrer_presence``) ; par
-  défaut, oui pour le clergé et le staff, non pour les fidèles.
+  défaut, oui pour le clergé et le staff, non pour les fidèles ;
+- réciprocité (décision 2 du 29/09/2026) : qui masque sa présence ne voit plus celle des autres
+  (lecture « inconnue », aucun ``presence.changed`` reçu).
 
 Une connexion coupée sans fermeture propre (processus tué) laisse le compteur trop haut au
 plus ``PRESENCE_TTL_SECONDS`` : sans battement, la clé expire et la personne redevient
@@ -102,6 +104,17 @@ def presence_contacts(*, user: Any) -> set[Any]:
     return others
 
 
+def presence_viewers(*, contact_ids: set[Any]) -> set[Any]:
+    """Réciprocité (décision 2) : parmi ces interlocuteurs, ceux qui montrent leur présence, donc
+    qui voient celle des autres. Les autres ne reçoivent aucun ``presence.changed``."""
+    if not contact_ids:
+        return set()
+    users = BaseUser.objects.filter(pk__in=contact_ids, is_active=True).only(
+        "pk", "is_staff", "degre_ordre", "montrer_presence"
+    )
+    return {u.pk for u in users if presence_visible(u)}
+
+
 # --- Compteur de connexions -----------------------------------------------------------------------
 
 
@@ -189,7 +202,7 @@ def presence_broadcast(*, user: BaseUser, online: bool | None = None, setting_ch
     layer = get_channel_layer()
     if layer is None:
         return 0
-    contacts = presence_contacts(user=user)
+    contacts = presence_viewers(contact_ids=presence_contacts(user=user))
     if not contacts:
         return 0
     payload = presence_payload(user=user, online=online)

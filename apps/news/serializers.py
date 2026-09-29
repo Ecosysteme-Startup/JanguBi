@@ -258,3 +258,7 @@ class ReactionInputSerializer(serializers.Serializer):
 
 class ReadOutputSerializer(serializers.Serializer):
     first_read = serializers.BooleanField()
+
+
+class MeFeedSecondaryFilterSerializer(serializers.Serializer):
+    paroisse = serializers.UUIDField(required=False, help_text="Une seule de mes paroisses secondaires")

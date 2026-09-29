@@ -39,6 +39,13 @@ Codes de fermeture des WebSocket :
   cette personne ne produisent **aucun** événement : leur heure ne peut pas se deviner.
 - On ne peut pas interroger la présence d'une personne hors de ses conversations. Les identifiants
   inconnus ou étrangers sont ignorés sans le dire.
+- **Réciprocité** (décision 2 du 29/09/2026) : qui ne montre pas sa présence (réglage effectif,
+  défaut compris) **ne voit plus celle des autres**. `GET /messaging/presence/` ne lui renvoie que des
+  lignes « inconnues » (`visible: false`, `online: null`, `last_seen_at: null`) et il ne reçoit
+  **aucun** `presence.changed`. Conséquence : un fidèle au réglage par défaut (présence masquée) ne
+  voit pas « En ligne » ni « Vu à » de son prêtre tant qu'il n'active pas le réglage. Texte du
+  réglage (F10, profil web) : « Si vous masquez votre présence, vous ne verrez plus celle des
+  autres. »
 
 ### 2.2 Connexion et battement
 
@@ -62,7 +69,8 @@ Codes de fermeture des WebSocket :
 
 ### 2.3 Événement reçu : `presence.changed`
 
-Il arrive sur `ws/notifications/`, envoyé aux interlocuteurs seulement.
+Il arrive sur `ws/notifications/`, envoyé aux interlocuteurs seulement, et seulement à ceux qui
+montrent eux-mêmes leur présence (réciprocité).
 
 ```json
 {"type": "presence.changed", "user_id": "…", "visible": true, "online": true, "last_seen_at": null}
@@ -86,12 +94,33 @@ Le dernier cas arrive quand la personne masque sa présence : le client efface l
   `{"montrer_presence": null, "effective": false, "default": false}`.
 - `PUT /api/v1/me/presence/` avec `{"montrer_presence": true | false | null}` change mon réglage.
   `null` revient au défaut. Les interlocuteurs sont prévenus si la visibilité change.
+  Après un `PUT`, le client efface (masquage) ou recharge (`GET /messaging/presence/`, activation)
+  les indicateurs de ses interlocuteurs : le serveur ne lui renvoie pas leur état.
 
 ### 2.5 Affichage conseillé (maquettes C3)
 
 - « En ligne » : un point discret.
 - Hors ligne : « Vu à 10 h 42 » le jour même, puis « Vu hier », puis « Vu le 25 septembre ».
 - Présence masquée : rien, pas même une mention « masqué ».
+
+### 2.6 Sonothèque : `playback.state` (une lecture à la fois)
+
+Sur la même socket `ws/notifications/`, enveloppe `{"type": "notification", "event_type":
+"playback.state", …}` (rien dans la liste des notifications). Deux actions (détail :
+`API-AUDIO.md` §3) :
+
+```json
+{"type": "notification", "event_type": "playback.state", "action": "etat", "playing": true,
+ "track_id": "…", "position_seconds": 88.0, "device_id": "web-mt-diouf", "updated_at": "2026-09-27T10:43:02+00:00"}
+{"type": "notification", "event_type": "playback.state", "action": "pause",
+ "sauf_device_id": "web-mt-diouf", "track_id": "…", "device_id": "web-mt-diouf"}
+```
+
+- `etat` : dernière position gagnante ; les autres appareils proposent « Reprendre sur cet appareil ».
+- `pause` (décision 10) : émis quand un appareil fait `PUT /audio/lecture/etat/` avec
+  `playing: true`. Tout appareil dont le `device_id` n'est pas `sauf_device_id` met sa lecture en
+  pause. Une seule lecture à la fois par compte.
+- Le `device_id` est stable par installation (mobile) ou par navigateur (web, `localStorage`).
 
 ## 3. SSE : tableaux de bord des dons
 

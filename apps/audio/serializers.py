@@ -73,17 +73,24 @@ class AudioAlbumRefSerializer(serializers.ModelSerializer):
 class AudioAlbumSerializer(serializers.ModelSerializer):
     source = AudioSourceRefSerializer()  # type: ignore[assignment]
     cover_url = serializers.SerializerMethodField()
+    verrouille = serializers.SerializerMethodField()
 
     class Meta:
         model = Album
         fields = (
             "id", "source", "kind", "title", "description", "visibility", "cover_url", "recorded_on",
-            "liturgical_season", "published_at",
+            "liturgical_season", "published_at", "verrouille",
         )  # fmt: skip
 
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_cover_url(self, obj: Album) -> str | None:
         return _cover_url(obj)
+
+    @extend_schema_field(
+        serializers.BooleanField(help_text="Réservé aux paroissiens et vous n'en êtes pas : écoute impossible")
+    )
+    def get_verrouille(self, obj: Album) -> bool:
+        return bool(getattr(obj, "verrouille", False))
 
 
 class AudioTrackSerializer(serializers.ModelSerializer):
@@ -177,9 +184,27 @@ class AudioSourceDetailSerializer(serializers.Serializer):
     most_played = AudioTrackSerializer(many=True, help_text="Les plus écoutés, à l'intérieur de cette source seulement")
 
 
+class AudioLockedTrackSerializer(AudioTrackSerializer):
+    """Piste d'une page d'album : ``verrouille`` vrai quand elle est réservée aux paroissiens et que
+    l'auditeur n'en est pas (titre, durée, position visibles ; jamais d'URL)."""
+
+    verrouille = serializers.SerializerMethodField()
+
+    class Meta(AudioTrackSerializer.Meta):
+        fields: tuple[str, ...] = (*AudioTrackSerializer.Meta.fields, "verrouille")  # type: ignore[assignment]
+
+    def get_verrouille(self, obj: Track) -> bool:
+        return bool(getattr(obj, "verrouille", False))
+
+
 class AudioAlbumDetailSerializer(serializers.Serializer):
     album = AudioAlbumSerializer()
-    tracks = AudioTrackSerializer(many=True)
+    tracks = AudioLockedTrackSerializer(many=True)
+    paroisse_requise = AudioNodeRefSerializer(
+        allow_null=True,
+        help_text="Paroisse à rejoindre pour écouter les contenus réservés (« Ajouter cette paroisse ») ; "
+        "null si rien n'est réservé ou au-dessus de la paroisse",
+    )
 
 
 class AudioStreamSerializer(serializers.Serializer):
@@ -207,6 +232,51 @@ class AudioPlaybackStateSerializer(serializers.Serializer):
     position_seconds = serializers.FloatField()
     device_id = serializers.CharField()
     updated_at = serializers.DateTimeField(source="client_updated_at")
+
+
+class AudioOfflineLicenseSerializer(serializers.Serializer):
+    delivree_le = serializers.DateTimeField()
+    expire_le = serializers.DateTimeField(help_text="30 jours ; renouvelée à chaque vérification en ligne")
+    paroisse_requise = AudioNodeRefSerializer(
+        allow_null=True, help_text="Paroisse dont il faut rester membre (contenu réservé) ; null si public"
+    )
+
+
+class AudioOfflineDownloadSerializer(serializers.Serializer):
+    track = AudioTrackSerializer()
+    mp3_url = serializers.URLField(help_text="MP3 128 kb/s, URL signée courte (15 min) : télécharger tout de suite")
+    url_expire_le = serializers.DateTimeField()
+    version = serializers.IntegerField(help_text="Version d'encodage téléchargée (re-télécharger si elle change)")
+    licence = AudioOfflineLicenseSerializer()
+
+
+class AudioOfflineVerifyInputSerializer(serializers.Serializer):
+    track_ids = serializers.ListField(
+        child=serializers.UUIDField(), allow_empty=False, max_length=settings.AUDIO_OFFLINE_VERIFY_MAX_BATCH
+    )
+
+
+class AudioOfflineVerifyRowSerializer(serializers.Serializer):
+    track_id = serializers.UUIDField()
+    statut = serializers.ChoiceField(choices=[("valide", "Valide"), ("a_supprimer", "À supprimer")])
+    motif = serializers.ChoiceField(
+        choices=[
+            ("", "—"),
+            ("plus_membre", "Plus membre de la paroisse"),
+            ("retiree", "Retirée ou dépubliée"),
+            ("privee", "Devenue privée"),
+            ("introuvable", "Introuvable"),
+        ],
+        allow_blank=True,
+    )
+    expire_le = serializers.DateTimeField(allow_null=True, help_text="Nouvelle expiration de la licence si valide")
+    version = serializers.IntegerField(allow_null=True, help_text="Version d'encodage courante")
+    paroisse_requise = AudioNodeRefSerializer(allow_null=True)
+
+
+class AudioOfflineVerifySerializer(serializers.Serializer):
+    verifie_le = serializers.DateTimeField()
+    results = AudioOfflineVerifyRowSerializer(many=True)
 
 
 class AudioPlaybackStateWriteOutputSerializer(serializers.Serializer):
@@ -412,6 +482,12 @@ class AudioPlaybackStateInputSerializer(serializers.Serializer):
     position_seconds = serializers.FloatField(min_value=0)
     device_id = serializers.CharField(max_length=100)
     client_updated_at = serializers.DateTimeField(help_text="Horodatage de l'appareil (borné par le serveur)")
+    playing = serializers.BooleanField(
+        required=False,
+        default=False,
+        help_text="Vrai quand cet appareil lit (lecture lancée, « Reprendre sur cet appareil ») : "
+        "les autres appareils du compte reçoivent playback.state action « pause »",
+    )
 
 
 class AudioSearchQuerySerializer(serializers.Serializer):

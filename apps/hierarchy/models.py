@@ -440,3 +440,64 @@ class AuditEvent(models.Model):
 
     def delete(self, *args: Any, **kwargs: Any) -> Any:
         raise ValueError("Le journal d'audit est en insertion seule.")
+
+
+class ParishMembership(BaseModel):
+    """Appartenance d'un fidèle à une paroisse (décisions 6-8 du 29/09/2026).
+
+    Une paroisse **principale** (accueil, annonces, horaires, dons proposés), des paroisses
+    **secondaires** ; principale ou secondaire, l'appartenance ouvre les contenus réservés de la
+    paroisse. Adhésion libre : le fidèle ajoute et retire lui-même ses paroisses. La paroisse peut
+    retirer un membre (``removed_by_parish_at``) : la ligne est gardée pour que le fidèle ne puisse
+    pas se réinscrire seul ; la paroisse peut le rétablir.
+
+    ``BaseUser.paroisse_suivie`` reste la copie de la paroisse principale (compatibilité : accueil,
+    annonces, horaires, tableaux de bord) ; seuls les services de ``services_memberships`` l'écrivent.
+    """
+
+    user = models.ForeignKey(
+        "users.BaseUser", on_delete=models.CASCADE, related_name="parish_memberships", verbose_name=_("fidèle")
+    )
+    node = models.ForeignKey(Node, on_delete=models.CASCADE, related_name="memberships", verbose_name=_("paroisse"))
+    is_primary = models.BooleanField(_("paroisse principale"), default=False)
+    joined_at = models.DateTimeField(_("membre depuis"))
+    removed_by_parish_at = models.DateTimeField(_("retiré par la paroisse le"), null=True, blank=True)
+    removed_by = models.ForeignKey(
+        "users.BaseUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name=_("retiré par"),
+    )
+
+    class Meta:
+        verbose_name = _("appartenance à une paroisse")
+        verbose_name_plural = _("appartenances aux paroisses")
+        ordering = ["-is_primary", "joined_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "node"], name="hierarchy_membership_unique"),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=Q(is_primary=True, removed_by_parish_at__isnull=True),
+                name="hierarchy_membership_one_primary",
+            ),
+            models.CheckConstraint(
+                condition=Q(is_primary=False) | Q(removed_by_parish_at__isnull=True),
+                name="hierarchy_membership_removed_not_primary",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["node", "joined_at"],
+                condition=Q(removed_by_parish_at__isnull=True),
+                name="hierarchy_membership_active",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} ∈ {self.node_id}{' (principale)' if self.is_primary else ''}"
+
+    @property
+    def is_active(self) -> bool:
+        return self.removed_by_parish_at is None

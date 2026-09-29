@@ -2,11 +2,17 @@
 
 - ``public`` : tout le monde, même sans compte ;
 - ``paroisse`` : membres rattachés au nœud de la source, c'est-à-dire
-  * les fidèles dont la paroisse suivie est ce nœud ou dans son sous-arbre,
+  * les fidèles membres (paroisse principale **ou secondaire**, décisions 6-8) de ce nœud ou d'une
+    paroisse de son sous-arbre,
   * les titulaires d'un office sur ce nœud, son sous-arbre, ou au-dessus (office hérité) ;
 - ``prive`` : brouillon du staff, visible seulement de ceux qui ont ``audio.publier`` sur le nœud.
 
-Le contexte d'appartenance d'un utilisateur est mis en cache 5 minutes (``AUDIO_AUTHZ_CACHE_SECONDS``).
+Le contexte d'appartenance d'un utilisateur est mis en cache 5 minutes (``AUDIO_AUTHZ_CACHE_SECONDS``) ;
+la clé inclut la version des droits de l'utilisateur (``authz.user_version``) : une nomination, une
+adhésion ou un retrait par la paroisse s'appliquent tout de suite.
+
+Album réservé (décision 4) : un non-membre voit l'album et la liste de ses pistes, verrouillées ;
+la lecture lui répond ``403 reserve_paroissiens`` (et non 404) avec la paroisse à rejoindre.
 """
 
 from dataclasses import dataclass
@@ -22,6 +28,8 @@ from apps.audio.models import Album, AudioSource, Playlist, Track
 from apps.core.exceptions import NotFoundError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
+from apps.hierarchy.selectors import node_ancestors
+from apps.hierarchy.selectors_memberships import member_node_paths
 
 STEPLEN = 4  # treebeard MP_Node : longueur d'un segment de chemin
 
@@ -34,7 +42,7 @@ class Membership:
     """Ce qu'il faut savoir d'un utilisateur pour filtrer le catalogue."""
 
     user_id: Any
-    member_paths: tuple[str, ...]  # paroisse suivie + nœuds de ses nominations actives
+    member_paths: tuple[str, ...]  # paroisses dont il est membre + nœuds de ses nominations actives
     grant_scopes: tuple[tuple[str, bool], ...]  # (chemin, hérite) de toutes ses nominations
     publish_scopes: tuple[tuple[str, bool], ...]  # (chemin, hérite) où il a audio.publier ("" = tout)
 
@@ -47,7 +55,7 @@ ANONYMOUS = Membership(user_id=None, member_paths=(), grant_scopes=(), publish_s
 
 
 def _membership_key(user_id: Any) -> str:
-    return f"audio:membership:v1:{user_id}"
+    return f"audio:membership:v2:{user_id}:{authz.user_version(user_id)}"
 
 
 def membership(user: Any) -> Membership:
@@ -58,10 +66,7 @@ def membership(user: Any) -> Membership:
     if cached is not None:
         return cached
     grants = authz.grants(user)
-    paths: list[str] = []
-    followed = getattr(user, "paroisse_suivie", None)
-    if followed is not None:
-        paths.append(followed.path)
+    paths: list[str] = member_node_paths(user=user)
     paths += [g.path for g in grants if g.path]
     result = Membership(
         user_id=user.pk,
@@ -168,6 +173,29 @@ def visible_albums(m: Membership) -> QuerySet[Album]:
     ).filter(_visibility_q(m, field="visibility", node_path="source__node__path"))
 
 
+def previewable_albums(m: Membership) -> QuerySet[Album]:
+    """Albums qu'on peut **voir** (décision 4) : ceux qu'on peut écouter, plus les albums
+    ``paroisse`` publiés, montrés verrouillés aux non-membres. Les brouillons (``prive``) restent
+    réservés au staff de la source."""
+    return Album.objects.filter(
+        published_at__isnull=False, published_at__lte=timezone.now(), hidden_at__isnull=True, source__is_active=True
+    ).filter(_visibility_q(m, field="visibility", node_path="source__node__path") | Q(visibility=Visibility.PAROISSE))
+
+
+def locked(m: Membership, node: Node, visibility: str) -> bool:
+    """Vrai si ``m`` voit ce contenu sans pouvoir l'écouter (réservé aux paroissiens)."""
+    return visibility == Visibility.PAROISSE and not level_allowed(m, node, visibility)
+
+
+def parish_of(node: Node) -> Node | None:
+    """Paroisse à rejoindre pour ouvrir les contenus réservés de ``node`` : le nœud lui-même s'il
+    tient des registres (paroisse, quasi-paroisse), sinon sa plus proche paroisse ancêtre
+    (mouvement, CEB). ``None`` au-dessus de la paroisse (diocèse, doyenné)."""
+    if node.type.holds_registers:
+        return node
+    return node_ancestors(node=node).filter(type__holds_registers=True).order_by("-depth").first()
+
+
 def visible_editorial_playlists(m: Membership) -> QuerySet[Playlist]:
     return Playlist.objects.filter(source__isnull=False, published_at__isnull=False, source__is_active=True).filter(
         _visibility_q(m, field="visibility", node_path="source__node__path")
@@ -184,7 +212,8 @@ def visible_sources() -> QuerySet[AudioSource]:
 
 def track_decision_key(user_id: Any, track: Track) -> str:
     stamp = int(track.updated_at.timestamp() * 1000) if track.updated_at else 0
-    return f"audio:play-authz:{user_id or 'anon'}:{track.pk}:{stamp}"
+    version = authz.user_version(user_id) if user_id else 0
+    return f"audio:play-authz:v2:{user_id or 'anon'}:{version}:{track.pk}:{stamp}"
 
 
 def can_play(user: Any, track: Track) -> bool:
@@ -211,10 +240,63 @@ def can_play(user: Any, track: Track) -> bool:
     return allowed
 
 
+def _track_published(track: Track) -> bool:
+    return (
+        track.source.is_active
+        and track.status == TrackStatus.PRET
+        and track.hidden_at is None
+        and track.published_at is not None
+        and track.published_at <= timezone.now()
+    )
+
+
+def is_reserved_for_members(user: Any, track: Track) -> bool:
+    """Piste publiée, réservée aux paroissiens, que ``user`` ne peut pas écouter (décision 4)."""
+    return (
+        _track_published(track)
+        and track.effective_visibility == Visibility.PAROISSE
+        and not can_play(user, track)
+    )
+
+
+def reserved_error(node: Node) -> PermissionDeniedError:
+    parish = parish_of(node)
+    name = parish.name if parish is not None else node.name
+    return PermissionDeniedError(
+        f"Réservé aux paroissiens de {name}.",
+        {"paroisse": {"id": str(parish.pk), "name": parish.name} if parish is not None else None},
+        code="reserve_paroissiens",
+    )
+
+
+def require_listen(user: Any, track: Track) -> None:
+    """Comme ``require_play``, mais une piste réservée aux paroissiens répond ``403
+    reserve_paroissiens`` avec la paroisse à rejoindre (« Ajouter cette paroisse ») ; une piste
+    privée ou retirée reste introuvable (404)."""
+    if can_play(user, track):
+        return
+    if is_reserved_for_members(user, track):
+        raise reserved_error(track.source.node)
+    raise NotFoundError("Cette piste est introuvable.", code="piste_introuvable")
+
+
 def require_play(user: Any, track: Track) -> None:
     """Refus sans dire si la piste existe (404) pour un anonyme ou un non-membre."""
     if not can_play(user, track):
         raise NotFoundError("Cette piste est introuvable.", code="piste_introuvable")
+
+
+def can_preview_album(user: Any, album: Album) -> bool:
+    """Voir l'album (métadonnées, liste des pistes) sans forcément pouvoir l'écouter (décision 4)."""
+    if can_view_album(user, album):
+        return True
+    return (
+        album.visibility == Visibility.PAROISSE
+        and album.source.is_active
+        and album.hidden_at is None
+        and album.published_at is not None
+        and album.published_at <= timezone.now()
+    )
 
 
 def can_view_album(user: Any, album: Album) -> bool:

@@ -71,8 +71,14 @@ def test_album_page_lists_tracks_in_order_and_hides_private_albums(world):
     data = client_for().get(f"{API}/albums/{world.messe.pk}/").json()
     assert data["album"]["title"] == "Messe du 27 septembre 2026"
     assert [t["title"] for t in data["tracks"]] == ["Kyrie", "Gloria"]
+    # Album réservé (décision 4) : visible verrouillé pour un non-membre ; un brouillon reste 404.
+    locked = client_for().get(f"{API}/albums/{world.homelies.pk}/")
+    assert locked.status_code == 200 and locked.json()["album"]["verrouille"] is True
+    assert client_for(world.fidele).get(f"{API}/albums/{world.homelies.pk}/").json()["album"]["verrouille"] is False
+    world.homelies.published_at = None
+    world.homelies.save()
+    services.catalog_invalidate()
     assert client_for().get(f"{API}/albums/{world.homelies.pk}/").status_code == 404
-    assert client_for(world.fidele).get(f"{API}/albums/{world.homelies.pk}/").status_code == 200
 
 
 def test_staff_creates_album_publishes_and_edits_track(world):
@@ -87,7 +93,7 @@ def test_staff_creates_album_publishes_and_edits_track(world):
     track = ready_track(world.paroisse, "Premier enseignement", published=False)
     patch = client.patch(
         f"{API}/pistes/{track.pk}/",
-        {"album_id": album["id"], "performers": ["Père Emmanuel Tine"], "language": "wo", "tags": ["retraite"]},
+        {"album_id": album["id"], "performers": ["Père Emmanuel Tine"], "language": "fr", "tags": ["retraite"]},
         format="json",
     )
     assert patch.status_code == 200, patch.content
