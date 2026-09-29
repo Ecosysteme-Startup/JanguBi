@@ -60,7 +60,7 @@ def _node(node_id: Any) -> Node:
 # --- Sérialiseurs -----------------------------------------------------------------------------
 
 
-class NodeRefSerializer(serializers.Serializer):
+class AdminNodeRefSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
 
@@ -92,7 +92,7 @@ class AdminAccountOutputSerializer(serializers.Serializer):
     sync = serializers.ChoiceField(choices=selectors_admin.SYNC_STATES)
     sync_error = serializers.CharField(allow_null=True)
     synced_at = serializers.DateTimeField(allow_null=True)
-    admin_node = NodeRefSerializer(allow_null=True)
+    admin_node = AdminNodeRefSerializer(allow_null=True)
     created_at = serializers.DateTimeField()
     last_login = serializers.DateTimeField(allow_null=True)
     last_seen_on = serializers.DateField(allow_null=True)
@@ -103,7 +103,7 @@ class AdminOfficeSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     office = serializers.CharField()
     office_label = serializers.CharField()
-    node = NodeRefSerializer()
+    node = AdminNodeRefSerializer()
     status = serializers.CharField()
     start_date = serializers.DateField()
     end_date = serializers.DateField(allow_null=True)
@@ -137,7 +137,7 @@ class AdminAccountDetailSerializer(AdminAccountOutputSerializer):
     statut_verification = serializers.CharField()
     degre_ordre = serializers.CharField()
     offices = AdminOfficeSerializer(many=True)
-    scope_nodes = NodeRefSerializer(many=True)
+    scope_nodes = AdminNodeRefSerializer(many=True)
     keycloak = KeycloakStateSerializer(allow_null=True, help_text="État en direct dans Keycloak ; null si non lié")
 
 
@@ -536,7 +536,7 @@ class AdminAccountExportApi(_AdminApi):
 
 class AdminScopeOutputSerializer(serializers.Serializer):
     is_platform_admin = serializers.BooleanField()
-    nodes = NodeRefSerializer(many=True, help_text="Nœuds où je gère les comptes (sous-arbres compris)")
+    nodes = AdminNodeRefSerializer(many=True, help_text="Nœuds où je gère les comptes (sous-arbres compris)")
     required_actions = serializers.ListField(child=serializers.CharField())
     impersonation = serializers.BooleanField(help_text="Toujours faux : l'usurpation d'identité n'est pas proposée")
 
@@ -574,7 +574,7 @@ class AdminAuditOutputSerializer(serializers.Serializer):
     actor_email = serializers.CharField(allow_null=True)
     target_id = serializers.CharField()
     target_email = serializers.CharField(allow_null=True)
-    node = NodeRefSerializer(allow_null=True)
+    node = AdminNodeRefSerializer(allow_null=True)
     metadata = serializers.JSONField()
 
 
