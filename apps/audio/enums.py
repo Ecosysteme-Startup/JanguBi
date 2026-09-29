@@ -40,6 +40,16 @@ class TrackStatus(models.TextChoices):
     ECHEC = "echec", "Échec de l'encodage"
 
 
+class EncodingStep(models.TextChoices):
+    """Étape de l'encodage en cours, pour la barre de progression du staff (``encoding_percent``)."""
+
+    ANALYSE = "analyse", "Analyse du fichier"
+    NORMALISATION = "normalisation", "Normalisation du volume"
+    QUALITES = "qualites", "Encodage des qualités"
+    FORME_ONDE = "forme_onde", "Forme d'onde et dépôt"
+    TERMINE = "termine", "Terminé"
+
+
 class Language(models.TextChoices):
     FR = "fr", "Français"
     WO = "wo", "Wolof"
@@ -86,6 +96,11 @@ class ReportReason(models.TextChoices):
     INAPPROPRIE = "inapproprie", "Contenu inapproprié"
     QUALITE = "qualite", "Problème de son"
     AUTRE = "autre", "Autre"
+
+
+class ReportTarget(models.TextChoices):
+    PISTE = "piste", "Piste"
+    ALBUM = "album", "Album"
 
 
 class ReportStatus(models.TextChoices):

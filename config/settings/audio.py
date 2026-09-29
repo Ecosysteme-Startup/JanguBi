@@ -30,6 +30,15 @@ AUDIO_UPLOAD_ALLOWED_TYPES: dict[str, tuple[str, ...]] = {
 AUDIO_RAW_PREFIX = env.str("AUDIO_RAW_PREFIX", default="audio-raw")
 AUDIO_HLS_PREFIX = env.str("AUDIO_HLS_PREFIX", default="audio-hls")
 
+# --- Pochettes d'album (POST présigné, comme l'audio) ----------------------------------------
+AUDIO_COVER_PREFIX = env.str("AUDIO_COVER_PREFIX", default="audio-covers")  # audio-covers/<album_id>/<fichier>
+AUDIO_COVER_MAX_SIZE = env.int("AUDIO_COVER_MAX_SIZE", default=5 * 1024 * 1024)  # 5 Mo
+AUDIO_COVER_ALLOWED_TYPES: dict[str, tuple[str, ...]] = {
+    "image/jpeg": (".jpg", ".jpeg"),
+    "image/png": (".png",),
+    "image/webp": (".webp",),
+}
+
 # --- Encodage (worker ffmpeg, file Celery « media ») -----------------------------------------
 AUDIO_FFMPEG_BIN = env.str("AUDIO_FFMPEG_BIN", default="ffmpeg")
 AUDIO_FFPROBE_BIN = env.str("AUDIO_FFPROBE_BIN", default="ffprobe")
@@ -64,6 +73,10 @@ AUDIO_EVENTS_MAX_AGE_DAYS = env.int("AUDIO_EVENTS_MAX_AGE_DAYS", default=7)  # r
 AUDIO_EVENTS_MAX_FUTURE_SECONDS = env.int("AUDIO_EVENTS_MAX_FUTURE_SECONDS", default=300)
 AUDIO_EVENTS_RETENTION_MONTHS = env.int("AUDIO_EVENTS_RETENTION_MONTHS", default=13)
 AUDIO_EVENTS_PARTITIONS_AHEAD = 2  # mois créés d'avance
+# Limite de débit de POST /audio/evenements/ (un lot toutes les 30 s environ par appareil).
+# Anonymes : par adresse IP (NUM_PROXIES) ; connectés : par compte. None désactive la limite.
+AUDIO_EVENTS_THROTTLE_RATE_ANON = env.str("AUDIO_EVENTS_THROTTLE_RATE_ANON", default="30/min") or None
+AUDIO_EVENTS_THROTTLE_RATE_USER = env.str("AUDIO_EVENTS_THROTTLE_RATE_USER", default="60/min") or None
 
 # --- Recommandations (précalculées chaque nuit, file Celery « reco ») ------------------------
 AUDIO_RECO_ENABLED = env.bool("AUDIO_RECO_ENABLED", default=True)  # interrupteur global

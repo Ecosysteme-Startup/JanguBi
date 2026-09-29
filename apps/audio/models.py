@@ -16,6 +16,7 @@ from pgvector.django import HnswIndex, VectorField
 
 from apps.audio.enums import (
     AlbumKind,
+    EncodingStep,
     Language,
     LiturgicalSeason,
     NeighborMethod,
@@ -70,6 +71,7 @@ class Album(BaseModel):
         _("temps liturgique"), max_length=12, choices=LiturgicalSeason.choices, blank=True, default=""
     )
     published_at = models.DateTimeField(_("publié le"), null=True, blank=True)
+    hidden_at = models.DateTimeField(_("retiré par la modération le"), null=True, blank=True)
     created_by = models.ForeignKey("users.BaseUser", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
     class Meta:
@@ -120,6 +122,11 @@ class Track(BaseModel):
     encoded_version = models.PositiveIntegerField(_("version encodée"), null=True, blank=True)
     encode_attempts = models.PositiveSmallIntegerField(default=0)
     encoding_started_at = models.DateTimeField(null=True, blank=True)
+    # Progression de l'encodage en cours (barre de progression du staff), tenue par transcode_track.
+    encoding_step = models.CharField(
+        _("étape de l'encodage"), max_length=16, choices=EncodingStep.choices, blank=True, default=""
+    )
+    encoding_percent = models.PositiveSmallIntegerField(_("avancement de l'encodage (%)"), default=0)
     encoded_at = models.DateTimeField(null=True, blank=True)
     duration_seconds = models.FloatField(_("durée (s)"), null=True, blank=True)
     probe_tags = models.JSONField(_("tags lus par ffprobe"), default=dict, blank=True)
@@ -329,9 +336,11 @@ class ListenerSettings(models.Model):
 
 
 class TrackReport(BaseModel):
-    """Signalement d'un contenu (droits d'auteur, contenu inapproprié). Traité par ``audio.moderer``."""
+    """Signalement d'un contenu (droits d'auteur, contenu inapproprié) : une piste **ou** un album.
+    Traité par ``audio.moderer`` sur le nœud de la source."""
 
-    track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="reports")
+    track = models.ForeignKey(Track, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
+    album = models.ForeignKey(Album, null=True, blank=True, on_delete=models.CASCADE, related_name="reports")
     reporter = models.ForeignKey("users.BaseUser", null=True, on_delete=models.SET_NULL, related_name="+")
     reason = models.CharField(max_length=12, choices=ReportReason.choices)
     comment = models.TextField(blank=True, default="")
@@ -341,3 +350,10 @@ class TrackReport(BaseModel):
 
     class Meta:
         indexes = [models.Index(fields=["status", "-created_at"], name="audio_report_status")]
+        constraints = [
+            models.CheckConstraint(
+                name="audio_report_track_xor_album",
+                condition=(Q(track__isnull=False) & Q(album__isnull=True))
+                | (Q(track__isnull=True) & Q(album__isnull=False)),
+            ),
+        ]

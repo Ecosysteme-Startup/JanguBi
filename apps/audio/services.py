@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from apps.audio import access, storage, transcode
 from apps.audio.enums import (
+    EncodingStep,
     PlayEventKind,
     ReportStatus,
     TrackStatus,
@@ -195,6 +196,132 @@ def album_publish(*, actor: Any, album: Album) -> Album:
     return album
 
 
+# --- Pochette d'album (POST présigné vers audio-covers/<album_id>/, comme l'audio) --------------
+
+
+def validate_cover_type(*, file_name: str, file_type: str) -> str:
+    """jpg, png ou webp ; extension, type MIME et cohérence des deux. Renvoie le type normalisé."""
+    extension = pathlib.Path(file_name or "").suffix.lower()
+    normalized = (file_type or "").split(";")[0].strip().lower()
+    allowed = settings.AUDIO_COVER_ALLOWED_TYPES
+    if normalized not in allowed or extension not in allowed[normalized]:
+        raise ApplicationError("Image non acceptée. Formats possibles : jpg, png, webp.", code="format_image")
+    return normalized
+
+
+def _check_cover_size(size: int) -> None:
+    if size <= 0:
+        raise ApplicationError("Le fichier est vide.", code="fichier_vide")
+    if size > settings.AUDIO_COVER_MAX_SIZE:
+        mo = settings.AUDIO_COVER_MAX_SIZE // (1024 * 1024)
+        raise ApplicationError(f"Image trop volumineuse (maximum {mo} Mo).", code="image_trop_grosse")
+
+
+_IMAGE_SIGNATURES = (b"\xff\xd8\xff", b"\x89PNG\r\n\x1a\n")
+
+
+def _looks_like_image(head: bytes) -> bool:
+    return head.startswith(_IMAGE_SIGNATURES) or (head[:4] == b"RIFF" and head[8:12] == b"WEBP")
+
+
+def cover_key_prefix(album: Album) -> str:
+    return f"{settings.AUDIO_COVER_PREFIX}/{album.pk}/"
+
+
+@transaction.atomic
+def album_cover_upload_start(
+    *, actor: Any, album: Album, file_name: str, file_type: str, file_size: int
+) -> dict[str, Any]:
+    """Crée le ``File`` (``apps.files``, non valide tant que l'envoi n'est pas terminé) et renvoie
+    le POST présigné vers ``audio-covers/<album_id>/`` (5 Mo, jpg/png/webp)."""
+    access.require_publish(actor, album.source.node)
+    content_type = validate_cover_type(file_name=file_name, file_type=file_type)
+    _check_cover_size(file_size)
+    stored_name = file_generate_name(file_name)
+    key = f"{cover_key_prefix(album)}{stored_name}"
+    cover = File(original_file_name=file_name[:500], file_name=stored_name, file_type=content_type, uploaded_by=actor)
+    cover.file.name = key
+    cover.save()
+    if storage.is_s3():
+        presigned = storage.presigned_post(
+            key=key,
+            content_type=content_type,
+            max_size=settings.AUDIO_COVER_MAX_SIZE,
+            expires_in=settings.AUDIO_UPLOAD_PRESIGNED_EXPIRY,
+        )
+        target = {"method": "POST", "url": presigned["url"], "fields": presigned["fields"]}
+    else:
+        from django.urls import reverse
+
+        path = reverse("api:audio:staff-album-cover-local", kwargs={"album_id": album.pk, "file_id": cover.pk})
+        target = {"method": "POST", "url": f"{settings.APP_DOMAIN}{path}", "fields": {}}
+    return {
+        "file_id": cover.pk,
+        "max_size": settings.AUDIO_COVER_MAX_SIZE,
+        "expires_in": settings.AUDIO_UPLOAD_PRESIGNED_EXPIRY,
+        **target,
+    }
+
+
+def album_cover_file_get(*, album: Album, file_id: Any) -> File:
+    """Le ``File`` d'une pochette **de cet album** (clé sous ``audio-covers/<album_id>/``)."""
+    cover = File.objects.filter(pk=file_id, file__startswith=cover_key_prefix(album)).first()
+    if cover is None:
+        raise NotFoundError("Envoi de pochette introuvable.", code="pochette_introuvable")
+    return cover
+
+
+@transaction.atomic
+def album_cover_upload_local(*, actor: Any, album: Album, cover: File, file_obj: Any) -> File:
+    """Développement sans S3 : le client envoie l'image ici au lieu du POST présigné."""
+    if storage.is_s3():
+        raise ApplicationError("En stockage S3, envoyez le fichier avec le POST présigné.", code="upload_s3")
+    access.require_publish(actor, album.source.node)
+    if cover.is_valid:
+        raise ConflictError("Cette image a déjà été reçue.", code="upload_deja_termine")
+    _check_cover_size(file_obj.size)
+    key = cover.file.name
+    if default_storage.exists(key):
+        default_storage.delete(key)
+    default_storage.save(key, file_obj)
+    return cover
+
+
+def _read_head(key: str, size: int = 16) -> bytes:
+    if storage.is_s3():
+        from apps.integrations.aws.client import s3_get_client, s3_get_credentials
+
+        response = s3_get_client().get_object(
+            Bucket=s3_get_credentials().bucket_name, Key=key, Range=f"bytes=0-{size - 1}"
+        )
+        return bytes(response["Body"].read())
+    with default_storage.open(key, "rb") as fh:
+        return bytes(fh.read(size))
+
+
+@transaction.atomic
+def album_cover_upload_finish(*, actor: Any, album: Album, cover: File) -> Album:
+    """Vérifie l'objet (présence, taille, signature d'image), le marque valide et en fait la
+    pochette de l'album. Idempotent."""
+    access.require_publish(actor, album.source.node)
+    if album.cover_id == cover.pk:
+        return album
+    key = cover.file.name
+    info = storage.head(key=key)
+    if info is None:
+        raise ApplicationError("L'image n'est pas encore arrivée. Réessayez dans un instant.", code="upload_absent")
+    _check_cover_size(int(info["size"]))
+    if not _looks_like_image(_read_head(key)):
+        raise ApplicationError("Ce fichier n'est pas une image jpg, png ou webp.", code="format_image")
+    cover.upload_finished_at = timezone.now()
+    cover.save(update_fields=["upload_finished_at", "updated_at"])
+    album.cover = cover
+    album.save(update_fields=["cover", "updated_at"])
+    audit_log(actor=actor, action="audio.album.pochette", target=album, node=album.source.node)
+    _on_commit_invalidate()
+    return album
+
+
 # --- Upload ----------------------------------------------------------------------------------
 
 
@@ -348,7 +475,8 @@ def upload_finish(*, actor: Any, track: Track) -> Track:
     track.version += 1
     track.status = TrackStatus.EN_FILE
     track.failure_reason = ""
-    track.save(update_fields=["version", "status", "failure_reason", "updated_at"])
+    track.encoding_step, track.encoding_percent = "", 0
+    track.save(update_fields=["version", "status", "failure_reason", "encoding_step", "encoding_percent", "updated_at"])
     _enqueue_transcode(track)
     return track
 
@@ -365,12 +493,15 @@ def track_reencode(*, actor: Any, track: Track) -> Track:
     track.version += 1
     track.status = TrackStatus.EN_FILE
     track.failure_reason = ""
-    track.save(update_fields=["version", "status", "failure_reason", "updated_at"])
+    track.encoding_step, track.encoding_percent = "", 0
+    track.save(update_fields=["version", "status", "failure_reason", "encoding_step", "encoding_percent", "updated_at"])
     _enqueue_transcode(track)
     return track
 
 
 # --- Encodage --------------------------------------------------------------------------------
+
+PROGRESS_DEPOT = 90  # fichiers encodés, dépôt dans le stockage en cours
 
 
 def _lock_key(track_id: Any) -> str:
@@ -413,7 +544,11 @@ def _mark_failed(*, track_id: Any, version: int, reason: str) -> None:
 @transaction.atomic
 def _mark_retrying(*, track_id: Any, version: int, reason: str) -> None:
     Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
-        status=TrackStatus.EN_FILE, failure_reason=reason[:1000], updated_at=timezone.now()
+        status=TrackStatus.EN_FILE,
+        failure_reason=reason[:1000],
+        encoding_step="",
+        encoding_percent=0,
+        updated_at=timezone.now(),
     )
 
 
@@ -447,6 +582,7 @@ def _mark_ready(*, track_id: Any, version: int, result: transcode.TranscodeResul
     track.failure_reason = ""
     track.encoded_version = version
     track.encoded_at = timezone.now()
+    track.encoding_step, track.encoding_percent = EncodingStep.TERMINE, 100
     track.duration_seconds = result.duration_seconds
     track.probe_tags = result.tags
     track.waveform = result.waveform
@@ -455,6 +591,22 @@ def _mark_ready(*, track_id: Any, version: int, result: transcode.TranscodeResul
     if track.published_at is not None:
         _on_commit_invalidate()
     return "pret"
+
+
+def _progress_recorder(track_id: Any, version: int) -> transcode.ProgressCallback:
+    """Écrit l'étape et l'avancement de l'encodage (hors transaction : visible tout de suite par
+    ``GET uploads/<id>/``). Une version périmée n'est pas touchée ; une erreur d'écriture n'arrête
+    jamais l'encodage."""
+
+    def record(step: str, percent: int) -> None:
+        try:
+            Track.objects.filter(pk=track_id, version=version, status=TrackStatus.ENCODAGE).update(
+                encoding_step=step, encoding_percent=max(0, min(100, int(percent)))
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("audio.transcode.progress_failed", extra={"track_id": str(track_id)})
+
+    return record
 
 
 def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) -> str:
@@ -489,7 +641,13 @@ def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) 
             track.status = TrackStatus.ENCODAGE
             track.encoding_started_at = timezone.now()
             track.encode_attempts = F("encode_attempts") + 1
-            track.save(update_fields=["status", "encoding_started_at", "encode_attempts", "updated_at"])
+            track.encoding_step, track.encoding_percent = EncodingStep.ANALYSE, 0
+            track.save(
+                update_fields=[
+                    "status", "encoding_started_at", "encode_attempts", "encoding_step", "encoding_percent",
+                    "updated_at",
+                ]
+            )  # fmt: skip
             raw_key = raw.file.name
             title, artist = track.title, ", ".join(track.performers)
 
@@ -500,7 +658,9 @@ def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) 
                 os.makedirs(out)
                 os.makedirs(work)
                 storage.download(key=raw_key, local_path=src)
-                result = transcode.transcode(src, out, work_dir=work, title=title, artist=artist)
+                progress = _progress_recorder(track_id, version)
+                result = transcode.transcode(src, out, work_dir=work, title=title, artist=artist, progress=progress)
+                progress(EncodingStep.FORME_ONDE, PROGRESS_DEPOT)
                 for rel in result.files:  # master.m3u8 en dernier : la version n'est lisible qu'une fois complète
                     storage.put_file(key=f"{prefix}/{rel}", local_path=os.path.join(out, rel))
         except transcode.InvalidMediaError as exc:
@@ -884,25 +1044,39 @@ def report_create(*, user: Any, track: Track, reason: str, comment: str = "") ->
 
 
 @transaction.atomic
+def album_report_create(*, user: Any, album: Album, reason: str, comment: str = "") -> TrackReport:
+    """Signalement d'un album entier (pochette, présentation, ensemble des pistes)."""
+    if not access.can_view_album(user, album):
+        raise NotFoundError("Album introuvable.", code="album_introuvable")
+    return TrackReport.objects.create(album=album, reporter=user, reason=reason, comment=comment[:2000])
+
+
+@transaction.atomic
 def report_handle(*, actor: Any, report: TrackReport, decision: str) -> TrackReport:
-    """``retire`` : la piste disparaît du catalogue (``hidden_at``) ; ``rejete`` : sans suite."""
-    track = report.track
-    access.require_moderate(actor, track.source.node)
+    """``retire`` : la piste (ou l'album et toutes ses pistes) disparaît du catalogue
+    (``hidden_at``) ; ``rejete`` : sans suite. Tous les signalements ouverts de la même cible sont
+    clos ensemble."""
+    target: Track | Album = report.track if report.track_id else report.album  # type: ignore[assignment]
+    node = target.source.node
+    access.require_moderate(actor, node)
     if report.status != ReportStatus.OUVERT:
         raise ConflictError("Ce signalement a déjà été traité.", code="signalement_traite")
     if decision not in (ReportStatus.RETIRE, ReportStatus.REJETE):
         raise ApplicationError("Décision inconnue.", code="decision_invalide")
     now = timezone.now()
-    TrackReport.objects.filter(track=track, status=ReportStatus.OUVERT).update(
+    same_target: dict[str, Track | Album] = {"track": target} if isinstance(target, Track) else {"album": target}
+    TrackReport.objects.filter(status=ReportStatus.OUVERT, **same_target).update(
         status=decision, handled_by=actor, handled_at=now, updated_at=now
     )
     if decision == ReportStatus.RETIRE:
-        track.hidden_at = now
-        track.save(update_fields=["hidden_at", "updated_at"])
+        target.hidden_at = now
+        target.save(update_fields=["hidden_at", "updated_at"])
+        if isinstance(target, Album):
+            target.tracks.filter(hidden_at__isnull=True).update(hidden_at=now, updated_at=now)
         _on_commit_invalidate()
     audit_log(
-        actor=actor, action=f"audio.signalement.{decision}", target=track, node=track.source.node,
-        metadata={"signalement": report.pk},
+        actor=actor, action=f"audio.signalement.{decision}", target=target, node=node,
+        metadata={"signalement": report.pk, "cible": "album" if isinstance(target, Album) else "piste"},
     )  # fmt: skip
     report.refresh_from_db()
     return report
