@@ -5430,6 +5430,107 @@ paths:
               schema:
                 $ref: '#/components/schemas/DayMassesOutput'
           description: ''
+  /api/v1/mass-intentions/parish/messes/plafond/:
+    get:
+      operationId: mass_intentions_mass_caps_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Plafonds propres aux messes d'une paroisse (horaires et messes datées)
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse
+        required: true
+      tags:
+      - intentions
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MassCapOutput'
+          description: ''
+    put:
+      operationId: mass_intentions_mass_cap_set
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fixer le plafond d'une messe (1 à 50, null = sans plafond)
+      tags:
+      - intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MassCapInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MassCapInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MassCapInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MassCapOutput'
+          description: ''
+    delete:
+      operationId: mass_intentions_mass_cap_clear
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retirer le plafond propre à une messe (le réglage de la paroisse s'applique)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+          nullable: true
+        description: Messe datée (exclusif avec weekday)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse
+        required: true
+      - in: query
+        name: place_id
+        schema:
+          type: integer
+        description: Lieu de la messe
+        required: true
+      - in: query
+        name: start_time
+        schema:
+          type: string
+          format: time
+        description: Heure de la messe (10:00)
+        required: true
+      - in: query
+        name: weekday
+        schema:
+          type: integer
+          maximum: 6
+          minimum: 0
+          nullable: true
+        description: 'Horaire hebdomadaire : 0 = lundi … 6 = dimanche (exclusif avec
+          date)'
+      tags:
+      - intentions
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/mass-intentions/parish/reglages/:
     get:
       operationId: mass_intentions_settings_get
@@ -5457,7 +5558,7 @@ paths:
     patch:
       operationId: mass_intentions_settings_update
       description: À placer en premier dans les bases des vues V1.
-      summary: Changer le plafond d'intentions par messe (1 à 50)
+      summary: Changer le plafond d'intentions par messe (1 à 50, null = sans plafond)
       tags:
       - intentions
       requestBody:
@@ -13477,6 +13578,16 @@ components:
       - part
       - sources
       - total
+    CapSourceEnum:
+      enum:
+      - paroisse
+      - horaire
+      - date
+      type: string
+      description: |-
+        * `paroisse` - paroisse
+        * `horaire` - horaire
+        * `date` - date
     CapabilityOverride:
       type: object
       properties:
@@ -14221,11 +14332,25 @@ components:
           type: integer
         max_intentions:
           type: integer
+          nullable: true
+          description: Plafond effectif ; null = sans plafond
+        cap_source:
+          allOf:
+          - $ref: '#/components/schemas/CapSourceEnum'
+          description: |-
+            Origine du plafond
+
+            * `paroisse` - paroisse
+            * `horaire` - horaire
+            * `date` - date
         remaining:
           type: integer
+          nullable: true
+          description: null = sans plafond
         is_full:
           type: boolean
       required:
+      - cap_source
       - intentions_count
       - is_full
       - label
@@ -14246,6 +14371,8 @@ components:
           format: date
         max_per_mass:
           type: integer
+          nullable: true
+          description: Plafond de la paroisse ; null = sans plafond
         masses:
           type: array
           items:
@@ -15742,6 +15869,70 @@ components:
           description: En faire la paroisse principale (la première l'est d'office)
       required:
       - paroisse_id
+    MassCapInput:
+      type: object
+      properties:
+        node:
+          type: string
+          format: uuid
+          description: Paroisse
+        place_id:
+          type: integer
+          description: Lieu de la messe
+        start_time:
+          type: string
+          format: time
+          description: Heure de la messe (10:00)
+        weekday:
+          type: integer
+          maximum: 6
+          minimum: 0
+          nullable: true
+          description: 'Horaire hebdomadaire : 0 = lundi … 6 = dimanche (exclusif
+            avec date)'
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Messe datée (exclusif avec weekday)
+        max_intentions:
+          type: integer
+          maximum: 50
+          minimum: 1
+          nullable: true
+          description: 1 à 50 ; null = pas de plafond pour cette messe
+      required:
+      - max_intentions
+      - node
+      - place_id
+      - start_time
+    MassCapOutput:
+      type: object
+      properties:
+        id:
+          type: string
+        place_id:
+          type: integer
+        start_time:
+          type: string
+          format: time
+        weekday:
+          type: integer
+          nullable: true
+        date:
+          type: string
+          format: date
+          nullable: true
+        max_intentions:
+          type: integer
+          nullable: true
+      required:
+      - date
+      - id
+      - max_intentions
+      - place_id
+      - start_time
+      - weekday
     MassIntentionKindEnum:
       enum:
       - defunt
@@ -18217,6 +18408,8 @@ components:
           type: integer
           maximum: 50
           minimum: 1
+          nullable: true
+          description: 1 à 50 ; null = pas de plafond
     PaymentIncident:
       type: object
       properties:
@@ -20671,6 +20864,7 @@ components:
           type: string
         max_per_mass:
           type: integer
+          nullable: true
       required:
       - max_per_mass
       - node
@@ -20716,8 +20910,21 @@ components:
           type: integer
         max_intentions:
           type: integer
+          nullable: true
+          description: Plafond effectif ; null = sans plafond
+        cap_source:
+          allOf:
+          - $ref: '#/components/schemas/CapSourceEnum'
+          description: |-
+            Origine du plafond
+
+            * `paroisse` - paroisse
+            * `horaire` - horaire
+            * `date` - date
         remaining:
           type: integer
+          nullable: true
+          description: null = sans plafond
         is_full:
           type: boolean
         intentions:
@@ -20725,6 +20932,7 @@ components:
           items:
             $ref: '#/components/schemas/SheetLine'
       required:
+      - cap_source
       - intentions
       - intentions_count
       - is_full

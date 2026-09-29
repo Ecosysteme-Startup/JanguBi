@@ -8,7 +8,7 @@ from django.db.models import QuerySet
 from apps.core.exceptions import NotFoundError, PermissionDeniedError
 from apps.hierarchy import authz
 from apps.hierarchy.models import Node
-from apps.intentions.models import MassIntention
+from apps.intentions.models import MassCapOverride, MassIntention
 
 _RELATED = ("node", "place", "requester__profile")
 
@@ -62,13 +62,14 @@ def _mass_label(start: datetime.time) -> str:
 def parish_masses_of_day(*, user: Any, node: Node, day: datetime.date) -> dict[str, Any]:
     """Messes d'un jour (horaires et exceptions des lieux actifs) avec intentions retenues et plafond."""
     from apps.hierarchy.selectors import node_week
-    from apps.intentions.services import max_per_mass
+    from apps.intentions.services import cap_overrides, max_per_mass
 
     if not authz.peut(user, "intentions.gerer", node):
         raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
     places, occurrences = node_week(node=node, start=day, days=1)
     names = {p.pk: p.name for p in places}
     cap = max_per_mass(node=node)
+    overrides = cap_overrides(node=node, day=day)
     planned = list(
         MassIntention.objects.filter(node=node, scheduled_date=day, status__in=_PLANNED).values_list(
             "place_id", "scheduled_time"
@@ -77,6 +78,7 @@ def parish_masses_of_day(*, user: Any, node: Node, day: datetime.date) -> dict[s
     masses = []
     for occ in sorted((o for o in occurrences if o.kind == "messe"), key=lambda o: (o.start_time, o.place_id)):
         count = sum(1 for pid, t in planned if pid == occ.place_id and t == occ.start_time)
+        mass_cap, source = overrides.get((occ.place_id, occ.start_time), (cap, "paroisse"))
         masses.append(
             {
                 "place_id": occ.place_id,
@@ -86,9 +88,10 @@ def parish_masses_of_day(*, user: Any, node: Node, day: datetime.date) -> dict[s
                 "language": occ.language,
                 "note": occ.note,
                 "intentions_count": count,
-                "max_intentions": cap,
-                "remaining": max(cap - count, 0),
-                "is_full": count >= cap,
+                "max_intentions": mass_cap,
+                "cap_source": source,
+                "remaining": None if mass_cap is None else max(mass_cap - count, 0),
+                "is_full": mass_cap is not None and count >= mass_cap,
             }
         )
     return {
@@ -113,8 +116,14 @@ def parish_sheet(*, user: Any, node: Node, day: datetime.date) -> dict[str, Any]
     announce = StaffMassIntentionOutputSerializer().get_announced_as
 
     def line(obj: MassIntention) -> dict[str, Any]:
-        return {"id": str(obj.pk), "kind": obj.kind, "kind_label": obj.get_kind_display(),
-                "intention": obj.intention, "announced_as": announce(obj), "status": obj.status}
+        return {
+            "id": str(obj.pk),
+            "kind": obj.kind,
+            "kind_label": obj.get_kind_display(),
+            "intention": obj.intention,
+            "announced_as": announce(obj),
+            "status": obj.status,
+        }
 
     used: set[Any] = set()
     groups = []
@@ -130,3 +139,9 @@ def parish_sheet(*, user: Any, node: Node, day: datetime.date) -> dict[str, Any]
         # Retenues ce jour sans messe reconnue (heure libre ou horaire modifié depuis).
         "other_intentions": [{**line(r), "scheduled_mass": r.scheduled_mass} for r in others],
     }
+
+
+def mass_caps(*, user: Any, node: Node) -> QuerySet[MassCapOverride]:
+    if not authz.peut(user, "intentions.gerer", node):
+        raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
+    return MassCapOverride.objects.filter(node=node).order_by("place_id", "date", "weekday", "start_time")

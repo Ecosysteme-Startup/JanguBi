@@ -21,6 +21,9 @@ from apps.intentions.serializers import (
     DayMassesOutputSerializer,
     DeclineInputSerializer,
     IntentionCreateInputSerializer,
+    MassCapInputSerializer,
+    MassCapKeySerializer,
+    MassCapOutputSerializer,
     MassIntentionOutputSerializer,
     NoticeOutputSerializer,
     ParishFilterSerializer,
@@ -81,7 +84,9 @@ class IntentionCreateApi(_AuthedApi):
         place = _place(data.pop("place_id"))
         obj = services.intention_create(requester=request.user, node=node, place=place, **data)
         return Response(
-            MassIntentionOutputSerializer(selectors.intention_get_for_person(user=request.user, intention_id=obj.pk)).data,
+            MassIntentionOutputSerializer(
+                selectors.intention_get_for_person(user=request.user, intention_id=obj.pk)
+            ).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -116,7 +121,9 @@ class IntentionCancelApi(_AuthedApi):
         obj = selectors.intention_get_for_person(user=request.user, intention_id=intention_id)
         services.intention_cancel(intention=obj, requester=request.user)
         return Response(
-            MassIntentionOutputSerializer(selectors.intention_get_for_person(user=request.user, intention_id=obj.pk)).data
+            MassIntentionOutputSerializer(
+                selectors.intention_get_for_person(user=request.user, intention_id=obj.pk)
+            ).data
         )
 
 
@@ -210,7 +217,9 @@ class ParishMassesApi(_StaffApi):
     )
     def get(self, request: Request) -> Response:
         node, day = _day(request)
-        return Response(DayMassesOutputSerializer(selectors.parish_masses_of_day(user=request.user, node=node, day=day)).data)
+        return Response(
+            DayMassesOutputSerializer(selectors.parish_masses_of_day(user=request.user, node=node, day=day)).data
+        )
 
 
 class ParishSheetApi(_StaffApi):
@@ -239,13 +248,15 @@ class ParishSettingsApi(_StaffApi):
         filters.is_valid(raise_exception=True)
         node = hierarchy_selectors.node_get(node_id=filters.validated_data["node"])
         if not authz.peut(request.user, "intentions.gerer", node):
-            raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
+            raise PermissionDeniedError(
+                "Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden"
+            )
         return Response({"node": str(node.pk), "max_per_mass": services.max_per_mass(node=node)})
 
     @extend_schema(
         tags=TAG,
         operation_id="mass_intentions_settings_update",
-        summary="Changer le plafond d'intentions par messe (1 à 50)",
+        summary="Changer le plafond d'intentions par messe (1 à 50, null = sans plafond)",
         request=SettingsInputSerializer,
         responses=SettingsOutputSerializer,
     )
@@ -257,3 +268,59 @@ class ParishSettingsApi(_StaffApi):
             node=node, actor=request.user, max_per_mass=serializer.validated_data["max_per_mass"]
         )
         return Response({"node": str(node.pk), "max_per_mass": obj.max_per_mass})
+
+
+def _cap_key(data: dict) -> dict:
+    node = hierarchy_selectors.node_get(node_id=data["node"])
+    return {
+        "node": node,
+        "place": hierarchy_selectors.place_get(place_id=data["place_id"]),
+        "start_time": data["start_time"],
+        "weekday": data.get("weekday"),
+        "date": data.get("date"),
+    }
+
+
+class MassCapApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_mass_caps_list",
+        summary="Plafonds propres aux messes d'une paroisse (horaires et messes datées)",
+        parameters=[SettingsFilterSerializer],
+        responses=MassCapOutputSerializer(many=True),
+    )
+    def get(self, request: Request) -> Response:
+        filters = SettingsFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        node = hierarchy_selectors.node_get(node_id=filters.validated_data["node"])
+        return Response(MassCapOutputSerializer(selectors.mass_caps(user=request.user, node=node), many=True).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_mass_cap_set",
+        summary="Fixer le plafond d'une messe (1 à 50, null = sans plafond)",
+        request=MassCapInputSerializer,
+        responses=MassCapOutputSerializer,
+    )
+    def put(self, request: Request) -> Response:
+        serializer = MassCapInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = services.mass_cap_set(
+            actor=request.user,
+            max_intentions=serializer.validated_data["max_intentions"],
+            **_cap_key(serializer.validated_data),
+        )
+        return Response(MassCapOutputSerializer(obj).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_mass_cap_clear",
+        summary="Retirer le plafond propre à une messe (le réglage de la paroisse s'applique)",
+        parameters=[MassCapKeySerializer],
+        responses={204: None},
+    )
+    def delete(self, request: Request) -> Response:
+        serializer = MassCapKeySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        services.mass_cap_clear(actor=request.user, **_cap_key(serializer.validated_data))
+        return Response(status=status.HTTP_204_NO_CONTENT)

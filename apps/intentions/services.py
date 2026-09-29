@@ -9,6 +9,7 @@ import datetime
 from typing import Any
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.core.exceptions import ApplicationError, PermissionDeniedError
@@ -16,7 +17,7 @@ from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node, PlaceOfWorship
 from apps.intentions.enums import OPEN_STATUSES, IntentionStatus
-from apps.intentions.models import IntentionSettings, MassIntention
+from apps.intentions.models import IntentionSettings, MassCapOverride, MassIntention
 
 PARISH_TYPES = ("paroisse", "quasi_paroisse")
 MAX_OPEN_PER_PERSON = 10
@@ -38,7 +39,9 @@ def _notify(*, user_ids: list[Any], intention: MassIntention, event: str) -> Non
 def _secretariat_ids(node: Node) -> list[Any]:
     from apps.hierarchy.selectors_offices import capability_holders
 
-    return list(capability_holders(node=node, capability="intentions.gerer", direct_only=True).values_list("pk", flat=True))
+    return list(
+        capability_holders(node=node, capability="intentions.gerer", direct_only=True).values_list("pk", flat=True)
+    )
 
 
 def _place_check(node: Node, place: PlaceOfWorship | None) -> None:
@@ -152,7 +155,8 @@ def intention_schedule(
             .exclude(pk=obj.pk)
             .count()
         )
-        if taken >= max_per_mass(node=obj.node):
+        cap, _ = effective_cap(node=obj.node, place=target_place, day=scheduled_date, start_time=scheduled_time)
+        if cap is not None and taken >= cap:
             raise ApplicationError("Cette messe a déjà toutes ses intentions.", code="mass_full")
     moved = obj.status == IntentionStatus.PLANIFIEE
     obj.status = IntentionStatus.PLANIFIEE
@@ -165,7 +169,10 @@ def intention_schedule(
     obj.decided_at = timezone.now()
     obj.save()
     audit_log(
-        actor=actor, action="intention.planification", target=obj, node=obj.node,
+        actor=actor,
+        action="intention.planification",
+        target=obj,
+        node=obj.node,
         metadata={"date": scheduled_date.isoformat(), "deplacee": moved},
     )
     if obj.requester_id:
@@ -218,19 +225,101 @@ def intentions_forget(*, user: Any) -> int:
     return MassIntention.objects.filter(requester=user).update(requester=None, is_anonymous=True, updated_at=now)
 
 
-def max_per_mass(*, node: Node) -> int:
+def max_per_mass(*, node: Node) -> int | None:
+    """Plafond de la paroisse : 5 sans réglage, ``None`` = sans plafond."""
     from apps.intentions.models import DEFAULT_MAX_PER_MASS
 
-    value = IntentionSettings.objects.filter(node=node).values_list("max_per_mass", flat=True).first()
-    return value or DEFAULT_MAX_PER_MASS
+    row = IntentionSettings.objects.filter(node=node).values_list("max_per_mass", flat=True)
+    return row[0] if row else DEFAULT_MAX_PER_MASS
+
+
+def _cap_check(value: int | None) -> None:
+    if value is not None and not 1 <= value <= 50:
+        raise ApplicationError("Le plafond va de 1 à 50 intentions par messe.", code="max_invalid")
+
+
+def _forbid_unless_manager(actor: Any, node: Node) -> None:
+    if not authz.peut(actor, "intentions.gerer", node):
+        raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
+
+
+def cap_overrides(*, node: Node, day: datetime.date) -> dict[tuple[int, datetime.time], tuple[int | None, str]]:
+    """Plafonds propres aux messes du jour : {(lieu, heure): (plafond, "date" | "horaire")}."""
+    out: dict[tuple[int, datetime.time], tuple[int | None, str]] = {}
+    rows = MassCapOverride.objects.filter(node=node).filter(Q(date=day) | Q(date__isnull=True, weekday=day.weekday()))
+    for row in sorted(rows, key=lambda r: r.date is not None):  # la messe datée l'emporte
+        out[(row.place_id, row.start_time)] = (row.max_intentions, "date" if row.date else "horaire")
+    return out
+
+
+def effective_cap(
+    *, node: Node, place: PlaceOfWorship, day: datetime.date, start_time: datetime.time
+) -> tuple[int | None, str]:
+    """Plafond appliqué à une messe et sa source (``date``, ``horaire`` ou ``paroisse``)."""
+    found = cap_overrides(node=node, day=day).get((place.pk, start_time))
+    return found if found is not None else (max_per_mass(node=node), "paroisse")
 
 
 @transaction.atomic
-def intention_settings_update(*, node: Node, actor: Any, max_per_mass: int) -> IntentionSettings:
-    if not authz.peut(actor, "intentions.gerer", node):
-        raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
-    if not 1 <= max_per_mass <= 50:
-        raise ApplicationError("Le plafond va de 1 à 50 intentions par messe.", code="max_invalid")
+def intention_settings_update(*, node: Node, actor: Any, max_per_mass: int | None) -> IntentionSettings:
+    _forbid_unless_manager(actor, node)
+    _cap_check(max_per_mass)
     obj, _ = IntentionSettings.objects.update_or_create(node=node, defaults={"max_per_mass": max_per_mass})
     audit_log(actor=actor, action="intention.reglages", target=obj, node=node, metadata={"max_per_mass": max_per_mass})
     return obj
+
+
+@transaction.atomic
+def mass_cap_set(
+    *,
+    node: Node,
+    actor: Any,
+    place: PlaceOfWorship,
+    start_time: datetime.time,
+    max_intentions: int | None,
+    weekday: int | None = None,
+    date: datetime.date | None = None,
+) -> MassCapOverride:
+    """Fixe le plafond d'une messe (horaire hebdomadaire ou messe datée) ; ``None`` = sans plafond."""
+    _forbid_unless_manager(actor, node)
+    _place_check(node, place)
+    _cap_check(max_intentions)
+    if (weekday is None) == (date is None):
+        raise ApplicationError("Indiquez soit le jour de la semaine, soit la date de la messe.", code="weekday_or_date")
+    if weekday is not None and not 0 <= weekday <= 6:
+        raise ApplicationError("Jour de la semaine invalide (0 = lundi … 6 = dimanche).", code="weekday_invalid")
+    obj, _ = MassCapOverride.objects.update_or_create(
+        place=place,
+        start_time=start_time,
+        weekday=weekday,
+        date=date,
+        defaults={"node": node, "max_intentions": max_intentions},
+    )
+    audit_log(
+        actor=actor,
+        action="intention.plafond_messe",
+        target=obj,
+        node=node,
+        metadata={"max_intentions": max_intentions, "weekday": weekday, "date": date.isoformat() if date else None},
+    )
+    return obj
+
+
+@transaction.atomic
+def mass_cap_clear(
+    *,
+    node: Node,
+    actor: Any,
+    place: PlaceOfWorship,
+    start_time: datetime.time,
+    weekday: int | None = None,
+    date: datetime.date | None = None,
+) -> None:
+    """Retire le plafond propre à la messe : le réglage de la paroisse s'applique de nouveau."""
+    _forbid_unless_manager(actor, node)
+    _place_check(node, place)
+    deleted, _ = MassCapOverride.objects.filter(
+        node=node, place=place, start_time=start_time, weekday=weekday, date=date
+    ).delete()
+    if deleted:
+        audit_log(actor=actor, action="intention.plafond_messe", target=place, node=node, metadata={"retire": True})
