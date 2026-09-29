@@ -573,3 +573,35 @@ def test_staff_sync_is_not_repeated_on_every_request(keys, fake_admin):
 def test_fidele_needs_no_staff_sync(keys, fake_admin):
     assert api(keys.token()).get(ME).status_code == 200
     assert fake_admin.calls == []
+
+
+# --- Client mobile (lot A2, V2) -----------------------------------------------------------
+
+
+def test_mobile_client_is_an_allowed_token_issuer_by_default():
+    from config.settings.keycloak import KEYCLOAK_ALLOWED_CLIENTS
+
+    assert set(KEYCLOAK_ALLOWED_CLIENTS) >= {"jangubi-web", "jangubi-mobile"}
+
+
+def test_token_from_the_mobile_client_is_accepted(keys):
+    with override_settings(KEYCLOAK_ALLOWED_CLIENTS=["jangubi-web", "jangubi-mobile"]):
+        assert api(keys.token(sub=str(uuid.uuid4()), azp="jangubi-mobile")).get(ME).status_code == 200
+
+
+def test_realm_declares_the_mobile_client_as_public_pkce_with_an_exact_redirect():
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    client = next(c for c in realm["clients"] if c["clientId"] == "jangubi-mobile")
+    assert client["publicClient"] and client["standardFlowEnabled"]
+    assert not client["implicitFlowEnabled"] and not client["directAccessGrantsEnabled"]
+    assert client["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert client["redirectUris"] == ["${KC_MOBILE_REDIRECT_URI:sn.numerisen.jangubi://oauth}"]
+    assert all("*" not in uri for uri in client["redirectUris"])
+    audience = [m for m in client["protocolMappers"] if m["protocolMapper"] == "oidc-audience-mapper"]
+    assert audience[0]["config"]["included.client.audience"] == "jangubi-api"
+    assert any(m["protocolMapper"] == "oidc-amr-mapper" for m in client["protocolMappers"])
