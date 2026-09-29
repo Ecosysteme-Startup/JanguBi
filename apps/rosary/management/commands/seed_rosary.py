@@ -28,17 +28,21 @@ class Command(BaseCommand):
             aws_secret_access_key=getattr(settings, 'AWS_S3_SECRET_ACCESS_KEY', None),
             region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'us-east-1'),
         )
-        bucket = 'rosary-audio'
+        bucket = settings.ROSARY_AUDIO_BUCKET
         try:
             s3.head_bucket(Bucket=bucket)
         except ClientError as exc:
             code = exc.response['Error']['Code']
-            if code in ('404', 'NoSuchBucket', '403'):
+            # Bucket absent : le créer (développement local). Un 403 veut dire
+            # « bucket d'un autre » ou compte restreint : ne rien créer.
+            if code in ('404', 'NoSuchBucket'):
                 s3.create_bucket(Bucket=bucket)
-                try:
-                    s3.put_bucket_acl(Bucket=bucket, ACL='public-read')
-                except ClientError:
-                    pass  # ACL not supported by all MinIO versions
+                # Lecture anonyme UNIQUEMENT si demandée (développement local).
+                if settings.ROSARY_AUDIO_PUBLIC:
+                    try:
+                        s3.put_bucket_acl(Bucket=bucket, ACL='public-read')
+                    except ClientError:
+                        pass  # ACL not supported by all MinIO versions
                 self.stdout.write(self.style.SUCCESS(f"Created bucket: {bucket}"))
             else:
                 raise

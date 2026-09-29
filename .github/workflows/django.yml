@@ -2,12 +2,11 @@ name: CI JanguBi Backend
 
 on:
   push:
+    # `stage` et les tags `v*` : .github/workflows/livraison-recette.yml
+    # (runner ceac, contrat de l'Infrastructure Ecosysteme-Startup).
     branches:
       - main
       - develop
-      - stage
-    tags:
-      - 'v*'
     # Les changements purement documentaires ne déclenchent ni CI ni déploiement.
     paths-ignore: ['docs/**', '**/*.md', 'graphify-out/**']
 
