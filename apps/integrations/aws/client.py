@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 import boto3
 from attrs import define
+from django.conf import settings
 
 from apps.common.utils import assert_settings
 
@@ -52,6 +53,8 @@ def s3_get_client():
         aws_access_key_id=credentials.access_key_id,
         aws_secret_access_key=credentials.secret_access_key,
         region_name=credentials.region_name,
+        # MinIO en local, R2 ou tout S3 compatible : sans endpoint explicite, boto3 visait AWS.
+        endpoint_url=getattr(settings, "AWS_S3_ENDPOINT_URL", None) or None,
     )
 
 
