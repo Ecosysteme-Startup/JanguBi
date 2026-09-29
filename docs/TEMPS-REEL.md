@@ -39,11 +39,11 @@ Codes de fermeture des WebSocket :
   cette personne ne produisent **aucun** événement : leur heure ne peut pas se deviner.
 - On ne peut pas interroger la présence d'une personne hors de ses conversations. Les identifiants
   inconnus ou étrangers sont ignorés sans le dire.
-- **Réciprocité** (décision 2 du 29/09/2026) : qui ne montre pas sa présence (réglage effectif,
-  défaut compris) **ne voit plus celle des autres**. `GET /messaging/presence/` ne lui renvoie que des
+- **Réciprocité** (décision 2 du 29/09/2026) : qui **masque explicitement** sa présence
+  (`montrer_presence = false`) **ne voit plus celle des autres** ; un fidèle resté au réglage par
+  défaut voit toujours celle de ses prêtres. `GET /messaging/presence/` ne lui renvoie que des
   lignes « inconnues » (`visible: false`, `online: null`, `last_seen_at: null`) et il ne reçoit
-  **aucun** `presence.changed`. Conséquence : un fidèle au réglage par défaut (présence masquée) ne
-  voit pas « En ligne » ni « Vu à » de son prêtre tant qu'il n'active pas le réglage. Texte du
+  **aucun** `presence.changed`. Texte du
   réglage (F10, profil web) : « Si vous masquez votre présence, vous ne verrez plus celle des
   autres. »
 

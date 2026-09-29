@@ -257,14 +257,14 @@ def test_reciprocity_hidden_viewer_reads_only_unknown(world, layer):
     assert rows == [{"user_id": str(world.pere.pk), "visible": False, "online": None, "last_seen_at": None}]
 
 
-def test_reciprocity_default_faithful_sees_nothing(world, layer):
-    """Un fidèle au réglage par défaut (présence non montrée) ne voit pas celle du Père."""
+def test_reciprocity_default_faithful_still_sees_priest(world, layer):
+    """Seul un masquage explicite coupe la vue : au réglage par défaut, le fidèle voit le Père."""
     presence_connect(user=world.pere)
     BaseUser.objects.filter(pk=world.marie.pk).update(montrer_presence=None)
 
     rows = _client(world.marie).get(PRESENCE_URL, {"users": str(world.pere.pk)}).json()
 
-    assert rows[0]["visible"] is False and rows[0]["online"] is None
+    assert rows[0]["visible"] is True and rows[0]["online"] is True
 
 
 def test_reciprocity_no_event_sent_to_a_hidden_viewer(world, layer):

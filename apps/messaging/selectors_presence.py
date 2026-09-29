@@ -2,7 +2,12 @@
 
 from typing import Any
 
-from apps.messaging.services_presence import presence_contacts, presence_online_map, presence_visible
+from apps.messaging.services_presence import (
+    presence_contacts,
+    presence_masked,
+    presence_online_map,
+    presence_visible,
+)
 from apps.users.models import BaseUser
 
 
@@ -12,13 +17,13 @@ def presence_for(*, viewer: BaseUser, user_ids: list[Any]) -> list[dict[str, Any
     Les autres identifiants sont ignorés sans le dire (on ne confirme même pas qu'ils
     existent). Une présence masquée est rendue sans « en ligne » ni « vu à ».
 
-    Réciprocité (décision 2 du 29/09/2026) : qui masque sa présence ne voit plus celle des
-    autres ; toutes ses lignes sont « inconnues » (``visible: false``)."""
+    Réciprocité (décision 2 du 29/09/2026) : qui masque explicitement sa présence ne voit plus
+    celle des autres ; toutes ses lignes sont « inconnues » (``visible: false``)."""
     contacts = {str(c) for c in presence_contacts(user=viewer)}
     wanted = [u for u in dict.fromkeys(str(u) for u in user_ids) if u in contacts]
     if not wanted:
         return []
-    if not presence_visible(viewer):
+    if presence_masked(viewer):
         return [{"user_id": u, "visible": False, "online": None, "last_seen_at": None} for u in wanted]
     users = list(
         BaseUser.objects.filter(pk__in=wanted, is_active=True).only(

@@ -71,6 +71,14 @@ def presence_visible(user: BaseUser) -> bool:
     return presence_default_for(user)
 
 
+def presence_masked(user: BaseUser) -> bool:
+    """Réciprocité (décision 2) : seul un masquage choisi explicitement coupe la vue des autres.
+
+    Un fidèle resté au réglage par défaut (présence non affichée) voit toujours celle de ses
+    prêtres ; s'il désactive lui-même sa présence, il ne voit plus celle des autres."""
+    return user.montrer_presence is False
+
+
 @transaction.atomic
 def presence_setting_update(*, user: BaseUser, montrer_presence: bool | None) -> BaseUser:
     """Change le réglage (``None`` : revenir au défaut) et prévient les interlocuteurs."""
@@ -105,14 +113,14 @@ def presence_contacts(*, user: Any) -> set[Any]:
 
 
 def presence_viewers(*, contact_ids: set[Any]) -> set[Any]:
-    """Réciprocité (décision 2) : parmi ces interlocuteurs, ceux qui montrent leur présence, donc
-    qui voient celle des autres. Les autres ne reçoivent aucun ``presence.changed``."""
+    """Réciprocité (décision 2) : parmi ces interlocuteurs, ceux qui n'ont pas masqué leur
+    présence, donc qui voient celle des autres. Les autres ne reçoivent aucun ``presence.changed``."""
     if not contact_ids:
         return set()
     users = BaseUser.objects.filter(pk__in=contact_ids, is_active=True).only(
         "pk", "is_staff", "degre_ordre", "montrer_presence"
     )
-    return {u.pk for u in users if presence_visible(u)}
+    return {u.pk for u in users if not presence_masked(u)}
 
 
 # --- Compteur de connexions -----------------------------------------------------------------------
