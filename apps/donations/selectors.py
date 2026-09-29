@@ -38,7 +38,7 @@ from apps.donations.models import (
     PaymentWebhookEvent,
     Payout,
 )
-from apps.donations.selectors_analyse import FUND_KIND_ORDER, METHOD_ORDER, Ledger, alpha_key
+from apps.donations.selectors_analyse import FUND_KIND_ORDER, METHOD_ORDER, Ledger, alpha_key, day_range
 from apps.hierarchy.models import Node
 
 CONFIRMED = Q(status=DonationStatus.CONFIRME)
@@ -300,7 +300,7 @@ def cash_collection_get(*, collection_id: int) -> CashCollection:
 
 def parish_reconciliation(*, node: Node, date_from: datetime.date, date_to: datetime.date) -> dict[str, Any]:
     """Rapprochement de la paroisse (H1 : les reversements arrivent au diocèse)."""
-    period = Q(confirmed_at__date__gte=date_from, confirmed_at__date__lte=date_to)
+    period = day_range("confirmed_at", date_from, date_to)
     confirmed = Donation.objects.filter(period, fund__node=node, status=DonationStatus.CONFIRME)
     totals = confirmed.aggregate(
         online_charged=_sum("charged_amount", Q(channel=DonationChannel.EN_LIGNE)),
@@ -334,9 +334,8 @@ def export_rows(
         Donation.objects.filter(
             fund__node=node,
             status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE],
-            confirmed_at__date__gte=date_from,
-            confirmed_at__date__lte=date_to,
         )
+        .filter(day_range("confirmed_at", date_from, date_to))
         .select_related("fund", "donor__profile", "cash_collection", "payout")
         .order_by("confirmed_at")
     )

@@ -189,6 +189,15 @@ def _sub_periods(period: Period, today: datetime.date) -> tuple[str, list[tuple[
 # --- Outils ---------------------------------------------------------------------------------
 
 
+def day_range(field: str, start: datetime.date, end: datetime.date) -> Q:
+    """Filtre de dates en intervalle d'instants (``>= début`` et ``< lendemain de fin``), jamais ``__date`` :
+    l'index sur la colonne sert alors aussi la date (docs/SCALING.md §4.2)."""
+    tz = timezone.get_current_timezone()
+    first = datetime.datetime.combine(start, datetime.time.min, tzinfo=tz)
+    after = datetime.datetime.combine(end + datetime.timedelta(days=1), datetime.time.min, tzinfo=tz)
+    return Q(**{f"{field}__gte": first, f"{field}__lt": after})
+
+
 def _sum(field: str, condition: Q | None = None) -> Coalesce:
     return Coalesce(Sum(field, filter=condition), 0)
 
@@ -736,7 +745,7 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
     }
 
     confirmed = Donation.objects.filter(
-        channel=DonationChannel.EN_LIGNE, confirmed_at__date__gte=period.start, confirmed_at__date__lte=period.end
+        day_range("confirmed_at", period.start, period.end), channel=DonationChannel.EN_LIGNE
     )
     waits = [
         (c - a).total_seconds() for a, c in confirmed.values_list("created_at", "confirmed_at") if c and a and c >= a

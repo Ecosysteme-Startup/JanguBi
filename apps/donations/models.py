@@ -165,6 +165,10 @@ class CashCollection(BaseModel):
         verbose_name = _("quête en espèces")
         verbose_name_plural = _("quêtes en espèces")
         ordering = ["-mass_date", "-created_at"]
+        indexes = [
+            # « À traiter » et liste des quêtes (B2, docs/SCALING.md §4.2).
+            models.Index(fields=["node", "status", "-mass_date"], name="dons_cash_node_st_mass_idx"),
+        ]
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="dons_cash_amount_positive"),
             # La validation est faite par une autre personne que la saisie.
@@ -326,7 +330,9 @@ class Donation(BaseModel):
             ),
         ]
         indexes = [
-            models.Index(fields=["fund", "status"], name="dons_donation_fund_status_idx"),
+            # Synthèse et rapprochement (B2, docs/SCALING.md §4.2) : couvre aussi le préfixe (fund, status).
+            models.Index(fields=["fund", "status", "confirmed_at"], name="dons_donation_fund_st_conf_idx"),
+            models.Index(fields=["fund", "-created_at"], name="dons_donation_fund_created_idx"),
             models.Index(fields=["donor", "status"], name="dons_donation_donor_idx"),
             models.Index(fields=["fund", "value_date"], name="dons_donation_fund_value_idx"),
         ]
