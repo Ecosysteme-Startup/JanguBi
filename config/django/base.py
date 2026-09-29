@@ -49,6 +49,15 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.authentication.tasks.keycloak_staff_reconcile_task",
         "schedule": crontab(hour=0, minute=45),
     },
+    # Réconciliation Keycloak ↔ application (docs/ADMIN-KEYCLOAK.md) : écarts détectés et corrigés.
+    "keycloak_events_poll": {
+        "task": "apps.users.tasks.keycloak_events_poll_task",
+        "schedule": crontab(minute="*"),
+    },
+    "keycloak_accounts_reconcile": {
+        "task": "apps.users.tasks.keycloak_accounts_reconcile_task",
+        "schedule": crontab(minute=20),
+    },
     "news_publish_scheduled": {
         "task": "apps.news.tasks.articles_publish_due_task",
         "schedule": crontab(minute="*/5"),

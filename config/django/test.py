@@ -88,3 +88,8 @@ STORAGES = {
     **STORAGES,  # noqa: F405
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
 }
+
+# Administration Keycloak : faux client en mémoire (jamais de Keycloak réel en CI).
+KEYCLOAK_ADMIN_BACKEND = "fake"
+KEYCLOAK_WEBHOOK_SECRET = "secret-webhook-de-test"
+KEYCLOAK_WEBHOOK_ENABLED = True

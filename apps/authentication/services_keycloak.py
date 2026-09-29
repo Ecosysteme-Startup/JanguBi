@@ -13,6 +13,15 @@ from apps.authentication.keycloak_admin import KeycloakAdmin, django_hash_to_key
 logger = logging.getLogger(__name__)
 
 
+def _admin_client() -> KeycloakAdmin:
+    """Client configuré (``KEYCLOAK_ADMIN_BACKEND`` : HTTP réel, ou faux client en tests)."""
+    if getattr(settings, "KEYCLOAK_ADMIN_BACKEND", "http") == "http":
+        return KeycloakAdmin()
+    from apps.integrations.keycloak import get_keycloak_admin
+
+    return get_keycloak_admin()
+
+
 def keycloak_staff_role_sync(*, person: Any, admin: KeycloakAdmin | None = None) -> str:
     """Rôle ``staff`` si et seulement si la personne a une nomination active. À l'ajout, la
     configuration de l'OTP devient une action requise (la MFA sera exigée à la connexion)."""
@@ -20,7 +29,7 @@ def keycloak_staff_role_sync(*, person: Any, admin: KeycloakAdmin | None = None)
 
     if not settings.KEYCLOAK_ENABLED or not person.keycloak_sub:
         return "skipped"
-    admin = admin or KeycloakAdmin()
+    admin = admin or _admin_client()
     has_office = active_assignments(user=person).exists()
     roles = admin.user_realm_roles(person.keycloak_sub)
     staff = settings.KEYCLOAK_STAFF_ROLE
@@ -41,7 +50,7 @@ def keycloak_staff_reconcile(*, admin: KeycloakAdmin | None = None) -> dict[str,
 
     if not settings.KEYCLOAK_ENABLED:
         return {}
-    admin = admin or KeycloakAdmin()
+    admin = admin or _admin_client()
     User = get_user_model()
     subs = set(admin.role_members(settings.KEYCLOAK_STAFF_ROLE))
     people = User.objects.filter(keycloak_sub__isnull=False).filter(
@@ -105,7 +114,7 @@ def users_to_keycloak_migrate(
         if not apply:
             lines.append(MigrationLine(user.email, "creer", password))
             continue
-        admin = admin or KeycloakAdmin()
+        admin = admin or _admin_client()
         keycloak_id, created = admin.user_create(_representation(user))
         with transaction.atomic():
             User.objects.filter(pk=user.pk, keycloak_sub__isnull=True).update(keycloak_sub=keycloak_id)

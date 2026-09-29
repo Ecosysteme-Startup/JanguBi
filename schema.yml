@@ -4,6 +4,1041 @@ info:
   version: 1.0.0
   description: API for JanguBi
 paths:
+  /api/v1/admin/accounts/:
+    get:
+      operationId: admin_accounts_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Comptes de mon périmètre (recherche, filtres)
+      parameters:
+      - in: query
+        name: created_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: created_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: etat_de_vie
+        schema:
+          enum:
+          - laic
+          - clerc
+          - consacre
+          type: string
+          minLength: 1
+        description: |-
+          * `laic` - Laïc
+          * `clerc` - Clerc
+          * `consacre` - Consacré
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Comptes rattachés à ce nœud ou à son sous-arbre
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: ordering
+        schema:
+          enum:
+          - recent
+          - ancien
+          - email
+          - nom
+          type: string
+          minLength: 1
+        description: |-
+          * `recent` - recent
+          * `ancien` - ancien
+          * `email` - email
+          * `nom` - nom
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: E-mail, prénom, nom, téléphone
+      - in: query
+        name: role
+        schema:
+          enum:
+          - fidele
+          - staff
+          - platform_admin
+          type: string
+          minLength: 1
+        description: |-
+          * `fidele` - fidele
+          * `staff` - staff
+          * `platform_admin` - platform_admin
+      - in: query
+        name: status
+        schema:
+          enum:
+          - actif
+          - desactive
+          - en_attente
+          type: string
+          minLength: 1
+        description: |-
+          * `actif` - actif
+          * `desactive` - desactive
+          * `en_attente` - en_attente
+      - in: query
+        name: sync
+        schema:
+          enum:
+          - synchronise
+          - non_lie
+          - ecart
+          type: string
+          minLength: 1
+        description: |-
+          État de synchronisation
+
+          * `synchronise` - synchronise
+          * `non_lie` - non_lie
+          * `ecart` - ecart
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminAccountOutputList'
+          description: ''
+    post:
+      operationId: admin_accounts_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Créer un compte (Keycloak + application) et envoyer l'invitation
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdminAccountCreate'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/:
+    get:
+      operationId: admin_accounts_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fiche d'un compte, avec son état en direct dans Keycloak
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountDetail'
+          description: ''
+    patch:
+      operationId: admin_accounts_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Modifier l'identité d'un compte (répercuté dans Keycloak)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAdminAccountUpdate'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+    delete:
+      operationId: admin_accounts_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Supprimer un compte (RGPD : anonymisation + suppression Keycloak)'
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/actions-email/:
+    post:
+      operationId: admin_accounts_actions_email
+      description: À placer en premier dans les bases des vues V1.
+      summary: Envoyer l'e-mail Keycloak d'actions requises
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionsEmail'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ActionsEmail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ActionsEmail'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/brute-force-unlock/:
+    post:
+      operationId: admin_accounts_brute_force_unlock
+      description: À placer en premier dans les bases des vues V1.
+      summary: Débloquer un compte bloqué après des échecs de connexion
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/disable/:
+    post:
+      operationId: admin_accounts_disable
+      description: À placer en premier dans les bases des vues V1.
+      summary: Désactiver un compte (Keycloak désactivé, sessions fermées)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reason'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/enable/:
+    post:
+      operationId: admin_accounts_enable
+      description: À placer en premier dans les bases des vues V1.
+      summary: Réactiver un compte (et lever un blocage anti-force brute)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptionalReason'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OptionalReason'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OptionalReason'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/logout/:
+    post:
+      operationId: admin_accounts_logout
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fermer toutes les sessions (jetons révoqués)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/mark-email-verified/:
+    post:
+      operationId: admin_accounts_mark_email_verified
+      description: À placer en premier dans les bases des vues V1.
+      summary: Marquer l'adresse comme vérifiée (plateforme, motif obligatoire)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reason'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/offices/:
+    post:
+      operationId: admin_accounts_office_assign
+      description: À placer en premier dans les bases des vues V1.
+      summary: Nommer le compte à un office (selon votre autorité de nomination)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfficeAssign'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OfficeAssign'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OfficeAssign'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOffice'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/offices/{assignment_id}/end/:
+    post:
+      operationId: admin_accounts_office_end
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mettre fin à une nomination du compte
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfficeEnd'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OfficeEnd'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OfficeEnd'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOffice'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/otp-reset/:
+    post:
+      operationId: admin_accounts_otp_reset
+      description: À placer en premier dans les bases des vues V1.
+      summary: Réinitialiser le second facteur (nouveau exigé à la connexion)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Reason'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Reason'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/password-reset/:
+    post:
+      operationId: admin_accounts_password_reset
+      description: À placer en premier dans les bases des vues V1.
+      summary: Envoyer le lien Keycloak de nouveau mot de passe
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/platform-admin/:
+    post:
+      operationId: admin_accounts_platform_admin
+      description: À placer en premier dans les bases des vues V1.
+      summary: Donner ou retirer le rôle administrateur plateforme (plateforme seulement)
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlatformAdmin'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PlatformAdmin'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PlatformAdmin'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/resync/:
+    post:
+      operationId: admin_accounts_resync
+      description: À placer en premier dans les bases des vues V1.
+      summary: Resynchroniser le compte avec Keycloak
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/sessions/:
+    get:
+      operationId: admin_accounts_sessions
+      description: À placer en premier dans les bases des vues V1.
+      summary: Sessions ouvertes dans Keycloak
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeycloakSession'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/sessions/{session_id}/:
+    delete:
+      operationId: admin_accounts_session_revoke
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fermer une session
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: session_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/{account_id}/verify-email/:
+    post:
+      operationId: admin_accounts_verify_email
+      description: À placer en premier dans les bases des vues V1.
+      summary: Renvoyer l'e-mail de vérification de l'adresse
+      parameters:
+      - in: path
+        name: account_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountOutput'
+          description: ''
+        '403':
+          description: Hors de votre portée (ou action réservée à la plateforme)
+        '409':
+          description: Conflit (e-mail pris, compte non lié, dernier administrateur…)
+        '503':
+          description: 'Keycloak injoignable : rien n''a été modifié'
+  /api/v1/admin/accounts/export/:
+    get:
+      operationId: admin_accounts_export
+      description: À placer en premier dans les bases des vues V1.
+      summary: Export CSV des comptes de mon périmètre (mêmes filtres que la liste)
+      parameters:
+      - in: query
+        name: created_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: created_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: etat_de_vie
+        schema:
+          enum:
+          - laic
+          - clerc
+          - consacre
+          type: string
+          minLength: 1
+        description: |-
+          * `laic` - Laïc
+          * `clerc` - Clerc
+          * `consacre` - Consacré
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Comptes rattachés à ce nœud ou à son sous-arbre
+      - in: query
+        name: ordering
+        schema:
+          enum:
+          - recent
+          - ancien
+          - email
+          - nom
+          type: string
+          minLength: 1
+        description: |-
+          * `recent` - recent
+          * `ancien` - ancien
+          * `email` - email
+          * `nom` - nom
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: E-mail, prénom, nom, téléphone
+      - in: query
+        name: role
+        schema:
+          enum:
+          - fidele
+          - staff
+          - platform_admin
+          type: string
+          minLength: 1
+        description: |-
+          * `fidele` - fidele
+          * `staff` - staff
+          * `platform_admin` - platform_admin
+      - in: query
+        name: status
+        schema:
+          enum:
+          - actif
+          - desactive
+          - en_attente
+          type: string
+          minLength: 1
+        description: |-
+          * `actif` - actif
+          * `desactive` - desactive
+          * `en_attente` - en_attente
+      - in: query
+        name: sync
+        schema:
+          enum:
+          - synchronise
+          - non_lie
+          - ecart
+          type: string
+          minLength: 1
+        description: |-
+          État de synchronisation
+
+          * `synchronise` - synchronise
+          * `non_lie` - non_lie
+          * `ecart` - ecart
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            text/csv:
+              schema:
+                type: string
+          description: ''
+  /api/v1/admin/audit/:
+    get:
+      operationId: admin_audit_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Journal des actions sur les comptes (qui, quoi, quand, sur qui)
+      parameters:
+      - in: query
+        name: account
+        schema:
+          type: string
+          format: uuid
+        description: Compte visé
+      - in: query
+        name: action
+        schema:
+          type: string
+          maxLength: 80
+          minLength: 1
+        description: Préfixe (ex. compte.admin.)
+      - in: query
+        name: actor
+        schema:
+          type: string
+          format: uuid
+        description: Auteur de l'action
+      - in: query
+        name: date_from
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: date_to
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdminAuditOutputList'
+          description: ''
+  /api/v1/admin/dashboard/:
+    get:
+      operationId: admin_dashboard
+      description: À placer en premier dans les bases des vues V1.
+      summary: Tableau de bord des comptes
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminDashboardOutput'
+          description: ''
+  /api/v1/admin/scope/:
+    get:
+      operationId: admin_scope
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mon périmètre d'administration
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminScopeOutput'
+          description: ''
+  /api/v1/admin/sync/:
+    get:
+      operationId: admin_sync_status
+      description: À placer en premier dans les bases des vues V1.
+      summary: État de la synchronisation Keycloak
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+          description: ''
+  /api/v1/admin/sync/runs/:
+    post:
+      operationId: admin_sync_run
+      description: À placer en premier dans les bases des vues V1.
+      summary: Lancer une réconciliation (simulation par défaut)
+      tags:
+      - admin-comptes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRunInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SyncRunInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SyncRunInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncRunDetail'
+          description: ''
+  /api/v1/admin/sync/runs/{run_id}/:
+    get:
+      operationId: admin_sync_run_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Rapport d'une réconciliation
+      parameters:
+      - in: path
+        name: run_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - admin-comptes
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncRunDetail'
+          description: ''
   /api/v1/agenda/:
     get:
       operationId: agenda_list
@@ -4865,6 +5900,38 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonStatusOutput'
           description: ''
+  /api/v1/integrations/keycloak/events/:
+    post:
+      operationId: keycloak_events_receive
+      description: À placer en premier dans les bases des vues V1.
+      summary: Événement Keycloak signé (webhook du SPI d'événements)
+      tags:
+      - integrations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeycloakWebhookEvent'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/KeycloakWebhookEvent'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/KeycloakWebhookEvent'
+        required: true
+      security:
+      - {}
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeycloakWebhookAck'
+          description: ''
+        '403':
+          description: Signature absente ou invalide
+        '404':
+          description: Webhook désactivé (KEYCLOAK_WEBHOOK_ENABLED)
   /api/v1/liturgy/{day}/:
     get:
       operationId: v1_liturgy_retrieve
@@ -10675,6 +11742,30 @@ components:
         * `terminer` - terminer
         * `annuler` - annuler
         * `qualifier` - qualifier
+    ActionsEmail:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionsEnum'
+          minItems: 1
+      required:
+      - actions
+    ActionsEnum:
+      enum:
+      - UPDATE_PASSWORD
+      - VERIFY_EMAIL
+      - CONFIGURE_TOTP
+      - UPDATE_PROFILE
+      - TERMS_AND_CONDITIONS
+      type: string
+      description: |-
+        * `UPDATE_PASSWORD` - UPDATE_PASSWORD
+        * `VERIFY_EMAIL` - VERIFY_EMAIL
+        * `CONFIGURE_TOTP` - CONFIGURE_TOTP
+        * `UPDATE_PROFILE` - UPDATE_PROFILE
+        * `TERMS_AND_CONDITIONS` - TERMS_AND_CONDITIONS
     Activation:
       type: object
       properties:
@@ -11141,6 +12232,315 @@ components:
       description: |-
         * `remboursement` - Remboursement (ligne négative du mois du remboursement)
         * `correction` - Correction d'un mois clos
+    AdminAccountCreate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+          default: ''
+          maxLength: 50
+        last_name:
+          type: string
+          default: ''
+          maxLength: 50
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        node_id:
+          type: string
+          format: uuid
+          description: Nœud gestionnaire du compte (dans votre périmètre)
+        etat_de_vie:
+          allOf:
+          - $ref: '#/components/schemas/EtatDeVieEnum'
+          default: laic
+        degre_ordre:
+          allOf:
+          - $ref: '#/components/schemas/DegreOrdreEnum'
+          default: aucun
+        send_invitation:
+          type: boolean
+          default: true
+          description: 'Keycloak envoie le lien : vérifier l''e-mail et choisir un
+            mot de passe'
+      required:
+      - email
+      - node_id
+    AdminAccountDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        full_name:
+          type: string
+        phone_number:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StatusA00Enum'
+        role:
+          $ref: '#/components/schemas/AccountRealmRoleEnum'
+        etat_de_vie:
+          $ref: '#/components/schemas/EtatDeVieEnum'
+        email_verified:
+          type: boolean
+        keycloak_id:
+          type: string
+          nullable: true
+        sync:
+          $ref: '#/components/schemas/SyncEnum'
+        sync_error:
+          type: string
+          nullable: true
+        synced_at:
+          type: string
+          format: date-time
+          nullable: true
+        admin_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        last_seen_on:
+          type: string
+          format: date
+          nullable: true
+        can_manage:
+          type: boolean
+          description: L'acteur peut agir sur ce compte (portée)
+        statut_verification:
+          type: string
+        degre_ordre:
+          type: string
+        offices:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOffice'
+        scope_nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeRef'
+        keycloak:
+          allOf:
+          - $ref: '#/components/schemas/KeycloakState'
+          nullable: true
+          description: État en direct dans Keycloak ; null si non lié
+      required:
+      - admin_node
+      - can_manage
+      - created_at
+      - degre_ordre
+      - email
+      - email_verified
+      - etat_de_vie
+      - first_name
+      - full_name
+      - id
+      - keycloak
+      - keycloak_id
+      - last_login
+      - last_name
+      - last_seen_on
+      - offices
+      - phone_number
+      - role
+      - scope_nodes
+      - status
+      - statut_verification
+      - sync
+      - sync_error
+      - synced_at
+    AdminAccountOutput:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        full_name:
+          type: string
+        phone_number:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StatusA00Enum'
+        role:
+          $ref: '#/components/schemas/AccountRealmRoleEnum'
+        etat_de_vie:
+          $ref: '#/components/schemas/EtatDeVieEnum'
+        email_verified:
+          type: boolean
+        keycloak_id:
+          type: string
+          nullable: true
+        sync:
+          $ref: '#/components/schemas/SyncEnum'
+        sync_error:
+          type: string
+          nullable: true
+        synced_at:
+          type: string
+          format: date-time
+          nullable: true
+        admin_node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+          nullable: true
+        last_seen_on:
+          type: string
+          format: date
+          nullable: true
+        can_manage:
+          type: boolean
+          description: L'acteur peut agir sur ce compte (portée)
+      required:
+      - admin_node
+      - can_manage
+      - created_at
+      - email
+      - email_verified
+      - etat_de_vie
+      - first_name
+      - full_name
+      - id
+      - keycloak_id
+      - last_login
+      - last_name
+      - last_seen_on
+      - phone_number
+      - role
+      - status
+      - sync
+      - sync_error
+      - synced_at
+    AdminAuditOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        at:
+          type: string
+          format: date-time
+        action:
+          type: string
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_email:
+          type: string
+          nullable: true
+        target_id:
+          type: string
+        target_email:
+          type: string
+          nullable: true
+        node:
+          allOf:
+          - $ref: '#/components/schemas/NodeRef'
+          nullable: true
+        metadata: {}
+      required:
+      - action
+      - actor_email
+      - actor_id
+      - at
+      - id
+      - metadata
+      - node
+      - target_email
+      - target_id
+    AdminDashboardOutput:
+      type: object
+      properties:
+        comptes:
+          $ref: '#/components/schemas/DashboardCounts'
+        synchronisation:
+          $ref: '#/components/schemas/DashboardSync'
+      required:
+      - comptes
+      - synchronisation
+    AdminOffice:
+      type: object
+      properties:
+        id:
+          type: integer
+        office:
+          type: string
+        office_label:
+          type: string
+        node:
+          $ref: '#/components/schemas/NodeRef'
+        status:
+          type: string
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+      required:
+      - end_date
+      - id
+      - node
+      - office
+      - office_label
+      - start_date
+      - status
+    AdminScopeOutput:
+      type: object
+      properties:
+        is_platform_admin:
+          type: boolean
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeRef'
+          description: Nœuds où je gère les comptes (sous-arbres compris)
+        required_actions:
+          type: array
+          items:
+            type: string
+        impersonation:
+          type: boolean
+          description: 'Toujours faux : l''usurpation d''identité n''est pas proposée'
+      required:
+      - impersonation
+      - is_platform_admin
+      - nodes
+      - required_actions
     Analyse:
       type: object
       properties:
@@ -14201,6 +15601,57 @@ components:
       required:
       - counts
       - total
+    DashboardCounts:
+      type: object
+      properties:
+        total:
+          type: integer
+        actifs:
+          type: integer
+        en_attente:
+          type: integer
+        desactives:
+          type: integer
+        responsables:
+          type: integer
+        administrateurs_plateforme:
+          type: integer
+        crees_30_jours:
+          type: integer
+        non_lies:
+          type: integer
+        ecarts:
+          type: integer
+        invitations_en_attente:
+          type: integer
+      required:
+      - actifs
+      - administrateurs_plateforme
+      - crees_30_jours
+      - desactives
+      - ecarts
+      - en_attente
+      - invitations_en_attente
+      - non_lies
+      - responsables
+      - total
+    DashboardSync:
+      type: object
+      properties:
+        derniere_reconciliation:
+          type: string
+          format: date-time
+          nullable: true
+        derniere_reconciliation_reussie:
+          type: boolean
+          nullable: true
+        ecarts_derniere_reconciliation:
+          type: integer
+          nullable: true
+      required:
+      - derniere_reconciliation
+      - derniere_reconciliation_reussie
+      - ecarts_derniere_reconciliation
     DayMassOutput:
       type: object
       properties:
@@ -15617,6 +17068,98 @@ components:
       - file_type
       - id
       - url
+    KeycloakSession:
+      type: object
+      properties:
+        id:
+          type: string
+        ip:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_access:
+          type: string
+          format: date-time
+          nullable: true
+        clients:
+          type: array
+          items:
+            type: string
+      required:
+      - clients
+      - id
+      - ip
+      - last_access
+      - started_at
+    KeycloakState:
+      type: object
+      properties:
+        available:
+          type: boolean
+          description: 'Faux : Keycloak injoignable, état inconnu'
+        exists:
+          type: boolean
+        enabled:
+          type: boolean
+        email_verified:
+          type: boolean
+        required_actions:
+          type: array
+          items:
+            type: string
+        otp:
+          type: boolean
+        webauthn:
+          type: boolean
+        password:
+          type: boolean
+        realm_roles:
+          type: array
+          items:
+            type: string
+        groups:
+          type: array
+          items:
+            type: string
+        locked_by_brute_force:
+          type: boolean
+        failed_logins:
+          type: integer
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/KeycloakSession'
+      required:
+      - available
+    KeycloakWebhookAck:
+      type: object
+      properties:
+        status:
+          type: string
+        duplicate:
+          type: boolean
+      required:
+      - duplicate
+      - status
+    KeycloakWebhookEvent:
+      type: object
+      properties:
+        uid:
+          type: string
+        type:
+          type: string
+          description: access.REGISTER, admin.USER-UPDATE…
+        userId:
+          type: string
+        resourcePath:
+          type: string
+          description: users/<id>…
+      required:
+      - type
+      - uid
     LastMessage:
       type: object
       properties:
@@ -16402,15 +17945,9 @@ components:
           format: uuid
         name:
           type: string
-        code:
-          type: string
-        type:
-          type: string
       required:
-      - code
       - id
       - name
-      - type
     NodeSettingsOutput:
       type: object
       properties:
@@ -16712,6 +18249,38 @@ components:
       required:
       - id
       - office_type
+    OfficeAssign:
+      type: object
+      properties:
+        office_type:
+          type: string
+          description: Code de l'office (catalogue)
+        node_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+          nullable: true
+        quality:
+          type: string
+          default: ''
+        decree_ref:
+          type: string
+          default: ''
+          maxLength: 100
+      required:
+      - node_id
+      - office_type
+    OfficeEnd:
+      type: object
+      properties:
+        end_date:
+          type: string
+          format: date
     OfficeHoursItem:
       type: object
       properties:
@@ -16878,6 +18447,13 @@ components:
       - net_amount
       - place
       - reference
+    OptionalReason:
+      type: object
+      properties:
+        reason:
+          type: string
+          default: ''
+          maxLength: 255
     PaginatedAccountOutputList:
       type: object
       properties:
@@ -16923,6 +18499,58 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Adjustment'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedAdminAccountOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAccountOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedAdminAuditOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditOutput'
       required:
       - count
       - limit
@@ -17866,6 +19494,26 @@ components:
           type: boolean
       required:
       - personnalisation_parole
+    PatchedAdminAccountUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+          maxLength: 50
+        last_name:
+          type: string
+          maxLength: 50
+        phone_number:
+          type: string
+          nullable: true
+          maxLength: 20
+        admin_node_id:
+          type: string
+          format: uuid
+          nullable: true
     PatchedArticleUpdateInput:
       type: object
       properties:
@@ -18655,6 +20303,19 @@ components:
       - priest_id
       - priest_name
       - starts_at
+    PlatformAdmin:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Motif (journalisé)
+          maxLength: 255
+        grant:
+          type: boolean
+          description: 'Vrai : donner le rôle ; faux : le retirer'
+      required:
+      - grant
+      - reason
     PlatformEnum:
       enum:
       - ios
@@ -19790,6 +21451,15 @@ components:
       - id
       - is_published
       - title
+    Reason:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Motif (journalisé)
+          maxLength: 255
+      required:
+      - reason
     ReasonEnum:
       enum:
       - religious_marriage
@@ -21190,6 +22860,16 @@ components:
         * `libre` - Libre
         * `reserve` - Réservé
         * `bloque` - Bloqué
+    StatusA00Enum:
+      enum:
+      - actif
+      - desactive
+      - en_attente
+      type: string
+      description: |-
+        * `actif` - actif
+        * `desactive` - desactive
+        * `en_attente` - en_attente
     StatusLog:
       type: object
       description: 'Historique vu du fidèle : jamais le nom des membres de l''équipe.'
@@ -21370,6 +23050,166 @@ components:
         attachment_file_id:
           type: integer
           nullable: true
+    SyncCursor:
+      type: object
+      properties:
+        name:
+          type: string
+          description: utilisateur | admin
+        last_event_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_polled_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_error:
+          type: string
+          nullable: true
+      required:
+      - last_error
+      - last_event_at
+      - last_polled_at
+      - name
+    SyncEnum:
+      enum:
+      - synchronise
+      - non_lie
+      - ecart
+      type: string
+      description: |-
+        * `synchronise` - synchronise
+        * `non_lie` - non_lie
+        * `ecart` - ecart
+    SyncEvents:
+      type: object
+      properties:
+        recus:
+          type: integer
+        echecs:
+          type: integer
+        traites_24h:
+          type: integer
+        dernier_recu:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - dernier_recu
+      - echecs
+      - recus
+      - traites_24h
+    SyncRun:
+      type: object
+      properties:
+        id:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        dry_run:
+          type: boolean
+        trigger:
+          type: string
+        success:
+          type: boolean
+        error:
+          type: string
+        counts: {}
+      required:
+      - counts
+      - dry_run
+      - error
+      - finished_at
+      - id
+      - started_at
+      - success
+      - trigger
+    SyncRunDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        dry_run:
+          type: boolean
+        trigger:
+          type: string
+        success:
+          type: boolean
+        error:
+          type: string
+        counts: {}
+        report:
+          description: 'Écarts : kind, keycloak_id, user_id, email (masqué), fields,
+            correction'
+      required:
+      - counts
+      - dry_run
+      - error
+      - finished_at
+      - id
+      - report
+      - started_at
+      - success
+      - trigger
+    SyncRunInput:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+          default: true
+          description: 'Vrai : rapport seulement, rien n''est corrigé'
+    SyncStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        events_polling:
+          type: boolean
+          description: Lecture périodique des événements (Admin REST API)
+        webhook_enabled:
+          type: boolean
+          description: Option webhook d'un SPI (désactivée par défaut)
+        curseurs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncCursor'
+        comptes_non_lies:
+          type: integer
+        comptes_en_ecart:
+          type: integer
+        ecarts_par_type:
+          type: object
+          additionalProperties:
+            type: integer
+        evenements:
+          $ref: '#/components/schemas/SyncEvents'
+        reconciliations:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncRun'
+      required:
+      - comptes_en_ecart
+      - comptes_non_lies
+      - curseurs
+      - ecarts_par_type
+      - enabled
+      - evenements
+      - events_polling
+      - reconciliations
+      - webhook_enabled
     Synthese:
       type: object
       properties:

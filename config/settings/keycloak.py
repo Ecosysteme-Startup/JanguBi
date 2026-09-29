@@ -35,3 +35,28 @@ KEYCLOAK_ADMIN_CLIENT_ID = env.str("KEYCLOAK_ADMIN_CLIENT_ID", default="jangubi-
 KEYCLOAK_ADMIN_CLIENT_SECRET = env.str("KEYCLOAK_ADMIN_CLIENT_SECRET", default="")
 KEYCLOAK_STAFF_ROLE = "staff"
 KEYCLOAK_PLATFORM_ADMIN_ROLE = "platform_admin"
+
+# --- Administration des comptes (docs/ADMIN-KEYCLOAK.md) ------------------------------------
+# "http" (API d'administration réelle), "fake" (en mémoire : tests, développement hors ligne)
+# ou chemin d'import d'une fabrique.
+KEYCLOAK_ADMIN_BACKEND = env.str("KEYCLOAK_ADMIN_BACKEND", default="http")
+KEYCLOAK_ADMIN_TIMEOUT_SECONDS = env.float("KEYCLOAK_ADMIN_TIMEOUT_SECONDS", default=10.0)
+KEYCLOAK_ADMIN_CONNECT_TIMEOUT_SECONDS = env.float("KEYCLOAK_ADMIN_CONNECT_TIMEOUT_SECONDS", default=3.0)
+# Sync Keycloak → application : lecture périodique des événements par l'Admin REST API (le
+# Keycloak partagé est l'image officielle, sans SPI). « Save events » et « Save admin events »
+# doivent être activés sur le realm (conservation 90 jours).
+KEYCLOAK_EVENTS_POLL_ENABLED = env.bool("KEYCLOAK_EVENTS_POLL_ENABLED", default=True)
+# Première lecture (pas de curseur) : on remonte au plus loin de cette durée ; la réconciliation
+# complète rattrape le reste.
+KEYCLOAK_EVENTS_INITIAL_LOOKBACK_HOURS = env.int("KEYCLOAK_EVENTS_INITIAL_LOOKBACK_HOURS", default=24)
+KEYCLOAK_EVENTS_MAX_PER_POLL = env.int("KEYCLOAK_EVENTS_MAX_PER_POLL", default=2000)
+# Option : webhook d'un SPI d'événements (p2-inc keycloak-events), DÉSACTIVÉ par défaut.
+KEYCLOAK_WEBHOOK_ENABLED = env.bool("KEYCLOAK_WEBHOOK_ENABLED", default=False)
+# Secret partagé avec le SPI : signature HMAC-SHA256 du corps.
+KEYCLOAK_WEBHOOK_SECRET = env.str("KEYCLOAK_WEBHOOK_SECRET", default="")
+# Garde-fou de la réconciliation : au-delà, aucune anonymisation automatique (realm mal configuré ?).
+KEYCLOAK_RECONCILE_MAX_DELETIONS = env.int("KEYCLOAK_RECONCILE_MAX_DELETIONS", default=5)
+# Durée de validité du lien envoyé par Keycloak (actions requises), en secondes (72 h).
+KEYCLOAK_ACTIONS_EMAIL_LIFESPAN = env.int("KEYCLOAK_ACTIONS_EMAIL_LIFESPAN", default=72 * 3600)
+KEYCLOAK_ACTIONS_CLIENT_ID = env.str("KEYCLOAK_ACTIONS_CLIENT_ID", default="jangubi-web")
+KEYCLOAK_ACTIONS_REDIRECT_URI = env.str("KEYCLOAK_ACTIONS_REDIRECT_URI", default="")

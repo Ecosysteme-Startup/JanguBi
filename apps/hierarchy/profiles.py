@@ -200,6 +200,9 @@ CAPABILITIES: list[CapabilitySpec] = [
     {"code": "comptes.valider", "label": "Inviter, valider et activer les comptes du clergé", "domain": "offices"},
     # Lot V1-routes : intentions de messe reçues par le secrétariat (aucun montant, aucun paiement).
     {"code": "intentions.gerer", "label": "Recevoir et planifier les intentions de messe", "domain": "paroisse"},
+    # Administration des comptes (docs/ADMIN-KEYCLOAK.md) : créer, modifier, désactiver les comptes
+    # de son périmètre, jamais ceux d'un office qu'on ne pourrait pas nommer. Migration 0015.
+    {"code": "comptes.gerer", "label": "Créer et gérer les comptes de son périmètre", "domain": "offices"},
 ]
 
 # Capacités « dons » par office (ADR-017). Séparées pour que la migration de données
@@ -272,13 +275,14 @@ _CURE_CAPABILITIES = [
     *AUDIO_OFFICE_CAPABILITIES["cure"],
     *MEMBRES_OFFICE_CAPABILITIES["cure"],
     "intentions.gerer",
+    "comptes.gerer",
 ]
 
 OFFICES: list[OfficeSpec] = [
     {"code": "eveque_diocesain", "label": "Évêque diocésain", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "one", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": _ALL_BUT_PLATFORM_AND_MESSAGING},
     {"code": "eveque_auxiliaire", "label": "Évêque auxiliaire", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "many", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser", "annonces.publier", "audit.voir"]},
-    {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir", "comptes.valider"]},
-    {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir", "comptes.valider"]},
+    {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir", "comptes.valider", "comptes.gerer"]},
+    {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir", "comptes.valider", "comptes.gerer"]},
     {"code": "delegue_numerique_diocesain", "label": "Délégué diocésain au numérique", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "horaires.gerer", "tableau_bord.voir", "audio.publier", "audio.moderer"]},
     {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "dons.definir_quete_imperee", "dons.voir_agregats"]},
     {"code": "doyen", "label": "Doyen", "node_types": ["doyenne"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser"]},
@@ -313,5 +317,7 @@ PLATFORM_ADMIN_CAPABILITIES = frozenset(
         "audio.moderer",
         # Lot V1-routes : la plateforme invite et valide les comptes du clergé.
         "comptes.valider",
+        # Administration des comptes et synchronisation Keycloak (docs/ADMIN-KEYCLOAK.md).
+        "comptes.gerer",
     }
 )
