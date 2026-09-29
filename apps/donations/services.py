@@ -25,6 +25,7 @@ from apps.donations import access
 from apps.donations.enums import (
     DONATION_TRANSITIONS,
     PARISH_TYPES,
+    AdjustmentKind,
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
@@ -33,6 +34,7 @@ from apps.donations.enums import (
     FundDestination,
     FundKind,
     FundStatus,
+    IncidentKind,
     PaymentMethod,
     PayoutStatus,
     StatusSource,
@@ -42,10 +44,13 @@ from apps.donations.models import (
     CashCollection,
     Donation,
     DonationActivation,
+    DonationAdjustment,
     DonationStatusChange,
     Fund,
     FundUpdate,
+    MonthClosing,
     PaymentAttempt,
+    PaymentIncident,
     PaymentWebhookEvent,
     Payout,
     PayoutLine,
@@ -548,10 +553,15 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
             return "doublon"
         if state.amount is not None and state.amount != donation.charged_amount:
             logger.warning("dons.montant_incoherent reference=%s", donation.reference)
+            _incident_record(attempt=attempt, donation=donation, kind=IncidentKind.AMOUNT_MISMATCH,
+                             reported_amount=state.amount)  # fmt: skip
             return "amount_mismatch"
         if donation.status not in (DonationStatus.INITIE, DonationStatus.EN_ATTENTE):
-            # Paiement réussi après expiration ou échec : incident à traiter (remboursement ou reprise).
+            # Paiement réussi après expiration ou échec : le fidèle est débité, le don n'est dans aucun
+            # total. Incident persisté, à régulariser par la paroisse (intégration ou remboursement).
             logger.warning("dons.paiement_tardif reference=%s", donation.reference)
+            _incident_record(attempt=attempt, donation=donation, kind=IncidentKind.LATE_PAYMENT,
+                             reported_amount=state.amount, method=state.method)  # fmt: skip
             return "late_payment"
         updates = ["payment_method", "updated_at"]
         donation.payment_method = state.method or PaymentMethod.INCONNU
@@ -586,6 +596,18 @@ def payment_state_apply(*, attempt: PaymentAttempt, state: PaymentState, source:
             return "expire"
         return "doublon"
     return "en_attente"
+
+
+def _incident_record(
+    *, attempt: PaymentAttempt, donation: Donation, kind: str, reported_amount: int | None, method: str = ""
+) -> PaymentIncident:
+    """Persiste un incident de paiement (idempotent : une notification rejouée ne le duplique pas)."""
+    incident, created = PaymentIncident.objects.get_or_create(
+        attempt=attempt, kind=kind, defaults={"donation": donation, "reported_amount": reported_amount}
+    )
+    if created and method and method != PaymentMethod.INCONNU and donation.payment_method == PaymentMethod.INCONNU:
+        Donation.objects.filter(pk=donation.pk).update(payment_method=method)
+    return incident
 
 
 def _receipt_email_queue(donation: Donation) -> None:
@@ -795,6 +817,17 @@ def payout_reconcile(*, payout: Payout) -> Payout:
     return payout
 
 
+# --- Clôture mensuelle : verrou -------------------------------------------------------------
+
+
+def month_open_check(*, node: Node, day: datetime.date) -> None:
+    """Refuse une opération datée d'un mois clos (la correction passe par un ajustement)."""
+    if MonthClosing.objects.filter(node=node, month=day.replace(day=1)).exists():
+        raise ApplicationError(
+            "Ce mois est clos : passez une écriture d'ajustement.", {"mois": f"{day:%Y-%m}"}, code="month_closed"
+        )
+
+
 # --- Quêtes en espèces ----------------------------------------------------------------------
 
 
@@ -823,6 +856,7 @@ def cash_collection_create(
         raise ApplicationError("Montant invalide.", code="invalid_amount")
     if mass_date > timezone.localdate():
         raise ApplicationError("La messe ne peut pas être à venir.", code="future_mass")
+    month_open_check(node=node, day=mass_date)
     one, two = counter_one.strip(), counter_two.strip()
     if not one or not two or one.casefold() == two.casefold():
         raise ApplicationError("La quête est comptée par deux personnes distinctes.", code="two_counters_required")
@@ -859,6 +893,7 @@ def _require_cash_validator(collection: CashCollection, actor: Any) -> None:
 def cash_collection_validate(*, collection: CashCollection, actor: Any) -> CashCollection:
     collection = CashCollection.objects.select_for_update().select_related("node", "fund").get(pk=collection.pk)
     _require_cash_validator(collection, actor)
+    month_open_check(node=collection.node, day=collection.mass_date)
     now = timezone.now()
     collection.status = CashCollectionStatus.VALIDEE
     collection.validated_by = actor
@@ -920,6 +955,13 @@ def donation_refund(*, donation: Donation, actor: Any, note: str = "") -> Donati
     donation = donation_transition(
         donation=donation, to=DonationStatus.REMBOURSE, source=StatusSource.STAFF, actor=actor, note=note
     )
+    # Le mois du don reste figé : le remboursement est une ligne négative du mois courant.
+    DonationAdjustment.objects.create(
+        node=donation.fund.node, fund=donation.fund, donation=donation, kind=AdjustmentKind.REMBOURSEMENT,
+        channel=donation.channel, source=donation.source, payment_method=donation.payment_method,
+        place_id=donation.place_id, amount=-donation.amount, net_amount=-donation.net_amount,
+        value_date=timezone.localdate(), reason=(note or "Remboursement")[:300], created_by=actor,
+    )  # fmt: skip
     audit_log(actor=actor, action="dons.remboursement", target=donation, node=donation.fund.node,
               metadata={"reference": donation.reference})  # fmt: skip
     return donation

@@ -32,6 +32,7 @@ from apps.donations.enums import (
     DonationStatus,
     FundKind,
     FundStatus,
+    IncidentStatus,
     PaymentMethod,
     RemittanceStatus,
     WebhookStatus,
@@ -41,7 +42,10 @@ from apps.donations.models import (
     CuriaRemittance,
     Donation,
     DonationActivation,
+    DonationAdjustment,
     Fund,
+    MonthClosing,
+    PaymentIncident,
     PaymentWebhookEvent,
     Payout,
 )
@@ -193,7 +197,7 @@ def _pct(part: int, whole: int) -> int | None:
     return round(part * 100 / whole) if whole else None
 
 
-def _alpha_key(name: str) -> str:
+def alpha_key(name: str) -> str:
     """Tri alphabétique insensible aux accents et à la casse (« Sainte-Thérèse » après « Saint-Joseph »)."""
     return unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().casefold()
 
@@ -210,9 +214,41 @@ class _Rounder:
         return int(math.floor(value / self.unit + 0.5) * self.unit)
 
 
+COUNTED = [DonationStatus.CONFIRME, DonationStatus.REMBOURSE]
+
+
 def _counted(scope: Q, start: datetime.date, end: datetime.date) -> QuerySet[Donation]:
-    """Dons comptés dans « collecté » : confirmés, datés par leur date de valeur."""
-    return Donation.objects.filter(scope, status=DonationStatus.CONFIRME, value_date__gte=start, value_date__lte=end)
+    """Dons comptés dans leur mois de valeur : confirmés, ou confirmés puis remboursés (le remboursement
+    est une ligne négative du mois où il a lieu, ``DonationAdjustment``) — un mois clos ne bouge plus."""
+    return Donation.objects.filter(scope, status__in=COUNTED, value_date__gte=start, value_date__lte=end)
+
+
+class Ledger:
+    """Dons comptés + écritures d'ajustement d'une portée et d'une période, agrégés ensemble.
+    ``s`` = somme de ``value`` (dons et ajustements), ``n`` = nombre de dons (un ajustement n'en est pas un)."""
+
+    def __init__(self, scope: Q, start: datetime.date, end: datetime.date, value: str = "amount") -> None:
+        self.donations = _counted(scope, start, end)
+        self.adjustments = DonationAdjustment.objects.filter(scope, value_date__gte=start, value_date__lte=end)
+        self.value = value
+
+    def group(self, *fields: str, condition: Q | None = None) -> list[dict[str, Any]]:
+        merged: dict[tuple[Any, ...], dict[str, Any]] = {}
+        for qs, counts in ((self.donations, True), (self.adjustments, False)):
+            if condition is not None:
+                qs = qs.filter(condition)
+            for row in qs.values(*fields).annotate(s=Sum(self.value), n=Count("id")).order_by():
+                key = tuple(row[f] for f in fields)
+                slot = merged.setdefault(key, {**{f: row[f] for f in fields}, "s": 0, "n": 0})
+                slot["s"] += row["s"]
+                slot["n"] += row["n"] if counts else 0
+        return list(merged.values())
+
+    def total(self, condition: Q | None = None) -> tuple[int, int]:
+        d = self.donations.filter(condition) if condition is not None else self.donations
+        a = self.adjustments.filter(condition) if condition is not None else self.adjustments
+        dt = d.aggregate(s=_sum(self.value), n=Count("id"))
+        return dt["s"] + a.aggregate(s=_sum(self.value))["s"], dt["n"]
 
 
 def _scope(node: Node, level: str) -> Q:
@@ -225,22 +261,20 @@ def _scope(node: Node, level: str) -> Q:
 
 
 def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> dict[str, Any]:
-    qs = _counted(scope, period.start, period.end)
+    ledger = Ledger(scope, period.start, period.end)
     online, cash = Q(channel=DonationChannel.EN_LIGNE), Q(channel=DonationChannel.ESPECES)
-    t = qs.aggregate(
-        collecte=_sum("amount"),
-        en_ligne=_sum("amount", online),
-        especes=_sum("amount", cash),
-        nb_en_ligne=Count("id", filter=online),
-        nb_quetes=Count("id", filter=cash),
-    )
-    total = t["collecte"]
-    dest = {row["fund__destination"]: row["s"] for row in qs.values("fund__destination").annotate(s=Sum("amount"))}
+    total, _ = ledger.total()
+    en_ligne, nb_en_ligne = ledger.total(online)
+    especes, nb_quetes = ledger.total(cash)
+    dest = {row["fund__destination"]: row["s"] for row in ledger.group("fund__destination")}
+
+    def side(row: dict[str, Any]) -> str:
+        return "en_ligne" if row["channel"] == DonationChannel.EN_LIGNE else "especes"
 
     kinds: dict[str, dict[str, int]] = {k: {"en_ligne": 0, "especes": 0, "nombre": 0} for k in FUND_KIND_ORDER}
-    for row in qs.values("fund__kind", "channel").annotate(s=Sum("amount"), n=Count("id")):
+    for row in ledger.group("fund__kind", "channel"):
         slot = kinds.setdefault(row["fund__kind"], {"en_ligne": 0, "especes": 0, "nombre": 0})
-        slot["en_ligne" if row["channel"] == DonationChannel.EN_LIGNE else "especes"] += row["s"]
+        slot[side(row)] += row["s"]
         slot["nombre"] += row["n"]
     par_type = [
         {"type": k, "libelle": FundKind(k).label, "en_ligne": r(v["en_ligne"]), "especes": r(v["especes"]),
@@ -251,41 +285,38 @@ def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> 
     par_fonds = None
     if level == "paroisse":
         rows: dict[Any, dict[str, Any]] = {}
-        for row in qs.values("fund_id", "fund__title", "fund__kind", "fund__destination", "channel").annotate(
-            s=Sum("amount"), n=Count("id")
-        ):
+        for row in ledger.group("fund_id", "fund__title", "fund__kind", "fund__destination", "channel"):
             item = rows.setdefault(
                 row["fund_id"],
                 {"fonds_id": row["fund_id"], "titre": row["fund__title"], "type": row["fund__kind"],
                  "destination": row["fund__destination"], "en_ligne": 0, "especes": 0, "nombre": 0},
             )  # fmt: skip
-            item["en_ligne" if row["channel"] == DonationChannel.EN_LIGNE else "especes"] += row["s"]
+            item[side(row)] += row["s"]
             item["nombre"] += row["n"]
         par_fonds = sorted(
             ({**v, "total": v["en_ligne"] + v["especes"], "part": _pct(v["en_ligne"] + v["especes"], total)}
              for v in rows.values()),
-            key=lambda v: (FUND_KIND_ORDER.index(v["type"]) if v["type"] in FUND_KIND_ORDER else 99, _alpha_key(v["titre"])),
+            key=lambda v: (FUND_KIND_ORDER.index(v["type"]) if v["type"] in FUND_KIND_ORDER else 99, alpha_key(v["titre"])),
         )  # fmt: skip
 
-    sources = {row["source"]: row for row in qs.filter(online).values("source").annotate(s=Sum("amount"), n=Count("id"))}
+    sources = {row["source"]: row for row in ledger.group("source", condition=online)}
     par_source = [
         {"source": s, "libelle": DonationSource(s).label, "total": r(sources.get(s, {}).get("s", 0)),
-         "nombre": sources.get(s, {}).get("n", 0), "part": _pct(sources.get(s, {}).get("s", 0), t["en_ligne"])}
+         "nombre": sources.get(s, {}).get("n", 0), "part": _pct(sources.get(s, {}).get("s", 0), en_ligne)}
         for s in SOURCE_ORDER
         if s in ALWAYS_SHOWN_SOURCES or s in sources
     ]  # fmt: skip
     par_canal = [
-        {"canal": DonationChannel.EN_LIGNE, "libelle": "En ligne", "total": r(t["en_ligne"]), "nombre": t["nb_en_ligne"],
-         "part": _pct(t["en_ligne"], total), "sources": par_source},
-        {"canal": DonationChannel.ESPECES, "libelle": "Espèces", "total": r(t["especes"]), "nombre": t["nb_quetes"],
-         "part": _pct(t["especes"], total), "sources": []},
+        {"canal": DonationChannel.EN_LIGNE, "libelle": "En ligne", "total": r(en_ligne), "nombre": nb_en_ligne,
+         "part": _pct(en_ligne, total), "sources": par_source},
+        {"canal": DonationChannel.ESPECES, "libelle": "Espèces", "total": r(especes), "nombre": nb_quetes,
+         "part": _pct(especes, total), "sources": []},
     ]  # fmt: skip
 
-    methods = {row["payment_method"]: row for row in qs.filter(online).values("payment_method").annotate(
-        s=Sum("amount"), n=Count("id"))}  # fmt: skip
+    methods = {row["payment_method"]: row for row in ledger.group("payment_method", condition=online)}
     par_moyen = [
         {"moyen": m, "libelle": PaymentMethod(m).label, "total": r(methods.get(m, {}).get("s", 0)),
-         "nombre": methods.get(m, {}).get("n", 0), "part": _pct(methods.get(m, {}).get("s", 0), t["en_ligne"])}
+         "nombre": methods.get(m, {}).get("n", 0), "part": _pct(methods.get(m, {}).get("s", 0), en_ligne)}
         for m in METHOD_ORDER
         if m in ALWAYS_SHOWN_METHODS or m in methods
     ]  # fmt: skip
@@ -293,9 +324,9 @@ def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> 
     par_lieu = None
     if level == "paroisse":
         by_place: dict[Any, dict[str, int]] = {}
-        for row in qs.values("place_id", "channel").annotate(s=Sum("amount"), n=Count("id")):
+        for row in ledger.group("place_id", "channel"):
             slot = by_place.setdefault(row["place_id"], {"en_ligne": 0, "especes": 0, "nombre": 0})
-            slot["en_ligne" if row["channel"] == DonationChannel.EN_LIGNE else "especes"] += row["s"]
+            slot[side(row)] += row["s"]
             slot["nombre"] += row["n"]
         places = PlaceOfWorship.objects.filter(node=node).filter(Q(is_active=True) | Q(pk__in=[k for k in by_place if k]))
         par_lieu = []
@@ -312,10 +343,10 @@ def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> 
 
     return {
         "collecte": r(total),
-        "en_ligne": r(t["en_ligne"]),
-        "especes": r(t["especes"]),
-        "nombre_dons_en_ligne": t["nb_en_ligne"],
-        "nombre_quetes": t["nb_quetes"],
+        "en_ligne": r(en_ligne),
+        "especes": r(especes),
+        "nombre_dons_en_ligne": nb_en_ligne,
+        "nombre_quetes": nb_quetes,
         "par_destination": {"paroisse": r(dest.get("paroisse", 0)), "curie": r(dest.get("curie", 0))},
         "par_type_fonds": par_type,
         "par_fonds": par_fonds,
@@ -327,11 +358,7 @@ def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> 
 
 def _tendance(scope: Q, period: Period, r: _Rounder, today: datetime.date) -> dict[str, Any]:
     grain, buckets = _sub_periods(period, today)
-    rows = (
-        _counted(scope, period.start, period.end)
-        .values("value_date", "fund__kind", "channel")
-        .annotate(s=Sum("amount"))
-    )
+    rows = Ledger(scope, period.start, period.end).group("value_date", "fund__kind", "channel")
     points = []
     for start, end, label in buckets:
         kinds = {k: 0 for k in FUND_KIND_ORDER}
@@ -406,6 +433,24 @@ def _a_traiter_paroisse(node: Node, today: datetime.date) -> list[dict[str, Any]
             due = fund.remit_by or fund.starts_on or today
             items.append(_todo("remise_curie", due, f"{fund.title} : espèces à remettre à la curie",
                                montant=row["reste"], objet_id=str(fund.pk)))  # fmt: skip
+    for incident in PaymentIncident.objects.filter(donation__fund__node=node, status=IncidentStatus.OUVERT).select_related(
+        "donation"
+    ):
+        due = timezone.localtime(incident.created_at).date() + datetime.timedelta(days=settings.DONATIONS_INCIDENT_DAYS)
+        label = "Paiement tardif à régulariser" if incident.kind == "late_payment" else "Montant incohérent à vérifier"
+        items.append(_todo("paiement_tardif", due, f"{label} (réf. {incident.donation.reference})",
+                           montant=incident.donation.amount, depuis=incident.created_at,
+                           objet_id=str(incident.pk)))  # fmt: skip
+    activation = DonationActivation.objects.filter(node=node, enabled=True).first()
+    previous = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    if (
+        activation is not None
+        and _opened_on(activation) < today.replace(day=1)
+        and not MonthClosing.objects.filter(node=node, month=previous).exists()
+    ):
+        due = today.replace(day=min(settings.DONATIONS_MONTH_CLOSE_DAY, 28))
+        items.append(_todo("cloture_mois", due, f"Clôturer {MONTHS[previous.month - 1]} {previous.year}",
+                           objet_id=f"{previous:%Y-%m}"))  # fmt: skip
     return items
 
 
@@ -440,7 +485,7 @@ def _sort_todo(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         items,
         key=lambda i: (i["echeance"], TODO_ORDER.index(i["type"]) if i["type"] in TODO_ORDER else 99,
-                       _alpha_key((i["paroisse"] or {}).get("nom", "")), i["libelle"]),
+                       alpha_key((i["paroisse"] or {}).get("nom", "")), i["libelle"]),
     )  # fmt: skip
 
 
@@ -454,10 +499,10 @@ def _evolution(parish: Node, period: Period, opened_on: datetime.date) -> str | 
         p = period.shifted(step)
         if p.start < opened_on:
             return None
-        previous.append(_counted(scope, p.start, p.end).aggregate(s=_sum("amount"))["s"])
+        previous.append(Ledger(scope, p.start, p.end).total()[0])
     if any(v == 0 for v in previous):
         return None
-    current = _counted(scope, period.start, period.end).aggregate(s=_sum("amount"))["s"]
+    current = Ledger(scope, period.start, period.end).total()[0]
     mean = statistics.mean(previous)
     if current > mean * 1.1:
         return "en_hausse"
@@ -482,13 +527,12 @@ def _paroisses(node: Node, period: Period, r: _Rounder) -> dict[str, Any]:
             rows.append({"id": parish.pk, "nom": parish.name, "statut_collecte": "en_preparation", "collecte": None,
                          "part_en_ligne": None, "quetes_a_valider": None, "evolution": None})  # fmt: skip
             continue
-        t = _counted(Q(fund__node=parish), period.start, period.end).aggregate(
-            s=_sum("amount"), online=_sum("amount", Q(channel=DonationChannel.EN_LIGNE))
-        )
+        ledger = Ledger(Q(fund__node=parish), period.start, period.end)
+        t = {"s": ledger.total()[0], "online": ledger.total(Q(channel=DonationChannel.EN_LIGNE))[0]}
         rows.append({"id": parish.pk, "nom": parish.name, "statut_collecte": "ouverte", "collecte": r(t["s"]),
                      "part_en_ligne": _pct(t["online"], t["s"]), "quetes_a_valider": pending,
                      "evolution": _evolution(parish, period, _opened_on(activation))})  # fmt: skip
-    rows.sort(key=lambda row: _alpha_key(str(row["nom"])))
+    rows.sort(key=lambda row: alpha_key(str(row["nom"])))
     opened = sum(1 for row in rows if row["statut_collecte"] == "ouverte")
     return {
         "compteurs": {"engagees": len(rows), "collecte_ouverte": opened, "en_preparation": len(rows) - opened},
@@ -516,14 +560,14 @@ def _quetes_imperees(scope_nodes: Q, period: Period) -> list[dict[str, Any]]:
             "total": total, "remis": row["remis"], "remise_declaree": row["declare"], "reste_a_remettre": row["reste"],
             "part_remise": _pct(row["remis"], row["especes"]),
         })  # fmt: skip
-    result = sorted(groups.values(), key=lambda g: (g["date"], _alpha_key(g["titre"])))
+    result = sorted(groups.values(), key=lambda g: (g["date"], alpha_key(g["titre"])))
     for group in result:
-        group["paroisses"].sort(key=lambda p: _alpha_key(p["nom"]))
+        group["paroisses"].sort(key=lambda p: alpha_key(p["nom"]))
     return result
 
 
 def _tresorerie(node: Node, period: Period) -> dict[str, Any]:
-    qs = _counted(Q(fund__node=node), period.start, period.end)
+    qs = _counted(Q(fund__node=node), period.start, period.end).filter(status=DonationStatus.CONFIRME)
     online = qs.filter(channel=DonationChannel.EN_LIGNE).aggregate(
         paye=_sum("charged_amount"),
         frais=_sum("fee_amount"),
@@ -771,7 +815,7 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
                 node=parish, mass_date__gte=period.start, mass_date__lte=period.end
             ).count(),
         })  # fmt: skip
-    par_paroisse.sort(key=lambda row: _alpha_key(str(row["nom"])))
+    par_paroisse.sort(key=lambda row: alpha_key(str(row["nom"])))
 
     events = PaymentWebhookEvent.objects.filter(
         received_at__date__gte=period.start, received_at__date__lte=period.end
@@ -815,17 +859,39 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
 
 
 def _platform_incidents(events: QuerySet[PaymentWebhookEvent]) -> dict[str, Any]:
-    """Incidents techniques, sans montant : notifications en erreur ou rejetées."""
-    failed = events.filter(status__in=[WebhookStatus.ERREUR, WebhookStatus.REJETE])
+    """Incidents techniques, sans montant : paiements tardifs et montants incohérents persistés (encore
+    ouverts), notifications rejetées ou en erreur pour une autre cause."""
+    persisted = PaymentIncident.objects.filter(status=IncidentStatus.OUVERT).select_related("donation__fund__node")
+    others = events.filter(status__in=[WebhookStatus.ERREUR, WebhookStatus.REJETE]).exclude(
+        error_code__in=["late_payment", "amount_mismatch"]
+    )
     by_type: dict[str, int] = {}
-    for code in failed.values_list("error_code", flat=True):
-        by_type[code or "inconnu"] = by_type.get(code or "inconnu", 0) + 1
+    listing: list[dict[str, Any]] = []
+    for incident in persisted.order_by("-created_at"):
+        by_type[incident.kind] = by_type.get(incident.kind, 0) + 1
+        listing.append({"type": incident.kind, "reference": incident.donation.reference,
+                        "paroisse": incident.donation.fund.node.name, "detecte_le": incident.created_at,
+                        "statut": incident.status})  # fmt: skip
+    for e in others.order_by("-received_at"):
+        code = e.error_code or e.status
+        by_type[code] = by_type.get(code, 0) + 1
+        listing.append({"type": code, "reference": e.external_ref, "paroisse": None, "detecte_le": e.received_at,
+                        "statut": "ouvert"})  # fmt: skip
+    listing.sort(key=lambda i: i["detecte_le"], reverse=True)
+    return {"ouverts": len(listing), "par_type": by_type, "liste": listing[:20]}
+
+
+def month_totals(*, node: Node, month: datetime.date) -> dict[str, Any]:
+    """Totaux figés à la clôture d'un mois (montant donné et affecté, par canal et par type de fonds)."""
+    start = month.replace(day=1)
+    end = _month_end(start.year, start.month)
+    given, affected = Ledger(Q(fund__node=node), start, end), Ledger(Q(fund__node=node), start, end, "net_amount")
+    online = Q(channel=DonationChannel.EN_LIGNE)
     return {
-        "ouverts": failed.count(),
-        "par_type": by_type,
-        "liste": [
-            {"type": e.error_code or e.status, "reference": e.external_ref, "paroisse": None, "detecte_le": e.received_at,
-             "statut": "ouvert"}
-            for e in failed.order_by("-received_at")[:20]
-        ],  # fmt: skip
+        "collecte": given.total()[0],
+        "en_ligne": given.total(online)[0],
+        "especes": given.total(Q(channel=DonationChannel.ESPECES))[0],
+        "affecte": affected.total()[0],
+        "nombre_dons_en_ligne": given.total(online)[1],
+        "par_type_fonds": {row["fund__kind"]: row["s"] for row in given.group("fund__kind")},
     }

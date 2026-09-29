@@ -20,12 +20,22 @@ from apps.api.pagination import LimitOffsetPagination, get_paginated_response, p
 from apps.api.v1 import V1ApiMixin, error_body
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.core.exceptions import ApplicationError, NotFoundError
-from apps.donations import access, exports, selectors, selectors_analyse, services, services_tresorerie
+from apps.donations import (
+    access,
+    exports,
+    selectors,
+    selectors_analyse,
+    services,
+    services_cloture,
+    services_tresorerie,
+)
 from apps.donations.enums import DonationStatus
 from apps.donations.providers import known_provider
 from apps.donations.serializers import (
     ActivationInputSerializer,
     ActivationSerializer,
+    AdjustmentInputSerializer,
+    AdjustmentSerializer,
     CashCollectionFilterSerializer,
     CashCollectionInputSerializer,
     CashCollectionSerializer,
@@ -46,6 +56,10 @@ from apps.donations.serializers import (
     ImpereeCreateInputSerializer,
     ImpereeFollowRowSerializer,
     ImpereeSerializer,
+    IncidentFilterSerializer,
+    IncidentResolveInputSerializer,
+    MonthClosingInputSerializer,
+    MonthClosingSerializer,
     MonthQuerySerializer,
     MyDonationSerializer,
     MyDonationsFilterSerializer,
@@ -53,6 +67,7 @@ from apps.donations.serializers import (
     OperationSerializer,
     OperationsFilterSerializer,
     ParishSummarySerializer,
+    PaymentIncidentSerializer,
     PayoutSerializer,
     PeriodQuerySerializer,
     PublicFundDetailSerializer,
@@ -638,6 +653,79 @@ class AnalysisApi(V1ApiMixin, ApiAuthMixin, APIView):
         period = selectors_analyse.period_parse(filters["periode"], filters["date"] or None)
         data = selectors_analyse.donations_analysis(node=node, level=level, period=period)
         return Response(AnalyseSerializer(data).data)
+
+
+class MonthClosingApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_closings_list", summary="Mois clos d'une paroisse",
+                   parameters=[NodeQuerySerializer], responses=MonthClosingSerializer(many=True))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return Response(MonthClosingSerializer(selectors.closings_for_parish(node=node), many=True).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_closings_create",
+        summary="Clore un mois écoulé (totaux figés ; plus aucune quête ne s'y saisit)",
+        request=MonthClosingInputSerializer,
+        responses={201: MonthClosingSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(MonthClosingInputSerializer, request)
+        node = _parish(data["node"])
+        month = datetime.date.fromisoformat(f"{data['month']}-01")
+        closing = services_cloture.month_close(node=node, month=month, actor=request.user)
+        return Response(MonthClosingSerializer(closing).data, status=status.HTTP_201_CREATED)
+
+
+class AdjustmentApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_adjustments_list",
+                   summary="Écritures d'ajustement (remboursements, corrections de mois clos)",
+                   parameters=[NodeQuerySerializer, *_PAGINATION],
+                   responses=paginated_response_serializer(AdjustmentSerializer))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=AdjustmentSerializer,
+            queryset=selectors.adjustments_for_parish(node=node),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_adjustments_create",
+                   summary="Passer une écriture de correction (datée du jour, motif obligatoire)",
+                   request=AdjustmentInputSerializer, responses={201: AdjustmentSerializer})  # fmt: skip
+    def post(self, request: Request) -> Response:
+        data = _body(AdjustmentInputSerializer, request)
+        fund = selectors.fund_get(fund_id=data.pop("fund_id"))
+        adjustment = services_cloture.adjustment_create(actor=request.user, fund=fund, **data)
+        return Response(AdjustmentSerializer(adjustment).data, status=status.HTTP_201_CREATED)
+
+
+class IncidentListApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_incidents_list",
+                   summary="Incidents de paiement (paiements tardifs, montants incohérents) d'une paroisse",
+                   parameters=[IncidentFilterSerializer], responses=PaymentIncidentSerializer(many=True))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        filters = _query(IncidentFilterSerializer, request)
+        node = _parish(filters["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        incidents = selectors.incidents_for_parish(node=node, status=filters.get("status"))
+        return Response(PaymentIncidentSerializer(incidents, many=True).data)
+
+
+class IncidentResolveApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_incidents_resolve",
+                   summary="Régulariser un incident (intégrer le paiement tardif, remboursé, sans suite)",
+                   request=IncidentResolveInputSerializer, responses=PaymentIncidentSerializer)  # fmt: skip
+    def post(self, request: Request, incident_id: int) -> Response:
+        data = _body(IncidentResolveInputSerializer, request)
+        incident = services_cloture.incident_resolve(
+            incident=selectors.incident_get(incident_id=incident_id), actor=request.user, **data
+        )
+        return Response(PaymentIncidentSerializer(selectors.incident_get(incident_id=incident.pk)).data)
 
 
 class ExportApi(V1ApiMixin, ApiAuthMixin, APIView):

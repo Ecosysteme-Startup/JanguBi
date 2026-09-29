@@ -27,7 +27,7 @@ def test_activity_has_counts_rates_and_delays_but_no_amount(world, sept):
     Donation.objects.filter(pk__in=[d.pk for d in sept.online[:6]]).update(returned_at=datetime.datetime(2026, 9, 20, tzinfo=datetime.UTC))
     PaymentWebhookEvent.objects.create(provider="fake", payload_hash="a" * 64, status=WebhookStatus.TRAITE)
     PaymentWebhookEvent.objects.create(provider="fake", payload_hash="b" * 64, status=WebhookStatus.ERREUR,
-                                       error_code="amount_mismatch", external_ref="fake_x")  # fmt: skip
+                                       error_code="unknown_reference", external_ref="fake_x")  # fmt: skip
     response = client_for(world.platform).get(URL)
     assert response.status_code == 200, response.json()
     body = response.json()
@@ -48,7 +48,7 @@ def test_activity_has_counts_rates_and_delays_but_no_amount(world, sept):
     sd = next(row for row in body["par_paroisse"] if row["nom"] == "Saint-Dominique")
     assert (sd["collecte_ouverte"], sd["lances"], sd["confirmes"], sd["quetes_saisies"]) == (True, 58, 47, 10)
     assert body["notifications"]["recues"] == 2 and body["notifications"]["erreurs"] == 1
-    assert body["incidents"]["par_type"] == {"amount_mismatch": 1}
+    assert body["incidents"]["par_type"] == {"unknown_reference": 1}
     assert len(body["par_jour"]) == 27 and sum(d["lances"] for d in body["par_jour"]) == 58
     assert sum(c["nombre"] for c in body["charge"]) == 58
 

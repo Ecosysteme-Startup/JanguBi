@@ -156,7 +156,7 @@ def test_diocese_parishes_are_never_sorted_by_amount(world, sept):
                                 net_amount=amount, channel=DonationChannel.EN_LIGNE, status=DonationStatus.CONFIRME,
                                 value_date=datetime.date(2026, 9, 10))  # fmt: skip
     names = [p["nom"] for p in analyse(world.eveque, world.dakar, "diocese").json()["paroisses"]["lignes"]]
-    assert names == sorted(names, key=selectors_analyse._alpha_key)
+    assert names == sorted(names, key=selectors_analyse.alpha_key)
     assert names.index("Paroisse Aa (plus gros montant)") < names.index("Paroisse Zz")
 
 

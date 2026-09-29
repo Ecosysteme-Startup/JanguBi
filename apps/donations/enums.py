@@ -127,3 +127,24 @@ class RemittanceStatus(models.TextChoices):
     DECLAREE = "declaree", _("Déclarée par la paroisse")
     CONFIRMEE = "confirmee", _("Réception confirmée par la curie")
     CONTESTEE = "contestee", _("Contestée par la curie")
+
+
+class AdjustmentKind(models.TextChoices):
+    REMBOURSEMENT = "remboursement", _("Remboursement (ligne négative du mois du remboursement)")
+    CORRECTION = "correction", _("Correction d'un mois clos")
+
+
+class IncidentKind(models.TextChoices):
+    LATE_PAYMENT = "late_payment", _("Paiement réussi après expiration ou échec")
+    AMOUNT_MISMATCH = "amount_mismatch", _("Montant payé différent du montant attendu")
+
+
+class IncidentStatus(models.TextChoices):
+    OUVERT = "ouvert", _("À régulariser")
+    RESOLU = "resolu", _("Régularisé")
+
+
+class IncidentResolution(models.TextChoices):
+    INTEGRE = "integre", _("Paiement intégré au fonds (don confirmé)")
+    REMBOURSE = "rembourse", _("Remboursé chez l'agrégateur")
+    SANS_SUITE = "sans_suite", _("Sans suite (vérifié, rien à faire)")

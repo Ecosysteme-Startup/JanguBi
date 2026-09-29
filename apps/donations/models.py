@@ -13,6 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
 from apps.donations.enums import (
+    AdjustmentKind,
     AttemptStatus,
     CashCollectionStatus,
     DonationChannel,
@@ -21,6 +22,9 @@ from apps.donations.enums import (
     FundDestination,
     FundKind,
     FundStatus,
+    IncidentKind,
+    IncidentResolution,
+    IncidentStatus,
     PaymentMethod,
     PayoutStatus,
     RemittanceMode,
@@ -405,3 +409,86 @@ class PayoutLine(models.Model):
     class Meta:
         verbose_name = _("ligne de reversement")
         verbose_name_plural = _("lignes de reversement")
+
+
+class MonthClosing(BaseModel):
+    """Clôture mensuelle d'une paroisse : le mois est figé. Plus aucune quête ne s'y saisit ni ne s'y
+    valide ; une erreur se corrige par une écriture d'ajustement datée du mois courant."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="donation_closings")
+    month = models.DateField(_("mois (premier jour)"))
+    closed_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )  # null : clôture automatique
+    totals = models.JSONField(_("totaux figés"), default=dict)
+
+    class Meta:
+        verbose_name = _("clôture mensuelle")
+        verbose_name_plural = _("clôtures mensuelles")
+        ordering = ["-month"]
+        constraints = [
+            models.UniqueConstraint(fields=["node", "month"], name="dons_closing_unique_month"),
+            models.CheckConstraint(condition=Q(month__day=1), name="dons_closing_first_day"),
+        ]
+
+
+class DonationAdjustment(BaseModel):
+    """Écriture d'ajustement (montant signé) : remboursement, ou correction d'un mois clos. Même
+    vocabulaire de champs qu'un ``Donation`` pour s'agréger avec lui ; datée du jour où elle est passée."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="donation_adjustments")
+    fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="adjustments")
+    donation = models.ForeignKey(
+        Donation, on_delete=models.PROTECT, null=True, blank=True, related_name="adjustments"
+    )
+    kind = models.CharField(max_length=15, choices=AdjustmentKind.choices)
+    channel = models.CharField(max_length=10, choices=DonationChannel.choices)
+    source = models.CharField(max_length=12, choices=DonationSource.choices, null=True, blank=True)
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, blank=True, default="")
+    place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    amount = models.IntegerField(_("montant donné (signé)"))
+    net_amount = models.IntegerField(_("montant affecté (signé)"))
+    value_date = models.DateField(_("date de valeur"), db_index=True)
+    reason = models.CharField(_("motif"), max_length=300)
+    created_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        verbose_name = _("ajustement")
+        verbose_name_plural = _("ajustements")
+        ordering = ["-value_date", "-created_at"]
+        constraints = [
+            models.CheckConstraint(condition=~Q(amount=0), name="dons_adjustment_non_zero"),
+            models.UniqueConstraint(
+                fields=["donation"], condition=Q(kind="remboursement"), name="dons_adjustment_one_refund"
+            ),
+        ]
+
+
+class PaymentIncident(BaseModel):
+    """Incident de paiement persisté (paiement tardif, montant incohérent) : jamais perdu, à régulariser."""
+
+    attempt = models.ForeignKey(PaymentAttempt, on_delete=models.CASCADE, related_name="incidents")
+    donation = models.ForeignKey(Donation, on_delete=models.CASCADE, related_name="incidents")
+    kind = models.CharField(max_length=20, choices=IncidentKind.choices)
+    status = models.CharField(
+        max_length=10, choices=IncidentStatus.choices, default=IncidentStatus.OUVERT, db_index=True
+    )
+    reported_amount = models.PositiveIntegerField(null=True, blank=True)
+    resolution = models.CharField(max_length=12, choices=IncidentResolution.choices, blank=True, default="")
+    note = models.CharField(max_length=300, blank=True, default="")
+    resolved_by = models.ForeignKey(
+        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("incident de paiement")
+        verbose_name_plural = _("incidents de paiement")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["attempt", "kind"], name="dons_incident_unique_attempt_kind"),
+        ]

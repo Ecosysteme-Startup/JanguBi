@@ -11,6 +11,8 @@ from apps.donations.enums import (
     DonationStatus,
     FundKind,
     FundStatus,
+    IncidentResolution,
+    IncidentStatus,
     RemittanceMode,
     RemittanceStatus,
 )
@@ -20,8 +22,11 @@ from apps.donations.models import (
     CuriaRemittance,
     Donation,
     DonationActivation,
+    DonationAdjustment,
     Fund,
     FundUpdate,
+    MonthClosing,
+    PaymentIncident,
     Payout,
 )
 from apps.donations.selectors import donor_label, fund_updates
@@ -200,6 +205,26 @@ class RemittanceFilterSerializer(NodeQuerySerializer):
     status = serializers.ChoiceField(choices=RemittanceStatus.choices, required=False)
 
 
+class MonthClosingInputSerializer(NodeQuerySerializer):
+    month = serializers.RegexField(r"^\d{4}-(0[1-9]|1[0-2])$", help_text="AAAA-MM, mois écoulé")
+
+
+class AdjustmentInputSerializer(serializers.Serializer):
+    fund_id = serializers.UUIDField()
+    channel = serializers.ChoiceField(choices=DonationChannel.choices)
+    amount = serializers.IntegerField(help_text="FCFA, signé : négatif pour retirer, jamais nul")
+    reason = serializers.CharField(max_length=300)
+
+
+class IncidentFilterSerializer(NodeQuerySerializer):
+    status = serializers.ChoiceField(choices=IncidentStatus.choices, required=False)
+
+
+class IncidentResolveInputSerializer(serializers.Serializer):
+    resolution = serializers.ChoiceField(choices=IncidentResolution.choices)
+    note = serializers.CharField(max_length=300, required=False, allow_blank=True, default="")
+
+
 class ActivationInputSerializer(serializers.Serializer):
     node = serializers.UUIDField()
     enabled = serializers.BooleanField()
@@ -373,6 +398,7 @@ class SummaryFundSerializer(serializers.Serializer):
     fund_id = serializers.UUIDField()
     title = serializers.CharField()
     kind = serializers.CharField()
+    destination = serializers.CharField(help_text="paroisse ou curie (quête impérée)")
     total = serializers.IntegerField()
     count = serializers.IntegerField()
 
@@ -384,19 +410,32 @@ class SummaryMethodSerializer(serializers.Serializer):
 
 
 class SummaryDaySerializer(serializers.Serializer):
-    date = serializers.DateField()
+    date = serializers.DateField(help_text="Date de valeur (jour de la messe pour les espèces)")
+    online = serializers.IntegerField()
+    cash = serializers.IntegerField()
     total = serializers.IntegerField()
+
+
+class SummaryDestinationSerializer(serializers.Serializer):
+    paroisse = serializers.IntegerField()
+    curie = serializers.IntegerField()
 
 
 class ParishSummarySerializer(serializers.Serializer):
     month = serializers.DateField()
-    total = serializers.IntegerField(help_text="Affecté ce mois (dons confirmés)")
+    total = serializers.IntegerField(help_text="Affecté ce mois (date de valeur), remboursements déduits")
     online = serializers.IntegerField()
     cash = serializers.IntegerField()
     fees = serializers.IntegerField()
-    count = serializers.IntegerField()
-    pending_count = serializers.IntegerField()
+    count = serializers.IntegerField(help_text="Obsolète : additionne dons en ligne et quêtes. Utiliser les deux champs suivants.")
+    online_count = serializers.IntegerField(help_text="Dons en ligne")
+    cash_collections_count = serializers.IntegerField(help_text="Quêtes en espèces validées")
+    pending_count = serializers.IntegerField(help_text="Paiements lancés ce mois encore en attente")
+    pending_oldest_at = serializers.DateTimeField(allow_null=True)
     cash_to_validate = serializers.IntegerField()
+    closed = serializers.BooleanField(help_text="Mois clos : aucune opération ne s'y ajoute plus")
+    closed_at = serializers.DateTimeField(allow_null=True)
+    by_destination = SummaryDestinationSerializer()
     by_fund = SummaryFundSerializer(many=True)
     by_method = SummaryMethodSerializer(many=True)
     daily = SummaryDaySerializer(many=True)
@@ -510,6 +549,48 @@ class RemittanceSerializer(serializers.ModelSerializer):
 
     def get_confirmed_by(self, obj: CuriaRemittance) -> str | None:
         return _full_name(obj.confirmed_by) if obj.confirmed_by else None
+
+
+class MonthClosingSerializer(serializers.ModelSerializer):
+    closed_by = serializers.SerializerMethodField(help_text="Vide : clôture automatique")
+    totals = serializers.DictField(help_text="Totaux figés : collecte, en_ligne, especes, affecte, par_type_fonds")
+
+    class Meta:
+        model = MonthClosing
+        fields = ["id", "node_id", "month", "closed_by", "totals", "created_at"]
+
+    def get_closed_by(self, obj: MonthClosing) -> str:
+        return _full_name(obj.closed_by) if obj.closed_by else ""
+
+
+class AdjustmentSerializer(serializers.ModelSerializer):
+    fund = FundBriefSerializer()
+    donation_reference = serializers.CharField(source="donation.reference", allow_null=True, default=None)
+    created_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DonationAdjustment
+        fields = ["id", "fund", "kind", "channel", "amount", "net_amount", "value_date", "reason", "donation_reference",
+                  "created_by", "created_at"]  # fmt: skip
+
+    def get_created_by(self, obj: DonationAdjustment) -> str:
+        return _full_name(obj.created_by) if obj.created_by else ""
+
+
+class PaymentIncidentSerializer(serializers.ModelSerializer):
+    reference = serializers.CharField(source="donation.reference")
+    fund = FundBriefSerializer(source="donation.fund")
+    amount = serializers.IntegerField(source="donation.charged_amount", help_text="Montant attendu (payé)")
+    donation_status = serializers.CharField(source="donation.status")
+    resolved_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaymentIncident
+        fields = ["id", "kind", "status", "reference", "fund", "amount", "reported_amount", "donation_status",
+                  "resolution", "note", "resolved_by", "resolved_at", "created_at"]  # fmt: skip
+
+    def get_resolved_by(self, obj: PaymentIncident) -> str | None:
+        return _full_name(obj.resolved_by) if obj.resolved_by else None
 
 
 class PayoutSerializer(serializers.ModelSerializer):
