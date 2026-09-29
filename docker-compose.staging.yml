@@ -1,0 +1,261 @@
+# ==============================================================================
+# RECETTE (staging) — pile complète autonome, image de production, réglages
+# config.django.staging. Pas de production ici. Mode d'emploi : docs/RECETTE.md.
+#
+#   cp .env.staging.example .env.staging   # puis renseigner les secrets
+#   docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+#
+# Ports publiés sur l'hôte (décalés pour cohabiter avec la pile de dev) :
+#   8100 API (daphne) · 8280 Keycloak · 9100/9101 MinIO (API/console) · 8026 Mailpit
+#   15673 RabbitMQ (console, 127.0.0.1 seulement). Postgres et Redis ne sont pas publiés.
+# ==============================================================================
+name: jangubi-staging
+
+x-app-base: &app-base
+  build:
+    context: .
+    dockerfile: docker/production.Dockerfile
+  image: jangubi-backend:staging
+  env_file:
+    - .env.staging
+  environment:
+    DJANGO_SETTINGS_MODULE: config.django.staging
+  restart: unless-stopped
+  networks:
+    - staging
+
+# Workers et planificateur : pas de migration au démarrage (seul django migre), pour éviter
+# plusieurs `migrate` concurrents ; ils attendent que l'API réponde.
+x-worker-base: &worker-base
+  <<: *app-base
+  entrypoint: []
+  depends_on:
+    django:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  # --- Données ------------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg17
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=top"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jangubi}
+      POSTGRES_USER: ${POSTGRES_USER:-jangubi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env.staging}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - staging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - staging
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-jangubi}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD manquant dans .env.staging}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - staging
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-jangubi}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD manquant dans .env.staging}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - staging
+
+  # Crée le bucket privé des médias (audio-raw/, audio-hls/, audio-covers/…) puis s'arrête.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-jangubi}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD manquant dans .env.staging}
+      BUCKET: ${AWS_STORAGE_BUCKET_NAME:-jangubi-media}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set recette http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
+        mc mb --ignore-existing "recette/$$BUCKET" &&
+        mc mb --ignore-existing recette/rosary-audio &&
+        mc anonymous set download recette/rosary-audio
+    restart: "no"
+    networks:
+      - staging
+
+  # Piège à e-mails : Django et Keycloak (vérification d'adresse, mot de passe oublié).
+  # Rien ne part vers de vraies boîtes en recette.
+  mailpit:
+    image: axllent/mailpit:latest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "8026:8025"
+    restart: unless-stopped
+    networks:
+      - staging
+
+  # --- Keycloak (ADR-004) : realm importé au premier démarrage --------------------------------
+  keycloak-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?KEYCLOAK_DB_PASSWORD manquant dans .env.staging}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - staging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    # Mode « start » (pas start-dev) ; HTTP admis derrière un proxy TLS ou sur un poste de recette.
+    command: ["start", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?KEYCLOAK_ADMIN_PASSWORD manquant dans .env.staging}
+      # URL publique : c'est l'émetteur (iss) des jetons, qui doit égaler KEYCLOAK_SERVER_URL côté API.
+      KC_HOSTNAME: ${KEYCLOAK_SERVER_URL:-http://localhost:8280}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      # Substitués dans infra/keycloak/realm-jangubi.json à l'import.
+      KC_ADMIN_SYNC_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:?KEYCLOAK_ADMIN_CLIENT_SECRET manquant dans .env.staging}
+      KC_WEB_REDIRECT_URI: ${KC_WEB_REDIRECT_URI:-http://localhost:3000/auth/callback}
+      KC_WEB_LEGACY_REDIRECT_URI: ${KC_WEB_LEGACY_REDIRECT_URI:-http://localhost:3000/api/auth/callback/keycloak}
+      KC_MOBILE_REDIRECT_URI: ${KC_MOBILE_REDIRECT_URI:-sn.numerisen.jangubi://oauth}
+      KC_WEB_POST_LOGOUT_URI: ${KC_WEB_POST_LOGOUT_URI:-http://localhost:3000/}
+      KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
+      JANGUBI_API_URL: ${JANGUBI_API_URL:-http://localhost:8100/api/v1}
+      KC_SMTP_HOST: mailpit
+      KC_SMTP_PORT: "1025"
+      KC_SMTP_FROM: ${KC_SMTP_FROM:-noreply@jangubi.sn}
+      KC_SMTP_STARTTLS: "false"
+      KC_SMTP_AUTH: "false"
+    volumes:
+      - ./infra/keycloak/realm-jangubi.json:/opt/keycloak/data/import/realm-jangubi.json:ro
+      - ./infra/keycloak/themes/jangubi:/opt/keycloak/themes/jangubi:ro
+    ports:
+      - "8280:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - staging
+
+  # --- Application ----------------------------------------------------------------------------
+  # API HTTP + WebSocket + SSE (ASGI). L'entrypoint de l'image applique les migrations.
+  django:
+    <<: *app-base
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+    ports:
+      - "8100:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # Daphne écoute (les migrations sont passées) : indépendant d'ALLOWED_HOSTS et de l'auth.
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # Files « default » (e-mails, notifications, push, webhooks) et « reco » (recommandations).
+  celery:
+    <<: *worker-base
+    command: ["celery", "-A", "apps.tasks", "worker", "-Q", "default,celery,reco", "-n", "default@%h", "-l", "info",
+              "--concurrency=2", "--without-gossip", "--without-mingle", "--without-heartbeat"]
+
+  # File « media » : encodage audio. Même image, avec ffmpeg installé (EXTRA_APT_PACKAGES).
+  celery-media:
+    <<: *worker-base
+    build:
+      context: .
+      dockerfile: docker/production.Dockerfile
+      args:
+        EXTRA_APT_PACKAGES: ffmpeg
+    image: jangubi-backend:staging-media
+    command: ["celery", "-A", "apps.tasks", "worker", "-Q", "media", "-n", "media@%h", "-l", "info",
+              "--concurrency=1", "--prefetch-multiplier=1", "--without-gossip", "--without-mingle", "--without-heartbeat"]
+
+  beat:
+    <<: *worker-base
+    command: ["celery", "-A", "apps.tasks", "beat", "-l", "info",
+              "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  minio_data:
+  keycloak_db_data:
+
+networks:
+  staging:
+    driver: bridge

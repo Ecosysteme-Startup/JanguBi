@@ -33,9 +33,14 @@ ENV PYTHONUNBUFFERED=1 \
 # Librairies SYSTÈME nécessaires à l'EXÉCUTION (pas au build) :
 #   libpq5   → client PostgreSQL requis par psycopg2 au runtime
 #   libgomp1 → OpenMP requis par onnxruntime (moteur de fastembed) au runtime
+#   EXTRA_APT_PACKAGES → paquets en plus, vide par défaut. Le worker d'encodage audio de la
+#                        recette y passe « ffmpeg » (docker-compose.staging.yml) ; les autres
+#                        images restent sans ffmpeg.
+ARG EXTRA_APT_PACKAGES=""
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
         libgomp1 \
+        ${EXTRA_APT_PACKAGES} \
     && rm -rf /var/lib/apt/lists/*
 
 

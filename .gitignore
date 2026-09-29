@@ -141,3 +141,6 @@ pyrightconfig.json
 
 # Secrets locaux pour act (voir .secrets.example)
 .secrets
+
+# Recette (docs/RECETTE.md) : copie locale non versionnée
+.env.staging
