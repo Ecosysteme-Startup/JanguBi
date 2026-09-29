@@ -20,6 +20,7 @@ from apps.news.serializers import (
     ArticleFilterSerializer,
     ArticleListOutputSerializer,
     ArticleOutputSerializer,
+    ArticlePinInputSerializer,
     ArticlePublishInputSerializer,
     ArticleUnpublishInputSerializer,
     ArticleUpdateInputSerializer,
@@ -298,6 +299,34 @@ class StaffArticleUnpublishApi(_StaffApi):
         serializer.is_valid(raise_exception=True)
         article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
         services.article_unpublish(article=article, editor=request.user, reason=serializer.validated_data["reason"])
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
+
+
+class StaffArticlePinApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_news_pin",
+        summary="Épingler un contenu en tête jusqu'à une date de fin",
+        request=ArticlePinInputSerializer,
+        responses=StaffArticleOutputSerializer,
+    )
+    def post(self, request: Request, article_id: str) -> Response:
+        serializer = ArticlePinInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
+        services.article_pin(article=article, editor=request.user, until=serializer.validated_data["until"])
+        return Response(
+            StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
+        )
+
+    @extend_schema(
+        tags=TAG, operation_id="staff_news_unpin", summary="Désépingler un contenu", responses=StaffArticleOutputSerializer
+    )
+    def delete(self, request: Request, article_id: str) -> Response:
+        article = selectors.article_get_for_staff(user=request.user, article_id=article_id)
+        services.article_unpin(article=article, editor=request.user)
         return Response(
             StaffArticleOutputSerializer(selectors.article_get_for_staff(user=request.user, article_id=article_id)).data
         )

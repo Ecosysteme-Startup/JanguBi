@@ -233,6 +233,28 @@ class ProcessorDetailApi(_ProcessorApi):
         return Response(ProcessorOutputSerializer(obj, context={"with_history": True, "request": request}).data)
 
 
+class RequestConversationOutputSerializer(serializers.Serializer):
+    conversation_id = serializers.UUIDField()
+    created = serializers.BooleanField(help_text="Vrai si la conversation vient d'être ouverte")
+
+
+class RequestConversationApi(_ProcessorApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_documents_conversation",
+        summary="Écrire au demandeur : ouvrir ou retrouver la conversation (prêtre de la paroisse)",
+        request=None,
+        responses=RequestConversationOutputSerializer,
+    )
+    def post(self, request: Request, request_id: str) -> Response:
+        obj = selectors.request_get_for_processor(user=request.user, request_id=request_id)
+        conversation, created = services.request_conversation_open(request=obj, actor=request.user)
+        return Response(
+            RequestConversationOutputSerializer({"conversation_id": conversation.pk, "created": created}).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
 _ACTIONS = {
     "start-verification": "start_verification",
     "request-info": "request_info",

@@ -128,3 +128,13 @@ def planning_for(*, user: Any, node_id: Any = None, date_from: datetime.date | N
         .prefetch_related(Prefetch("bookings", queryset=active, to_attr="active_bookings"))
         .order_by("starts_at")
     )
+
+
+def priest_get(*, user_id: Any) -> Any:
+    """Confesseur désigné pour une séance ponctuelle : un compte actif (404 sinon)."""
+    from apps.users.models import BaseUser
+
+    priest = BaseUser.objects.filter(pk=user_id, is_active=True).first()
+    if priest is None:
+        raise NotFoundError("Prêtre introuvable.")
+    return priest

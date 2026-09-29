@@ -17,6 +17,7 @@ from apps.confessions.serializers import (
     PlanningSlotSerializer,
     RuleCreateInputSerializer,
     RuleOutputSerializer,
+    SessionOpenInputSerializer,
     SlotCancelInputSerializer,
     SlotFilterSerializer,
     SlotOutputSerializer,
@@ -144,6 +145,25 @@ class RuleDetailApi(_PriestApi):
         rule = selectors.rule_get_for_priest(user=request.user, rule_id=rule_id)
         services.rule_deactivate(rule=rule, actor=request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SessionOpenApi(_PriestApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_confessions_sessions_create",
+        summary="Ouvrir une séance ponctuelle de confession (créneaux libres sur une plage d'un jour)",
+        request=SessionOpenInputSerializer,
+        responses={201: SlotOutputSerializer(many=True)},
+    )
+    def post(self, request: Request) -> Response:
+        serializer = SessionOpenInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = dict(serializer.validated_data)
+        place = hierarchy_selectors.place_get(place_id=data.pop("place_id"))
+        priest_id = data.pop("priest_id")
+        priest = selectors.priest_get(user_id=priest_id) if priest_id else None
+        slots = services.session_open(actor=request.user, place=place, day=data.pop("date"), priest=priest, **data)
+        return Response(SlotOutputSerializer(slots, many=True).data, status=status.HTTP_201_CREATED)
 
 
 class PlanningApi(V1ApiMixin, ApiAuthMixin, APIView):

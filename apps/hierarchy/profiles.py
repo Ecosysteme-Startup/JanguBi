@@ -196,6 +196,10 @@ CAPABILITIES: list[CapabilitySpec] = [
     # V2, décisions 6-8 (29/09/2026) : adhésion libre, mais la paroisse peut retirer un membre.
     # Donnée personnelle : réservée à la paroisse même (pas à l'évêque, RG-11).
     {"code": "paroissiens.gerer", "label": "Voir les membres de la paroisse et en retirer", "domain": "paroisse"},
+    # Lot V1-routes : invitations et validation des comptes du clergé (diocèse, plateforme).
+    {"code": "comptes.valider", "label": "Inviter, valider et activer les comptes du clergé", "domain": "offices"},
+    # Lot V1-routes : intentions de messe reçues par le secrétariat (aucun montant, aucun paiement).
+    {"code": "intentions.gerer", "label": "Recevoir et planifier les intentions de messe", "domain": "paroisse"},
 ]
 
 # Capacités « dons » par office (ADR-017). Séparées pour que la migration de données
@@ -228,6 +232,16 @@ AUDIO_OFFICE_CAPABILITIES: dict[str, list[str]] = {
     "delegue_numerique_diocesain": ["audio.publier", "audio.moderer"],
 }
 
+# Lot V1-routes : la migration 0014 ajoute ces capacités aux offices déjà chargés.
+V1_ROUTES_OFFICE_CAPABILITIES: dict[str, list[str]] = {
+    "chancelier": ["comptes.valider"],
+    "vicaire_general": ["comptes.valider"],
+    "eveque_diocesain": ["comptes.valider", "intentions.gerer"],
+    "cure": ["intentions.gerer"],
+    "cure_in_solidum": ["intentions.gerer"],
+    "secretaire_paroissial": ["intentions.gerer"],
+}
+
 # Membres de la paroisse (décisions 6-8) : la migration 0013 l'ajoute aux offices déjà chargés.
 MEMBRES_OFFICE_CAPABILITIES: dict[str, list[str]] = {
     "cure": ["paroissiens.gerer"],
@@ -257,13 +271,14 @@ _CURE_CAPABILITIES = [
     *DONS_PAROISSE_CAPABILITIES,
     *AUDIO_OFFICE_CAPABILITIES["cure"],
     *MEMBRES_OFFICE_CAPABILITIES["cure"],
+    "intentions.gerer",
 ]
 
 OFFICES: list[OfficeSpec] = [
     {"code": "eveque_diocesain", "label": "Évêque diocésain", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "one", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": _ALL_BUT_PLATFORM_AND_MESSAGING},
     {"code": "eveque_auxiliaire", "label": "Évêque auxiliaire", "node_types": ["diocese"], "required_order": "eveque", "cardinality": "many", "appointed_by": [], "appointed_by_platform": True, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser", "annonces.publier", "audit.voir"]},
-    {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir"]},
-    {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir"]},
+    {"code": "vicaire_general", "label": "Vicaire général / épiscopal", "node_types": ["diocese", "zone"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "tableau_bord.voir", "actes.superviser", "audit.voir", "comptes.valider"]},
+    {"code": "chancelier", "label": "Chancelier", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "offices.nommer", "personnes.verifier", "tableau_bord.voir", "audit.voir", "comptes.valider"]},
     {"code": "delegue_numerique_diocesain", "label": "Délégué diocésain au numérique", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["structure.gerer", "horaires.gerer", "tableau_bord.voir", "audio.publier", "audio.moderer"]},
     {"code": "econome_diocesain", "label": "Économe diocésain", "node_types": ["diocese"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "dons.definir_quete_imperee", "dons.voir_agregats"]},
     {"code": "doyen", "label": "Doyen", "node_types": ["doyenne"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", "actes.superviser"]},
@@ -273,7 +288,7 @@ OFFICES: list[OfficeSpec] = [
     {"code": "vicaire_paroissial", "label": "Vicaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "pretre", "cardinality": "many", "appointed_by": ["eveque_diocesain", "chancelier"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["annonces.publier", "evenements.gerer", "actes.traiter", "messagerie.recevoir_fideles", "confessions.gerer", "audio.publier"]},
     {"code": "aumonier", "label": "Aumônier", "node_types": ["aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["annonces.publier", "evenements.gerer", "messagerie.recevoir_fideles", "confessions.gerer", "audio.publier"]},
     {"code": "recteur", "label": "Recteur de sanctuaire / d'église", "node_types": ["paroisse", "quasi_paroisse", "aumonerie"], "required_order": "pretre", "cardinality": "one", "appointed_by": ["eveque_diocesain"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["horaires.gerer", "annonces.publier", "confessions.gerer"]},
-    {"code": "secretaire_paroissial", "label": "Secrétaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "actes.traiter", "confessions.voir_planning", "tableau_bord.voir", "dons.voir_fonds", "dons.saisir_quete", "audio.publier", "paroissiens.gerer"]},
+    {"code": "secretaire_paroissial", "label": "Secrétaire paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "actes.traiter", "confessions.voir_planning", "tableau_bord.voir", "dons.voir_fonds", "dons.saisir_quete", "audio.publier", "paroissiens.gerer", "intentions.gerer"]},
     {"code": "econome_paroissial", "label": "Économe paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "one", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["tableau_bord.voir", *DONS_PAROISSE_CAPABILITIES]},
     {"code": "referent_numerique", "label": "Référent numérique paroissial", "node_types": ["paroisse", "quasi_paroisse"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": True, "capabilities": ["horaires.gerer", "annonces.publier", "evenements.gerer", "tableau_bord.voir", "audio.publier"]},
     {"code": "catechiste", "label": "Catéchiste", "node_types": ["paroisse", "quasi_paroisse", "ceb"], "required_order": "aucun", "cardinality": "many", "appointed_by": ["cure", "cure_in_solidum"], "appointed_by_platform": False, "inherits_down": False, "capabilities": ["evenements.gerer"]},
@@ -296,5 +311,7 @@ PLATFORM_ADMIN_CAPABILITIES = frozenset(
         # Sonothèque : la plateforme peut retirer un contenu signalé (droits d'auteur, contenu
         # inapproprié) partout, sans publier à la place des paroisses.
         "audio.moderer",
+        # Lot V1-routes : la plateforme invite et valide les comptes du clergé.
+        "comptes.valider",
     }
 )

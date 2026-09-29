@@ -126,6 +126,74 @@ def slots_generate(*, today: datetime.date | None = None) -> int:
     return total
 
 
+# --- Séance ponctuelle (lot V1-routes, G05) --------------------------------------------------
+
+SESSION_MAX_SLOTS = 48
+
+
+@transaction.atomic
+def session_open(
+    *,
+    actor: Any,
+    place: PlaceOfWorship,
+    day: datetime.date,
+    start_time: datetime.time,
+    end_time: datetime.time,
+    slot_minutes: int = 10,
+    priest: Any = None,
+) -> list[ConfessionSlot]:
+    """Ouvre une séance ponctuelle (sans règle hebdomadaire) : des créneaux libres de
+    ``slot_minutes`` entre ``start_time`` et ``end_time`` le jour ``day``.
+
+    Le confesseur (``priest``, par défaut celui qui ouvre) doit détenir ``confessions.gerer`` sur
+    le nœud du lieu ; ouvrir pour un autre prêtre exige aussi ``confessions.gerer`` sur ce nœud.
+    Les créneaux déjà existants du prêtre à la même heure sont gardés (idempotent)."""
+    priest = priest or actor
+    node = place.node
+    if not authz.peut(actor, "confessions.gerer", node):
+        raise PermissionDeniedError("Vous ne gérez pas de créneaux sur ce lieu.", code="confessions_forbidden")
+    if priest.pk != actor.pk and not authz.peut(priest, "confessions.gerer", node):
+        raise ApplicationError("Ce prêtre ne confesse pas sur ce lieu.", code="priest_not_confessor")
+    if not place.is_active:
+        raise ApplicationError("Ce lieu n'est plus actif.", code="place_inactive")
+    if end_time <= start_time:
+        raise ApplicationError("La fin doit suivre le début.", code="invalid_times")
+    today = timezone.localdate()
+    if day < today or day > today + datetime.timedelta(days=HORIZON_DAYS * 3):
+        raise ApplicationError("Choisissez une date dans les douze semaines à venir.", code="invalid_day")
+    tz = timezone.get_current_timezone()
+    step = datetime.timedelta(minutes=slot_minutes)
+    cursor = datetime.datetime.combine(day, start_time, tzinfo=tz)
+    end = datetime.datetime.combine(day, end_time, tzinfo=tz)
+    now = timezone.now()
+    starts = []
+    while cursor + step <= end:
+        if cursor > now:
+            starts.append(cursor)
+        cursor += step
+    if not starts:
+        raise ApplicationError("Aucun créneau à venir dans cette plage.", code="no_slot")
+    if len(starts) > SESSION_MAX_SLOTS:
+        raise ApplicationError("Séance trop longue : réduisez la plage.", code="session_too_long")
+    ConfessionSlot.objects.bulk_create(
+        [ConfessionSlot(priest=priest, place=place, starts_at=s, ends_at=s + step) for s in starts],
+        ignore_conflicts=True,
+    )
+    slots = list(
+        ConfessionSlot.objects.filter(priest=priest, place=place, starts_at__in=starts)
+        .select_related("place", "priest__profile")
+        .order_by("starts_at")
+    )
+    audit_log(
+        actor=actor,
+        action="confessions.seance_ouverture",
+        target=place,
+        node=node,
+        metadata={"day": day.isoformat(), "slots": len(slots), "priest_id": str(priest.pk)},
+    )
+    return slots
+
+
 # --- Réservations -------------------------------------------------------------------------
 
 

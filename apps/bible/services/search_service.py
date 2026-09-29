@@ -40,6 +40,13 @@ class SearchService:
 
         return self._group_results_by_book(raw_results)
 
+    def verses(self, query: str, *, limit: int, source_file: Optional[str] = None) -> List[Dict]:
+        """Versets (liste à plat, par pertinence) : FTS puis repli trigramme. Recherche transverse."""
+        clean_query = CleaningService.clean_text(query)
+        if not clean_query:
+            return []
+        return self._lexical_search(clean_query, None, None, None, limit, source_file=source_file)
+
     def _lexical_search(
         self, query: str, testament_slug: Optional[str],
         book_slug: Optional[str], chapter_number: Optional[int], limit: int, source_file: Optional[str] = "bible_fr"

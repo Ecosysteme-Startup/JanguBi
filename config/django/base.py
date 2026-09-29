@@ -157,6 +157,9 @@ LOCAL_APPS = [
     "apps.dashboards.apps.DashboardsConfig",
     "apps.contact.apps.ContactConfig",
     "apps.donations.apps.DonationsConfig",
+    "apps.invitations.apps.InvitationsConfig",
+    "apps.intentions.apps.IntentionsConfig",
+    "apps.search.apps.SearchConfig",
     "apps.audio.apps.AudioConfig",
     "apps.realtime.apps.RealtimeConfig",
 ]

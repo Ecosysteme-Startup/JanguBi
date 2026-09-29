@@ -1,0 +1,8 @@
+<p>Bonjour{% if invitation.first_name %} {{ invitation.first_name }}{% endif %},</p>
+<p>{{ invitation.node.name }} vous invite à rejoindre l'espace du clergé de Jàngu Bi.</p>
+<ol>
+  <li><a href="{{ register_url }}">Créez votre compte</a> (ou connectez-vous) avec cette adresse e-mail.</li>
+  <li><a href="{{ accept_url }}">Acceptez l'invitation</a>.</li>
+</ol>
+<p>Votre compte sera ensuite validé par le diocèse. Ce lien est valable jusqu'au {{ invitation.expires_at|date:"d/m/Y" }}.</p>
+<p>Si vous n'attendiez pas cette invitation, ignorez ce message.</p>

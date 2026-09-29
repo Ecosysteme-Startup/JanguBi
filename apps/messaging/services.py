@@ -163,6 +163,26 @@ def conversation_get_or_create(
 
 
 @transaction.atomic
+def conversation_open_by_priest(*, priest: BaseUser, fidele: BaseUser) -> tuple[Conversation, bool]:
+    """Le prêtre (titulaire de ``messagerie.recevoir_fideles``) écrit le premier à un fidèle,
+    par exemple depuis une demande d'acte (lot V1-routes, G03). Sa propre disponibilité ne
+    l'empêche pas d'écrire ; le fidèle doit être majeur (RG-13) et aucun blocage ne doit exister."""
+    from apps.hierarchy import authz
+
+    if fidele.pk == priest.pk:
+        raise ApplicationError("Conversation impossible avec soi-même.", code="self_conversation")
+    if not authz.a_la_capacite(priest, "messagerie.recevoir_fideles"):
+        raise ApplicationError("Vous n'êtes pas joignable par la messagerie.", code="not_reachable")
+    participant_a, participant_b = _normalize_participants(fidele, priest)
+    existing = Conversation.objects.filter(participant_a=participant_a, participant_b=participant_b).first()
+    if existing is not None:
+        return existing, False
+    adult_check(user=fidele)
+    _check_not_blocked(priest, fidele)
+    return Conversation.objects.get_or_create(participant_a=participant_a, participant_b=participant_b)
+
+
+@transaction.atomic
 def availability_update(*, user: BaseUser, data: dict) -> MessagingAvailability:
     """EF-PRE-07 : disponibilités d'un prêtre joignable."""
     from apps.hierarchy import authz

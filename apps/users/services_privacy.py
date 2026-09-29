@@ -226,6 +226,9 @@ def account_delete(*, user: Any) -> None:
     conversations = _purge_conversations(user)
     documents = _anonymize_document_requests(user, now)
     _release_bookings_and_registrations(user, now)
+    from apps.intentions.services import intentions_forget
+
+    intentions_forget(user=user)
     _forget_traces(user)
     _declaration_forget(user)
     keycloak_sub = _anonymize_identity(user)

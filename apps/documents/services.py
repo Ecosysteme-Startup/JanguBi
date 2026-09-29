@@ -691,3 +691,36 @@ def document_attachments_purge(*, now: datetime.datetime | None = None, retentio
         )
         purged += 1
     return purged
+
+
+# --- Conversation avec le demandeur (lot V1-routes, G03) -----------------------------------
+
+
+@transaction.atomic
+def request_conversation_open(*, request: DocumentRequest, actor: Any) -> tuple[Any, bool]:
+    """« Écrire à … » depuis une demande : ouvre (ou retrouve) la conversation entre le prêtre qui
+    traite la demande et le demandeur. Réservé à qui peut traiter la demande ET est joignable par
+    les fidèles sur la paroisse du sacrement (la messagerie relie un fidèle et un prêtre, RG-09).
+    Aucune donnée de la demande n'est copiée dans la conversation ; l'ouverture est journalisée."""
+    from apps.messaging.services import conversation_open_by_priest
+
+    node = request.target_node
+    if not authz.peut(actor, "actes.traiter", node):
+        raise PermissionDeniedError("Vous ne traitez pas cette demande.", code="documents_forbidden")
+    if not authz.peut(actor, "messagerie.recevoir_fideles", node):
+        raise PermissionDeniedError(
+            "La messagerie relie un fidèle et un prêtre de la paroisse. Contactez le demandeur par téléphone "
+            "ou par e-mail.",
+            code="messaging_not_allowed",
+        )
+    if request.requester_id is None or not request.requester.is_active:
+        raise ApplicationError("Le demandeur n'a plus de compte actif.", code="requester_inactive")
+    conversation, created = conversation_open_by_priest(priest=actor, fidele=request.requester)
+    audit_log(
+        actor=actor,
+        action="actes.conversation_demandeur",
+        target=request,
+        node=node,
+        metadata={"conversation_id": str(conversation.pk), "created": created},
+    )
+    return conversation, created

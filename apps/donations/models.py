@@ -9,6 +9,7 @@ import uuid
 
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Lower
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
@@ -177,6 +178,34 @@ class CashCollection(BaseModel):
                 name="dons_cash_four_eyes",
             ),
         ]
+
+
+class CollectionCounter(BaseModel):
+    """Membre de l'équipe des compteurs de quête d'une paroisse (lot V1-routes, G08).
+
+    Un nom suffit : beaucoup de compteurs n'ont pas de compte Jàngu Bi. Retirer un compteur le désactive : les quêtes déjà saisies gardent le
+    nom tel quel (``CashCollection.counter_one``/``counter_two`` sont du texte)."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="collection_counters")
+    name = models.CharField(_("nom"), max_length=120)
+    is_active = models.BooleanField(_("actif"), default=True)
+    created_by = models.ForeignKey("users.BaseUser", on_delete=models.PROTECT, related_name="+")
+
+    class Meta:
+        verbose_name = _("compteur de quête")
+        verbose_name_plural = _("compteurs de quête")
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "node",
+                condition=Q(is_active=True),
+                name="dons_counter_unique_active_name",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
 
 
 class CashDeposit(BaseModel):

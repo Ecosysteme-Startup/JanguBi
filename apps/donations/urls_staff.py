@@ -1,6 +1,6 @@
 from django.urls import path
 
-from apps.donations import apis
+from apps.donations import apis, apis_compteurs
 
 urlpatterns = [
     path("fonds/", apis.FundListCreateApi.as_view(), name="funds"),
@@ -17,6 +17,8 @@ urlpatterns = [
     path("quetes/", apis.CashCollectionListCreateApi.as_view(), name="cash"),
     path("quetes/<int:collection_id>/valider/", apis.CashCollectionValidateApi.as_view(), name="cash-validate"),
     path("quetes/<int:collection_id>/rejeter/", apis.CashCollectionRejectApi.as_view(), name="cash-reject"),
+    path("compteurs/", apis_compteurs.CounterListCreateApi.as_view(), name="counters"),
+    path("compteurs/<int:counter_id>/", apis_compteurs.CounterDetailApi.as_view(), name="counter-detail"),
     path("depots/", apis.CashDepositListCreateApi.as_view(), name="deposits"),
     path("remises-curie/", apis.RemittanceListCreateApi.as_view(), name="remittances"),
     path("remises-curie/<int:remittance_id>/confirmer/", apis.RemittanceConfirmApi.as_view(), name="remittance-confirm"),

@@ -47,6 +47,7 @@ class ArticleOutputSerializer(serializers.ModelSerializer):
     scope = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
+    is_pinned = serializers.BooleanField(read_only=True, default=False, help_text="Épinglé en tête (date de fin non dépassée)")
 
     class Meta:
         model = Article
@@ -67,6 +68,8 @@ class ArticleOutputSerializer(serializers.ModelSerializer):
             "cover_image_alt",
             "cover_image_decorative",
             "published_at",
+            "is_pinned",
+            "pinned_until",
             "reactions",
         ]
 
@@ -105,6 +108,7 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
     cover_image_id = serializers.IntegerField(read_only=True, allow_null=True)
     cover_image_url = serializers.SerializerMethodField()
     reads_count = serializers.IntegerField(read_only=True, default=0)
+    is_pinned = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Article
@@ -131,6 +135,8 @@ class StaffArticleOutputSerializer(serializers.ModelSerializer):
             "cover_image_alt",
             "cover_image_decorative",
             "notify_followers",
+            "is_pinned",
+            "pinned_until",
             "reads_count",
             "created_at",
             "updated_at",
@@ -249,6 +255,10 @@ class ArticlePublishInputSerializer(serializers.Serializer):
 
 class ArticleUnpublishInputSerializer(serializers.Serializer):
     reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ArticlePinInputSerializer(serializers.Serializer):
+    until = serializers.DateTimeField(help_text="Fin de l'épinglage (future, 60 jours au plus)")
 
 
 class ReactionInputSerializer(serializers.Serializer):
