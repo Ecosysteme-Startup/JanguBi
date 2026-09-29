@@ -19,6 +19,7 @@ import dataclasses
 import hashlib
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import urllib.request
@@ -165,6 +166,12 @@ def fetch(asset: Asset, store: Any, *, timeout: int = 60) -> tuple[str, str]:
     return "téléchargé", digest
 
 
+def _title_from(stem: str) -> str:
+    """« 02-gloria_in_excelsis » → « Gloria in excelsis »."""
+    text = re.sub(r"^[\d\s._-]+", "", stem).replace("_", " ").replace("-", " ").strip()
+    return (text or stem).capitalize()
+
+
 # --- Album fourni par l'utilisateur -----------------------------------------------------------------
 
 
@@ -206,7 +213,7 @@ def user_album(folder: str | None) -> list[UserTrack]:
         )
         tracks.append(
             UserTrack(
-                path=path, titre=meta.get("titre") or path.stem.replace("_", " ").replace("-", " ").strip().capitalize(),
+                path=path, titre=meta.get("titre") or _title_from(path.stem),
                 compositeur=meta.get("compositeur", ""), interpretes=list(meta.get("interpretes") or ([album["artiste"]] if album.get("artiste") else [])),
                 credit=attribution or "Album libre fourni pour la recette.",
             )
@@ -266,8 +273,22 @@ def music(out: pathlib.Path, *, seconds: float, seed: int) -> None:
             "-ac", "2", "-ar", "44100", str(out))  # fmt: skip
 
 
+def duration_of(path: pathlib.Path) -> float:
+    try:
+        out = subprocess.run(
+            [settings.AUDIO_FFPROBE_BIN, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+            check=True, capture_output=True, text=True, timeout=60,
+        )  # fmt: skip
+        return float(out.stdout.strip() or 0)
+    except (subprocess.SubprocessError, ValueError, OSError):
+        return 0.0
+
+
 def excerpt(src: pathlib.Path, out: pathlib.Path, *, seconds: float | None, start: float = 0.0) -> None:
-    """Extrait (``--medias legers`` : 30 s) ou copie intégrale réencodée en FLAC."""
+    """Extrait (``--medias legers`` : 30 s) ou copie intégrale réencodée en FLAC. Une piste trop courte
+    pour le décalage demandé est prise depuis le début."""
+    if start and duration_of(src) < start + (seconds or 0):
+        start = 0.0
     args = ["-ss", f"{start:.1f}", "-i", str(src)]
     if seconds:
         args += ["-t", f"{seconds:.1f}"]

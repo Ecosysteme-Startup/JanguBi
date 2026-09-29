@@ -496,7 +496,7 @@ class _EventBuffer(list):  # type: ignore[type-arg]
 
     def append(self, row: Any) -> None:
         super().append(row)
-        if len(self) >= self.LIMIT:
+        if super().__len__() >= self.LIMIT:  # lignes en attente seulement (``len`` compte aussi les écrites)
             self.flush()
 
     def __len__(self) -> int:

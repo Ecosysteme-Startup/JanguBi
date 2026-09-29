@@ -126,3 +126,24 @@ def test_light_media_go_through_the_real_encoder(allowed, monkeypatch):
     assert tracks.count() == 4
     assert all(t.status == "pret" and t.waveform and 25 <= t.duration_seconds <= 31 for t in tracks)
     assert TrackRendition.objects.filter(kind__startswith="hls_").count() == 12
+
+
+def test_user_album_feeds_the_chants_with_its_credits(allowed, monkeypatch, tmp_path):
+    """``--medias-dossier`` : les pistes de l'album fourni servent de chants, attribution de credits.yaml."""
+    import subprocess
+
+    from apps.audio.models import Track
+
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=330:duration=8",
+                    str(tmp_path / "01-kyrie.mp3")], check=True)  # fmt: skip
+    (tmp_path / "credits.yaml").write_text(
+        'album: {titre: "Messe libre", artiste: "Chœur de test", licence: "CC BY 4.0"}\n'
+        'pistes:\n  "01-kyrie.mp3": {titre: "Kyrie eleison"}\n',
+        encoding="utf-8",
+    )
+    small = dataclasses.replace(SCALES["petite"], pistes=30, ecoutes=100, fideles=20)  # jusqu'aux chorales
+    monkeypatch.setitem(SCALES, "petite", small)
+    seed("--medias", "legers", "--modules", "audio", "--medias-dossier", str(tmp_path))
+    chants = Track.objects.filter(title="Kyrie eleison")
+    assert chants.exists()
+    assert all("Chœur de test" in t.description and "CC BY 4.0" in t.description for t in chants)
