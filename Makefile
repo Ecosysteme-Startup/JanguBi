@@ -7,6 +7,7 @@ export
 	   down-v rebuild dev-deps \
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-hierarchy seed-demo seed-reset \
+       seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
 	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
@@ -182,6 +183,29 @@ seed: seed-hierarchy seed-demo
 	@echo "==========================================================="
 	@echo "   Seed termine (référentiel + démonstration sur la paroisse pilote)"
 	@echo "==========================================================="
+
+# ==============================================================================
+# DONNÉES DE TEST RÉALISTES (docs/DONNEES-DE-TEST.md) — jamais en production
+# ==============================================================================
+# Options supplémentaires : make seed-realiste SEED_ARGS="--graine 7 --medias-dossier /chemin/album --bible-json …"
+SEED_ARGS ?=
+
+# Local : échelle petite, médias légers, vérification des invariants (< 1 min).
+seed-realiste:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier $(SEED_ARGS)
+
+seed-realiste-reset:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --reset $(SEED_ARGS)
+
+# Tests de charge : échelle grande (COPY en masse), sans fichiers audio.
+seed-charge:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier $(SEED_ARGS)
+
+fetch-seed-assets:
+	docker compose exec django python manage.py fetch_seed_assets
+
+# Recette : sur le serveur, par le dépôt Infrastructure — make seed-realiste APP=jangubi ENV=staging
+# (voir docs/RECETTE.md).
 
 # Le référentiel (types, province, diocèses, doyennés, paroisse pilote) fait partie de
 # l'initialisation : sans lui, personne ne peut choisir sa paroisse. Idempotent.

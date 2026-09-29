@@ -531,8 +531,10 @@ class StaffSyncAdmin:
 
 
 @pytest.fixture
-def fake_admin(monkeypatch):
+def fake_admin(monkeypatch, settings):
     from apps.authentication import services_keycloak
+
+    settings.KEYCLOAK_ADMIN_BACKEND = "http"  # le client (simulé ci-dessous) de services_keycloak
 
     StaffSyncAdmin.calls = []
     monkeypatch.setattr(services_keycloak, "KeycloakAdmin", StaffSyncAdmin)

@@ -48,6 +48,19 @@ make shell APP=jangubi ENV=staging    # puis import_bible, seed_rosary, import_a
 Les comptes Keycloak se gèrent depuis l'administration de l'app (synchronisés avec le realm) :
 ils ne sont pas créés par la commande ci-dessus.
 
+### Données de test réalistes
+
+Pour une recette peuplée (12 paroisses, 5 000 fidèles, dons sur douze mois, sonothèque encodée par le vrai
+pipeline, écoutes et recommandations), sur le serveur :
+
+```bash
+make seed-realiste APP=jangubi ENV=staging              # médias du manifeste (bucket) + échelle moyenne
+make seed-realiste APP=jangubi ENV=staging RESET=1      # remise à zéro, MANUELLE uniquement
+```
+
+Détails : `docs/DONNEES-DE-TEST.md`. Bible, Rosaire et liturgie du jour : `import_bible`, `seed_rosary`,
+`import_aelf` depuis `make shell APP=jangubi ENV=staging`.
+
 ## Comptes
 
 Consoles Keycloak et MinIO : celles du socle partagé (`accounts.ceac.dev`, `console-s3.ceac.dev`),

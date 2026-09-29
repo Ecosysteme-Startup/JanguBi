@@ -32,12 +32,12 @@ def keycloak_user_delete_task(self, keycloak_sub: str) -> str:
     """Supprime le compte Keycloak d'une personne qui a supprimé son compte (EF-CONF-03)."""
     from django.conf import settings
 
-    from apps.authentication.keycloak_admin import KeycloakAdmin  # import local (HackSoft)
+    from apps.integrations.keycloak import get_keycloak_admin  # import local (HackSoft)
 
     if not settings.KEYCLOAK_ENABLED:
         return "skipped"
     try:
-        KeycloakAdmin().user_delete(keycloak_sub)
+        get_keycloak_admin().user_delete(keycloak_sub)
     except (httpx.HTTPError, KeycloakAdminError) as exc:
         raise self.retry(exc=exc) from exc
     return "deleted"
