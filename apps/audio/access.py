@@ -73,6 +73,12 @@ def membership(user: Any) -> Membership:
     return result
 
 
+def parish_follower(parish: Node) -> Membership:
+    """Contexte d'un simple fidèle qui suit ``parish`` (aucun office) : sert aux sections d'accueil
+    mises en cache par paroisse, identiques pour tous ses fidèles et jamais plus ouvertes qu'eux."""
+    return Membership(user_id=f"paroisse:{parish.pk}", member_paths=(parish.path,), grant_scopes=(), publish_scopes=())
+
+
 def membership_invalidate(user_id: Any) -> None:
     cache.delete(_membership_key(user_id))
 
@@ -158,7 +164,7 @@ def listenable_tracks(m: Membership) -> QuerySet[Track]:
 
 def visible_albums(m: Membership) -> QuerySet[Album]:
     return Album.objects.filter(
-        published_at__isnull=False, published_at__lte=timezone.now(), source__is_active=True
+        published_at__isnull=False, published_at__lte=timezone.now(), hidden_at__isnull=True, source__is_active=True
     ).filter(_visibility_q(m, field="visibility", node_path="source__node__path"))
 
 
@@ -209,6 +215,19 @@ def require_play(user: Any, track: Track) -> None:
     """Refus sans dire si la piste existe (404) pour un anonyme ou un non-membre."""
     if not can_play(user, track):
         raise NotFoundError("Cette piste est introuvable.", code="piste_introuvable")
+
+
+def can_view_album(user: Any, album: Album) -> bool:
+    node = album.source.node
+    if can_publish(user, node) or can_moderate(user, node):
+        return True
+    return (
+        album.source.is_active
+        and album.hidden_at is None
+        and album.published_at is not None
+        and album.published_at <= timezone.now()
+        and level_allowed(membership(user), node, album.visibility)
+    )
 
 
 def can_view_playlist(user: Any, playlist: Playlist) -> bool:

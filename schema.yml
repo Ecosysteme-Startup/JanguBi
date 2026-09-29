@@ -141,6 +141,25 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/v1/audio/accueil/:
+    get:
+      operationId: audio_home
+      description: 'Compte facultatif : un jeton valide ouvre les contenus « paroisse
+        » et « privé » autorisés.'
+      summary: 'Accueil de la sonothèque en un appel : reprendre, nouveautés de ma
+        paroisse, pour vous, playlists de la paroisse, temps liturgique'
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioHome'
+          description: ''
   /api/v1/audio/albums/:
     get:
       operationId: audio_albums_list
@@ -296,6 +315,43 @@ paths:
           description: ''
         '403':
           description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/albums/{album_id}/signaler/:
+    post:
+      operationId: audio_albums_report
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Signaler un album (droits d'auteur, contenu inapproprié, son)
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioReportInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioReport'
+          description: ''
+        '404':
+          description: Introuvable, ou non visible pour vous
   /api/v1/audio/bibliotheque/:
     get:
       operationId: audio_library
@@ -342,6 +398,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/AudioEventsResult'
           description: ''
+        '429':
+          description: 'Trop de lots : réessayer plus tard'
   /api/v1/audio/lecture/etat/:
     get:
       operationId: audio_playback_state_get
@@ -1153,11 +1211,252 @@ paths:
           description: ''
         '403':
           description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/albums/:
+    get:
+      operationId: audio_staff_albums_list
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Tous les albums de mes sources (brouillons compris)
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          enum:
+          - album
+          - messe
+          - homelies
+          - retraite
+          type: string
+          minLength: 1
+        description: |-
+          * `album` - Album
+          * `messe` - Messe enregistrée
+          * `homelies` - Série d'homélies
+          * `retraite` - Retraite
+      - in: query
+        name: source
+        schema:
+          type: string
+          format: uuid
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AudioStaffAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+    post:
+      operationId: audio_staff_albums_create
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Créer un album (brouillon : titre, type, visibilité, description)'
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioAlbumInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/albums/{album_id}/:
+    get:
+      operationId: audio_staff_albums_retrieve
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Album et toutes ses pistes (états d'encodage, écoutes 30 jours)
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffAlbumDetail'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+        '404':
+          description: Introuvable, ou non visible pour vous
+    patch:
+      operationId: audio_staff_albums_update
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Modifier un album (la visibilité s'applique à ses pistes)
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAudioAlbumUpdateInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffAlbum'
+          description: ''
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/albums/{album_id}/pochette/:
+    post:
+      operationId: audio_staff_albums_cover_start
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Pochette : POST présigné vers audio-covers/ (jpg, png, webp ; 5 Mo)'
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioCoverUploadInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioCoverUploadInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioCoverUploadInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioCoverUploadOutput'
+          description: ''
+        '400':
+          description: Format ou taille
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
+  /api/v1/audio/staff/albums/{album_id}/pochette/{file_id}/local/:
+    post:
+      operationId: audio_staff_albums_cover_local
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: Envoi de la pochette en développement (stockage local, sans S3)
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: file_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioLocalUploadInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/audio/staff/albums/{album_id}/pochette/terminer/:
+    post:
+      operationId: audio_staff_albums_cover_finish
+      description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
+      summary: 'Fin de l''envoi : l''image devient la pochette de l''album'
+      parameters:
+      - in: path
+        name: album_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - audio
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AudioCoverFinishInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AudioCoverFinishInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AudioCoverFinishInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AudioStaffAlbum'
+          description: ''
+        '400':
+          description: Image absente, trop grosse ou illisible
+        '403':
+          description: Capacité audio.publier / audio.moderer requise sur le nœud
   /api/v1/audio/staff/pistes/:
     get:
       operationId: audio_staff_tracks
       description: 'Sonothèque paroissiale (contrat : docs/API-AUDIO.md).'
-      summary: Toutes les pistes d'une source, avec l'état de l'encodage
+      summary: 'Toutes les pistes d''une source : état et progression de l''encodage,
+        écoutes des 30 derniers jours'
       parameters:
       - in: query
         name: source
@@ -1529,6 +1828,45 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedVerseOutputList'
           description: ''
+  /api/v1/bible/evenements/:
+    post:
+      operationId: v1_bible_evenements_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Envoyer des signaux de lecture (par lots, idempotent par client_event_id)
+      tags:
+      - Bible — Pour vous
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadingEventBatchInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReadingEventBatchInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ReadingEventBatchInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadingEventBatchOutput'
+          description: ''
+    delete:
+      operationId: v1_bible_evenements_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Effacer mon historique de lecture (et les recommandations qui en découlent)
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/bible/homilenotes/:
     get:
       operationId: v1_bible_homilenotes_list
@@ -1713,6 +2051,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LectioDivinaOutput'
+          description: ''
+  /api/v1/bible/pour-vous/:
+    get:
+      operationId: v1_bible_pour_vous_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: '« Pour vous aujourd''hui » : verset, lecture à continuer, livre et
+        plan suggérés'
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PourVousOutput'
           description: ''
   /api/v1/bible/reading-plans/:
     get:
@@ -1901,6 +2256,49 @@ paths:
           description: ''
         '400':
           description: No response body
+  /api/v1/bible/reglages/:
+    get:
+      operationId: v1_bible_reglages_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes réglages de la Parole
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParolePreference'
+          description: ''
+    put:
+      operationId: v1_bible_reglages_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Activer ou désactiver « Pour vous aujourd'hui » personnalisé
+      tags:
+      - Bible — Pour vous
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParolePreference'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ParolePreference'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ParolePreference'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParolePreference'
+          description: ''
   /api/v1/bible/search/:
     get:
       operationId: v1_bible_search_list
@@ -1959,6 +2357,121 @@ paths:
                 items:
                   $ref: '#/components/schemas/SearchBookGroupOutput'
           description: ''
+  /api/v1/bible/signets/:
+    get:
+      operationId: v1_bible_signets_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mes signets et surlignages
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBookmarkOutputList'
+          description: ''
+    post:
+      operationId: v1_bible_signets_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Poser un signet ou surligner un verset (un seul par verset : met à
+        jour s''il existe)'
+      tags:
+      - Bible — Pour vous
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookmarkInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BookmarkInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BookmarkInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookmarkOutput'
+          description: ''
+  /api/v1/bible/signets/{bookmark_id}/:
+    get:
+      operationId: v1_bible_signets_retrieve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Un signet
+      parameters:
+      - in: path
+        name: bookmark_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookmarkOutput'
+          description: ''
+    patch:
+      operationId: v1_bible_signets_partial_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Changer la couleur ou la note d'un signet
+      parameters:
+      - in: path
+        name: bookmark_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Pour vous
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBookmarkUpdate'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBookmarkUpdate'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBookmarkUpdate'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookmarkOutput'
+          description: ''
+    delete:
+      operationId: v1_bible_signets_destroy
+      description: À placer en premier dans les bases des vues V1.
+      summary: Retirer un signet
+      parameters:
+      - in: path
+        name: bookmark_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Bible — Pour vous
+      security:
+      - keycloakBearer: []
+      responses:
+        '204':
+          description: No response body
   /api/v1/bible/testaments/:
     get:
       operationId: v1_bible_testaments_list
@@ -9704,6 +10217,59 @@ components:
       required:
       - id
       - title
+    AudioCoverFinishInput:
+      type: object
+      properties:
+        file_id:
+          type: integer
+          minimum: 1
+      required:
+      - file_id
+    AudioCoverUploadInput:
+      type: object
+      properties:
+        file_name:
+          type: string
+          maxLength: 255
+        file_type:
+          type: string
+          description: image/jpeg, image/png ou image/webp
+          maxLength: 100
+        file_size:
+          type: integer
+          minimum: 1
+          description: Octets ; 5 Mo au plus
+      required:
+      - file_name
+      - file_size
+      - file_type
+    AudioCoverUploadOutput:
+      type: object
+      properties:
+        file_id:
+          type: integer
+          description: À renvoyer à « terminer »
+        method:
+          type: string
+        url:
+          type: string
+          format: uri
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Champs du formulaire POST présigné
+        max_size:
+          type: integer
+        expires_in:
+          type: integer
+      required:
+      - expires_in
+      - fields
+      - file_id
+      - max_size
+      - method
+      - url
     AudioEventInput:
       type: object
       properties:
@@ -9772,6 +10338,56 @@ components:
       - demarrage_a_froid
       - personnalise
       - results
+    AudioHome:
+      type: object
+      properties:
+        nouveautes_ma_paroisse:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+        playlists_paroisse:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioPlaylist'
+        temps_liturgique:
+          $ref: '#/components/schemas/AudioHomeSeason'
+        paroisse:
+          allOf:
+          - $ref: '#/components/schemas/AudioNodeRef'
+          nullable: true
+          description: Paroisse suivie ; null sans compte ou sans paroisse
+        reprendre:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioRecent'
+        pour_vous:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioRecommendation'
+      required:
+      - nouveautes_ma_paroisse
+      - paroisse
+      - playlists_paroisse
+      - pour_vous
+      - reprendre
+      - temps_liturgique
+    AudioHomeSeason:
+      type: object
+      properties:
+        code:
+          type: string
+          description: avent, noel, careme, triduum, paques, ordinaire
+        label:
+          type: string
+          description: « Temps ordinaire »…
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioTrack'
+      required:
+      - code
+      - label
+      - tracks
     AudioLanguageEnum:
       enum:
       - fr
@@ -10066,8 +10682,18 @@ components:
         id:
           type: integer
           readOnly: true
+        cible:
+          allOf:
+          - $ref: '#/components/schemas/CibleEnum'
+          readOnly: true
         track:
-          $ref: '#/components/schemas/AudioTrack'
+          allOf:
+          - $ref: '#/components/schemas/AudioTrack'
+          nullable: true
+        album:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbum'
+          nullable: true
         motif:
           $ref: '#/components/schemas/AudioReportReasonEnum'
         comment:
@@ -10082,6 +10708,8 @@ components:
           format: date-time
           nullable: true
       required:
+      - album
+      - cible
       - id
       - motif
       - track
@@ -10268,10 +10896,89 @@ components:
       required:
       - id
       - name
+    AudioStaffAlbum:
+      type: object
+      description: 'Album vu par le staff : brouillons compris, nombre de pistes,
+        retrait par la modération.'
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        source:
+          $ref: '#/components/schemas/AudioSourceRef'
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/AudioAlbumKindEnum'
+          title: Type
+        title:
+          type: string
+          title: Titre
+          maxLength: 200
+        description:
+          type: string
+        visibility:
+          allOf:
+          - $ref: '#/components/schemas/AudioVisibilityEnum'
+          title: Visibilité
+        cover_url:
+          type: string
+          nullable: true
+          readOnly: true
+        recorded_on:
+          type: string
+          format: date
+          nullable: true
+          title: Date d'enregistrement
+        liturgical_season:
+          title: Temps liturgique
+          oneOf:
+          - $ref: '#/components/schemas/AudioLiturgicalSeasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Publié le
+        track_count:
+          type: integer
+          readOnly: true
+        hidden_at:
+          type: string
+          format: date-time
+          nullable: true
+          title: Retiré par la modération le
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cover_url
+      - id
+      - source
+      - title
+      - track_count
+      - updated_at
+    AudioStaffAlbumDetail:
+      type: object
+      properties:
+        album:
+          $ref: '#/components/schemas/AudioStaffAlbum'
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/AudioStaffTrack'
+      required:
+      - album
+      - tracks
     AudioStaffTrack:
       type: object
-      description: 'Piste vue par le staff de la source : état de l''encodage, visibilités,
-        version.'
+      description: |-
+        Piste vue par le staff de la source : état et progression de l'encodage, visibilités,
+        version, écoutes des 30 derniers jours (listes staff seulement).
       properties:
         id:
           type: string
@@ -10340,6 +11047,22 @@ components:
         failure_reason:
           type: string
           title: Motif de l'échec
+        encoding_step:
+          description: |-
+            Étape en cours ; vide avant le début de l'encodage
+
+            * `analyse` - Analyse du fichier
+            * `normalisation` - Normalisation du volume
+            * `qualites` - Encodage des qualités
+            * `forme_onde` - Forme d'onde et dépôt
+            * `termine` - Terminé
+          oneOf:
+          - $ref: '#/components/schemas/EncodingStepEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        encoding_percent:
+          type: integer
+          maximum: 100
+          minimum: 0
         version:
           type: integer
           maximum: 2147483647
@@ -10363,10 +11086,19 @@ components:
         created_at:
           type: string
           format: date-time
+        plays_30d:
+          type: integer
+          nullable: true
+          description: Débuts d'écoute des 30 derniers jours (listes staff) ; null
+            ailleurs
+          readOnly: true
       required:
       - album
+      - encoding_percent
+      - encoding_step
       - id
       - own_visibility
+      - plays_30d
       - source
       - title
       - visibility
@@ -10802,6 +11534,82 @@ components:
         * `annulee_pretre` - Annulée par le prêtre
         * `honoree` - Honorée
         * `absent` - Absent
+    BookmarkColorEnum:
+      enum:
+      - jaune
+      - vert
+      - bleu
+      - rose
+      - violet
+      type: string
+      description: |-
+        * `` - Aucune (signet)
+        * `jaune` - Jaune
+        * `vert` - Vert
+        * `bleu` - Bleu
+        * `rose` - Rose
+        * `violet` - Violet
+    BookmarkInput:
+      type: object
+      properties:
+        verset_id:
+          type: integer
+          minimum: 1
+        couleur:
+          default: ''
+          oneOf:
+          - $ref: '#/components/schemas/BookmarkColorEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 2000
+      required:
+      - verset_id
+    BookmarkOutput:
+      type: object
+      properties:
+        id:
+          type: integer
+        verset_id:
+          type: integer
+        reference:
+          type: string
+          readOnly: true
+        livre_id:
+          type: integer
+        chapitre:
+          type: integer
+        numero:
+          type: integer
+        texte:
+          type: string
+        type:
+          type: string
+          readOnly: true
+        couleur:
+          type: string
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - chapitre
+      - couleur
+      - created_at
+      - id
+      - livre_id
+      - note
+      - numero
+      - reference
+      - texte
+      - type
+      - updated_at
+      - verset_id
     Campagne:
       type: object
       properties:
@@ -11268,6 +12076,14 @@ components:
       - net_amount
       - reference
       - status
+    CibleEnum:
+      enum:
+      - piste
+      - album
+      type: string
+      description: |-
+        * `piste` - Piste
+        * `album` - Album
     CommunityRosaryInput:
       type: object
       properties:
@@ -11766,6 +12582,20 @@ components:
       - count
       - total
       - year
+    EncodingStepEnum:
+      enum:
+      - analyse
+      - normalisation
+      - qualites
+      - forme_onde
+      - termine
+      type: string
+      description: |-
+        * `analyse` - Analyse du fichier
+        * `normalisation` - Normalisation du volume
+        * `qualites` - Encodage des qualités
+        * `forme_onde` - Forme d'onde et dépôt
+        * `termine` - Terminé
     EtatDeVieEnum:
       enum:
       - laic
@@ -12513,7 +13343,7 @@ components:
       type: object
       properties:
         resolution:
-          $ref: '#/components/schemas/ResolutionEnum'
+          $ref: '#/components/schemas/Resolution24fEnum'
         note:
           type: string
           default: ''
@@ -13805,6 +14635,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedBookmarkOutputList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookmarkOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedCashCollectionList:
       type: object
       properties:
@@ -14474,6 +15330,13 @@ components:
       - collecte_ouverte
       - en_preparation
       - engagees
+    ParolePreference:
+      type: object
+      properties:
+        personnalisation_parole:
+          type: boolean
+      required:
+      - personnalisation_parole
     PatchedArticleUpdateInput:
       type: object
       properties:
@@ -14612,6 +15475,16 @@ components:
           type: string
           format: uuid
           nullable: true
+    PatchedBookmarkUpdate:
+      type: object
+      properties:
+        couleur:
+          oneOf:
+          - $ref: '#/components/schemas/BookmarkColorEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        note:
+          type: string
+          maxLength: 2000
     PatchedEventUpdateInput:
       type: object
       properties:
@@ -14824,7 +15697,7 @@ components:
           type: string
         resolution:
           oneOf:
-          - $ref: '#/components/schemas/ResolutionEnum'
+          - $ref: '#/components/schemas/Resolution24fEnum'
           - $ref: '#/components/schemas/BlankEnum'
         note:
           type: string
@@ -15246,6 +16119,52 @@ components:
         * `ios` - ios
         * `android` - android
         * `web` - web
+    PourVousOutput:
+      type: object
+      description: 'Documentation du contrat : la charge utile est servie telle quelle
+        (aucun score).'
+      properties:
+        date:
+          type: string
+          format: date
+        personnalise:
+          type: boolean
+        personnalisation_parole:
+          type: boolean
+        verset:
+          allOf:
+          - $ref: '#/components/schemas/_Verse'
+          nullable: true
+        autres_versets:
+          type: array
+          items:
+            $ref: '#/components/schemas/_Verse'
+        lecture_a_continuer:
+          allOf:
+          - $ref: '#/components/schemas/_Continue'
+          nullable: true
+        livre_suggere:
+          allOf:
+          - $ref: '#/components/schemas/_SuggestedBook'
+          nullable: true
+        plan_suggere:
+          allOf:
+          - $ref: '#/components/schemas/_SuggestedPlan'
+          nullable: true
+        raisons:
+          type: array
+          items:
+            type: string
+      required:
+      - autres_versets
+      - date
+      - lecture_a_continuer
+      - livre_suggere
+      - personnalisation_parole
+      - personnalise
+      - plan_suggere
+      - raisons
+      - verset
     Prayer:
       type: object
       properties:
@@ -16209,6 +17128,82 @@ components:
           type: boolean
       required:
       - first_read
+    ReadingEventBatchInput:
+      type: object
+      properties:
+        evenements:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReadingEventInput'
+      required:
+      - evenements
+    ReadingEventBatchOutput:
+      type: object
+      properties:
+        recus:
+          type: integer
+        enregistres:
+          type: integer
+        rejetes:
+          type: array
+          items:
+            type: string
+          description: client_event_id à référence inconnue
+        personnalisation_parole:
+          type: boolean
+      required:
+      - enregistres
+      - personnalisation_parole
+      - recus
+      - rejetes
+    ReadingEventInput:
+      type: object
+      properties:
+        client_event_id:
+          type: string
+          maxLength: 64
+        type:
+          $ref: '#/components/schemas/ReadingEventKindEnum'
+        verset_debut_id:
+          type: integer
+          minimum: 1
+          nullable: true
+        verset_fin_id:
+          type: integer
+          minimum: 1
+          nullable: true
+        livre_id:
+          type: integer
+          minimum: 1
+          nullable: true
+        chapitre:
+          type: integer
+          minimum: 1
+          nullable: true
+        termine:
+          type: boolean
+          default: false
+        occurred_at:
+          type: string
+          format: date-time
+      required:
+      - client_event_id
+      - occurred_at
+      - type
+    ReadingEventKindEnum:
+      enum:
+      - lu
+      - signet
+      - surligne
+      - recherche
+      - lectio
+      type: string
+      description: |-
+        * `lu` - Lu
+        * `signet` - Signet
+        * `surligne` - Surligné
+        * `recherche` - Ouvert depuis une recherche
+        * `lectio` - Lectio divina
     ReadingPlanInput:
       type: object
       properties:
@@ -16728,7 +17723,7 @@ components:
         * `diacre` - Diacre
         * `pretre` - Prêtre
         * `eveque` - Évêque
-    ResolutionEnum:
+    Resolution24fEnum:
       enum:
       - integre
       - rembourse
@@ -17934,6 +18929,95 @@ components:
       required:
       - expires_in
       - ticket
+    _Book:
+      type: object
+      properties:
+        id:
+          type: integer
+        nom:
+          type: string
+        slug:
+          type: string
+      required:
+      - id
+      - nom
+      - slug
+    _Continue:
+      type: object
+      properties:
+        reference:
+          type: string
+        livre:
+          $ref: '#/components/schemas/_Book'
+        chapitre:
+          type: integer
+        reprendre_au_verset:
+          type: integer
+          nullable: true
+      required:
+      - chapitre
+      - livre
+      - reference
+      - reprendre_au_verset
+    _SuggestedBook:
+      type: object
+      properties:
+        id:
+          type: integer
+        nom:
+          type: string
+        slug:
+          type: string
+        raison:
+          type: string
+      required:
+      - id
+      - nom
+      - raison
+      - slug
+    _SuggestedPlan:
+      type: object
+      properties:
+        id:
+          type: integer
+        titre:
+          type: string
+        description:
+          type: string
+        raison:
+          type: string
+      required:
+      - description
+      - id
+      - raison
+      - titre
+    _Verse:
+      type: object
+      properties:
+        id:
+          type: integer
+        reference:
+          type: string
+        livre:
+          $ref: '#/components/schemas/_Book'
+        chapitre:
+          type: integer
+        numero:
+          type: integer
+        texte:
+          type: string
+        raisons:
+          type: array
+          items:
+            type: string
+      required:
+      - chapitre
+      - id
+      - livre
+      - numero
+      - raisons
+      - reference
+      - texte
   securitySchemes:
     keycloakBearer:
       type: http

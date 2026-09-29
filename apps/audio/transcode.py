@@ -15,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -237,15 +238,50 @@ def master_playlist(renditions: list[RenditionResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def transcode(src: str, out_dir: str, *, work_dir: str, title: str = "", artist: str = "") -> TranscodeResult:
+ProgressCallback = Callable[[str, int], None]
+
+# Avancement (%) annoncé au début de chaque étape (codes de ``EncodingStep``).
+PROGRESS_ANALYSE = 5
+PROGRESS_NORMALISATION = 15
+PROGRESS_QUALITES = (30, 75)  # réparti entre les débits HLS puis le MP3
+PROGRESS_FORME_ONDE = 80
+
+
+def _noop(step: str, percent: int) -> None:
+    return None
+
+
+def transcode(
+    src: str,
+    out_dir: str,
+    *,
+    work_dir: str,
+    title: str = "",
+    artist: str = "",
+    progress: ProgressCallback | None = None,
+) -> TranscodeResult:
     """Chaîne complète. ``out_dir`` reçoit l'arborescence à déposer telle quelle sous
-    ``audio-hls/<track_id>/<version>/`` ; ``work_dir`` reçoit les intermédiaires."""
+    ``audio-hls/<track_id>/<version>/`` ; ``work_dir`` reçoit les intermédiaires.
+
+    ``progress(etape, pourcentage)`` est appelé au début de chaque étape (analyse, normalisation,
+    qualites — une fois par débit et pour le MP3 —, forme_onde)."""
+    report = progress or _noop
+    report("analyse", PROGRESS_ANALYSE)
     info = probe(src)
+    report("normalisation", PROGRESS_NORMALISATION)
     norm = os.path.join(work_dir, "normalise.flac")
     normalize(src, norm)
-    renditions = [encode_hls(norm, out_dir, spec) for spec in rendition_specs()]
+    specs = rendition_specs()
+    low, high = PROGRESS_QUALITES
+    step = (high - low) / (len(specs) + 1)
+    renditions = []
+    for index, spec in enumerate(specs):
+        report("qualites", int(low + index * step))
+        renditions.append(encode_hls(norm, out_dir, spec))
+    report("qualites", int(low + len(specs) * step))
     mp3_rel = "audio.mp3"
     encode_mp3(norm, os.path.join(out_dir, mp3_rel), title=title, artist=artist)
+    report("forme_onde", PROGRESS_FORME_ONDE)
     peaks = waveform(norm)
     with open(os.path.join(out_dir, "waveform.json"), "w") as fh:
         json.dump({"version": 1, "peaks": peaks}, fh)

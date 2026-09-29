@@ -18,13 +18,19 @@ from apps.audio.serializers import (
     AudioAlbumListFilterSerializer,
     AudioAlbumSerializer,
     AudioAlbumUpdateInputSerializer,
+    AudioCoverFinishInputSerializer,
+    AudioCoverUploadInputSerializer,
+    AudioCoverUploadOutputSerializer,
     AudioEventsInputSerializer,
     AudioEventsResultSerializer,
     AudioForYouSerializer,
+    AudioHomeParishSerializer,
+    AudioHomeSerializer,
     AudioLibrarySerializer,
     AudioLikeOutputSerializer,
     AudioListenerSettingsSerializer,
     AudioLocalUploadInputSerializer,
+    AudioNodeRefSerializer,
     AudioPlaybackSerializer,
     AudioPlaybackStateInputSerializer,
     AudioPlaybackStateSerializer,
@@ -35,6 +41,8 @@ from apps.audio.serializers import (
     AudioPlaylistOrderInputSerializer,
     AudioPlaylistSerializer,
     AudioPlaylistUpdateInputSerializer,
+    AudioRecentSerializer,
+    AudioRecommendationSerializer,
     AudioReportDecisionInputSerializer,
     AudioReportInputSerializer,
     AudioReportSerializer,
@@ -45,6 +53,9 @@ from apps.audio.serializers import (
     AudioSourceListFilterSerializer,
     AudioSourceSerializer,
     AudioSourceUpdateInputSerializer,
+    AudioStaffAlbumDetailSerializer,
+    AudioStaffAlbumFilterSerializer,
+    AudioStaffAlbumSerializer,
     AudioStaffTrackFilterSerializer,
     AudioStaffTrackSerializer,
     AudioTrackSerializer,
@@ -52,6 +63,7 @@ from apps.audio.serializers import (
     AudioUploadInputSerializer,
     AudioUploadOutputSerializer,
 )
+from apps.audio.throttling import AudioEventsAnonThrottle, AudioEventsUserThrottle
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.hierarchy import selectors as hierarchy_selectors
 
@@ -498,17 +510,44 @@ class LibraryApi(_Api):
 
 
 class EventsApi(_PublicApi):
+    throttle_classes = (AudioEventsAnonThrottle, AudioEventsUserThrottle)
+
     @extend_schema(
         tags=TAG,
         operation_id="audio_events_create",
         summary="Événements d'écoute par lot (100 au plus), idempotents par client_event_id",
         request=AudioEventsInputSerializer,
-        responses={202: AudioEventsResultSerializer},
+        responses={202: AudioEventsResultSerializer, 429: OpenApiResponse(description="Trop de lots : réessayer plus tard")},
     )
     def post(self, request: Request) -> Response:
         data = _body(AudioEventsInputSerializer, request)
         result = services.play_events_ingest(user=request.user, events=data["events"])
         return Response(result, status=status.HTTP_202_ACCEPTED)
+
+
+class HomeApi(_PublicApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_home",
+        summary="Accueil de la sonothèque en un appel : reprendre, nouveautés de ma paroisse, pour vous, "
+        "playlists de la paroisse, temps liturgique",
+        responses=AudioHomeSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        user = request.user
+        parish = selectors.home_parish(user=user)
+        season = selectors.current_season()
+
+        def build() -> dict[str, Any]:
+            return AudioHomeParishSerializer(selectors.home_parish_sections(parish=parish)).data
+
+        shared = selectors.catalog_cached(("accueil", parish.pk if parish else "anon", season), build)
+        personal = {
+            "paroisse": AudioNodeRefSerializer(parish).data if parish else None,
+            "reprendre": AudioRecentSerializer(selectors.home_resume(user=user), many=True).data,
+            "pour_vous": AudioRecommendationSerializer(selectors.home_for_you(user=user), many=True).data,
+        }
+        return Response({**personal, **shared})
 
 
 class ForYouApi(_Api):
@@ -656,7 +695,7 @@ class StaffTracksApi(_Api):
     @extend_schema(
         tags=TAG,
         operation_id="audio_staff_tracks",
-        summary="Toutes les pistes d'une source, avec l'état de l'encodage",
+        summary="Toutes les pistes d'une source : état et progression de l'encodage, écoutes des 30 derniers jours",
         parameters=[AudioStaffTrackFilterSerializer],
         responses={200: AudioStaffTrackSerializer(many=True), 403: _FORBIDDEN},
     )
@@ -665,6 +704,132 @@ class StaffTracksApi(_Api):
         source = selectors.source_get(source_id=f["source"])
         tracks = selectors.staff_tracks(user=request.user, source=source, status=f.get("status", ""))
         return Response(AudioStaffTrackSerializer(tracks[:200], many=True).data)
+
+
+class StaffAlbumListCreateApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_list",
+        summary="Tous les albums de mes sources (brouillons compris)",
+        parameters=[AudioStaffAlbumFilterSerializer],
+        responses={200: AudioStaffAlbumSerializer(many=True), 403: _FORBIDDEN},
+    )
+    def get(self, request: Request) -> Response:
+        f = _query(AudioStaffAlbumFilterSerializer, request)
+        source = selectors.source_get(source_id=f["source"]) if f.get("source") else None
+        albums = selectors.staff_albums(user=request.user, source=source, kind=f.get("kind", ""))
+        return Response(AudioStaffAlbumSerializer(albums[:500], many=True).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_create",
+        summary="Créer un album (brouillon : titre, type, visibilité, description)",
+        request=AudioAlbumInputSerializer,
+        responses={201: AudioStaffAlbumSerializer, 403: _FORBIDDEN},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(AudioAlbumInputSerializer, request)
+        source = selectors.source_get(source_id=data.pop("source_id"))
+        album = services.album_create(actor=request.user, source=source, **data)
+        album = selectors.staff_album_get(user=request.user, album_id=album.pk)
+        return Response(AudioStaffAlbumSerializer(album).data, status=status.HTTP_201_CREATED)
+
+
+class StaffAlbumDetailApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_retrieve",
+        summary="Album et toutes ses pistes (états d'encodage, écoutes 30 jours)",
+        responses={200: AudioStaffAlbumDetailSerializer, 403: _FORBIDDEN, 404: _NOT_FOUND},
+    )
+    def get(self, request: Request, album_id: str) -> Response:
+        album = selectors.staff_album_get(user=request.user, album_id=album_id)
+        tracks = selectors.staff_album_tracks(user=request.user, album=album)
+        return Response(AudioStaffAlbumDetailSerializer({"album": album, "tracks": tracks}).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_update",
+        summary="Modifier un album (la visibilité s'applique à ses pistes)",
+        request=AudioAlbumUpdateInputSerializer,
+        responses={200: AudioStaffAlbumSerializer, 403: _FORBIDDEN},
+    )
+    def patch(self, request: Request, album_id: str) -> Response:
+        album = selectors.album_get(album_id=album_id)
+        data = _body(AudioAlbumUpdateInputSerializer, request)
+        services.album_update(actor=request.user, album=album, data=data)
+        return Response(AudioStaffAlbumSerializer(selectors.staff_album_get(user=request.user, album_id=album.pk)).data)
+
+
+class StaffAlbumCoverStartApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_cover_start",
+        summary="Pochette : POST présigné vers audio-covers/ (jpg, png, webp ; 5 Mo)",
+        request=AudioCoverUploadInputSerializer,
+        responses={
+            201: AudioCoverUploadOutputSerializer,
+            400: OpenApiResponse(description="Format ou taille"),
+            403: _FORBIDDEN,
+        },
+    )
+    def post(self, request: Request, album_id: str) -> Response:
+        data = _body(AudioCoverUploadInputSerializer, request)
+        album = selectors.album_get(album_id=album_id)
+        result = services.album_cover_upload_start(actor=request.user, album=album, **data)
+        return Response(AudioCoverUploadOutputSerializer(result).data, status=status.HTTP_201_CREATED)
+
+
+class StaffAlbumCoverLocalApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_cover_local",
+        summary="Envoi de la pochette en développement (stockage local, sans S3)",
+        request={"multipart/form-data": AudioLocalUploadInputSerializer},
+        responses={204: None},
+    )
+    def post(self, request: Request, album_id: str, file_id: int) -> Response:
+        data = _body(AudioLocalUploadInputSerializer, request)
+        album = selectors.album_get(album_id=album_id)
+        cover = services.album_cover_file_get(album=album, file_id=file_id)
+        services.album_cover_upload_local(actor=request.user, album=album, cover=cover, file_obj=data["file"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class StaffAlbumCoverFinishApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_staff_albums_cover_finish",
+        summary="Fin de l'envoi : l'image devient la pochette de l'album",
+        request=AudioCoverFinishInputSerializer,
+        responses={
+            200: AudioStaffAlbumSerializer,
+            400: OpenApiResponse(description="Image absente, trop grosse ou illisible"),
+            403: _FORBIDDEN,
+        },
+    )
+    def post(self, request: Request, album_id: str) -> Response:
+        data = _body(AudioCoverFinishInputSerializer, request)
+        album = selectors.album_get(album_id=album_id)
+        cover = services.album_cover_file_get(album=album, file_id=data["file_id"])
+        services.album_cover_upload_finish(actor=request.user, album=album, cover=cover)
+        return Response(AudioStaffAlbumSerializer(selectors.staff_album_get(user=request.user, album_id=album.pk)).data)
+
+
+class AlbumReportApi(_Api):
+    @extend_schema(
+        tags=TAG,
+        operation_id="audio_albums_report",
+        summary="Signaler un album (droits d'auteur, contenu inapproprié, son)",
+        request=AudioReportInputSerializer,
+        responses={201: AudioReportSerializer, 404: _NOT_FOUND},
+    )
+    def post(self, request: Request, album_id: str) -> Response:
+        data = _body(AudioReportInputSerializer, request)
+        report = services.album_report_create(
+            user=request.user, album=selectors.album_get(album_id=album_id), reason=data["motif"], comment=data["comment"]
+        )
+        return Response(AudioReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
 
 class ReportListApi(_Api):

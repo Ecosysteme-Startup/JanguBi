@@ -14,17 +14,18 @@ from typing import Any
 from django.conf import settings
 from django.contrib.postgres.search import SearchQuery, SearchRank, TrigramWordSimilarity
 from django.core.cache import cache
-from django.db.models import F, FloatField, Q, QuerySet
-from django.db.models.functions import Cast
+from django.db.models import Count, F, FloatField, IntegerField, OuterRef, Q, QuerySet, Subquery
+from django.db.models.functions import Cast, Coalesce
 from django.utils import timezone
 
 from apps.audio import access, signing, storage
-from apps.audio.enums import ReportStatus, TrackStatus
+from apps.audio.enums import PlayEventKind, ReportStatus, TrackStatus
 from apps.audio.models import (
     Album,
     AudioSource,
     Like,
     ListenerSettings,
+    PlayEvent,
     PlaybackPosition,
     PlaybackState,
     Playlist,
@@ -77,7 +78,9 @@ def playlist_get(*, playlist_id: Any) -> Playlist:
 
 
 def report_get(*, report_id: Any) -> TrackReport:
-    report = TrackReport.objects.select_related("track__source__node").filter(pk=report_id).first()
+    report = (
+        TrackReport.objects.select_related("track__source__node", "album__source__node").filter(pk=report_id).first()
+    )
     if report is None:
         raise NotFoundError("Signalement introuvable.", code="signalement_introuvable")
     return report
@@ -388,15 +391,112 @@ def next_tracks(*, user: Any, track: Track, limit: int = 10) -> list[Track]:
     return result[:limit]
 
 
+# --- Accueil ---------------------------------------------------------------------------------
+
+HOME_LIMIT = 10
+
+
+def home_parish(*, user: Any) -> Any:
+    """Paroisse suivie (``None`` sans compte ou sans paroisse)."""
+    if not getattr(user, "is_authenticated", False):
+        return None
+    return getattr(user, "paroisse_suivie", None)
+
+
+def home_resume(*, user: Any, limit: int = HOME_LIMIT) -> list[dict[str, Any]]:
+    """« Reprendre » : pistes commencées et pas finies, les plus récentes d'abord (jamais en cache)."""
+    if not getattr(user, "is_authenticated", False):
+        return []
+    positions = list(
+        PlaybackPosition.objects.filter(user=user, position_seconds__gt=0)
+        .order_by("-client_updated_at")
+        .values_list("track_id", "position_seconds", "client_updated_at")[:50]
+    )
+    tracks = {
+        t.pk: t
+        for t in access.listenable_tracks(access.membership(user))
+        .filter(pk__in=[p[0] for p in positions])
+        .select_related("source", "album")
+    }
+    out: list[dict[str, Any]] = []
+    for track_id, position, at in positions:
+        track = tracks.get(track_id)
+        if track is None:
+            continue
+        if track.duration_seconds and position >= track.duration_seconds - RESUME_END_MARGIN_SECONDS:
+            continue  # finie
+        out.append({"track": track, "position_seconds": position, "updated_at": at})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def home_for_you(*, user: Any, limit: int = HOME_LIMIT) -> list[dict[str, Any]]:
+    """« Pour vous » (cache par utilisateur des recommandations) ; sans compte : démarrage à froid."""
+    if not getattr(user, "is_authenticated", False):
+        return _cold_start(user=user, limit=limit)
+    return recommendations_for(user=user)["results"][:limit]
+
+
+def home_parish_sections(*, parish: Any, limit: int = HOME_LIMIT) -> dict[str, Any]:
+    """Sections partagées par tous les fidèles d'une paroisse (mises en cache par paroisse) :
+    calculées avec les droits d'un simple fidèle de cette paroisse, jamais ceux de l'appelant."""
+    m = access.parish_follower(parish) if parish is not None else access.ANONYMOUS
+    listenable = access.listenable_tracks(m).select_related("source", "album")
+    season = current_season()
+    news: Any = []
+    playlists: Any = []
+    if parish is not None:
+        news = listenable.filter(source__node__path__startswith=parish.path).order_by("-published_at")[:limit]
+        playlists = (
+            access.visible_editorial_playlists(m)
+            .filter(source__node__path__startswith=parish.path)
+            .select_related("source")
+            .order_by("-published_at")[:limit]
+        )
+    seasonal = listenable.filter(Q(liturgical_season=season) | Q(album__liturgical_season=season)).order_by(
+        "-published_at"
+    )[:limit]
+    return {
+        "nouveautes_ma_paroisse": list(news),
+        "playlists_paroisse": list(playlists),
+        "temps_liturgique": {"code": season, "label": season_label(season), "tracks": list(seasonal)},
+    }
+
+
+def season_label(season: str) -> str:
+    from apps.audio.enums import LiturgicalSeason
+
+    return str(LiturgicalSeason(season).label) if season in LiturgicalSeason.values else ""
+
+
 # --- Staff -----------------------------------------------------------------------------------
+
+PLAYS_WINDOW_DAYS = 30
+
+
+def _with_plays_30d(qs: QuerySet[Track]) -> QuerySet[Track]:
+    """``plays_30d`` : débuts d'écoute des 30 derniers jours (``PlayEvent``, table partitionnée ;
+    le filtre sur ``occurred_at`` limite la lecture aux partitions utiles)."""
+    since = timezone.now() - datetime.timedelta(days=PLAYS_WINDOW_DAYS)
+    plays = (
+        PlayEvent.objects.filter(track_id=OuterRef("pk"), kind=PlayEventKind.START, occurred_at__gte=since)
+        .order_by()
+        .values("track_id")
+        .annotate(n=Count("id"))
+        .values("n")
+    )
+    return qs.annotate(plays_30d=Coalesce(Subquery(plays, output_field=IntegerField()), 0))
 
 
 def staff_tracks(*, user: Any, source: AudioSource, status: str = "") -> QuerySet[Track]:
+    """Pistes d'**une** source gérée par ``user`` (jamais plusieurs sources à la fois : aucune
+    comparaison d'écoutes entre sources), avec ``plays_30d``."""
     access.require_publish(user, source.node)
     qs = Track.objects.filter(source=source).select_related("source", "album").order_by("-created_at")
     if status:
         qs = qs.filter(status=status)
-    return qs
+    return _with_plays_30d(qs)
 
 
 def staff_sources(*, user: Any) -> QuerySet[AudioSource]:
@@ -407,12 +507,43 @@ def staff_sources(*, user: Any) -> QuerySet[AudioSource]:
     return AudioSource.objects.filter(condition).select_related("node").order_by("name")
 
 
+def staff_albums(*, user: Any, source: AudioSource | None = None, kind: str = "") -> QuerySet[Album]:
+    """Tous les albums (brouillons, publiés, retirés) des sources où ``user`` peut publier, ou
+    d'une seule source."""
+    if source is not None:
+        access.require_publish(user, source.node)
+        qs = Album.objects.filter(source=source)
+    else:
+        sources = staff_sources(user=user)
+        if access.membership(user).publish_scopes:
+            from apps.hierarchy import authz
+
+            authz.mfa_check(user)
+        qs = Album.objects.filter(source__in=sources)
+    if kind:
+        qs = qs.filter(kind=kind)
+    return qs.select_related("source", "cover").annotate(track_count=Count("tracks")).order_by("-created_at")
+
+
+def staff_album_get(*, user: Any, album_id: Any) -> Album:
+    album = album_get(album_id=album_id)
+    access.require_publish(user, album.source.node)
+    return Album.objects.select_related("source__node", "cover").annotate(track_count=Count("tracks")).get(pk=album.pk)
+
+
+def staff_album_tracks(*, user: Any, album: Album) -> QuerySet[Track]:
+    access.require_publish(user, album.source.node)
+    qs = Track.objects.filter(album=album).select_related("source", "album").order_by("position", "created_at")
+    return _with_plays_30d(qs)
+
+
 def reports_open(*, user: Any) -> QuerySet[TrackReport]:
     from apps.hierarchy import authz
 
     nodes = authz.noeuds_autorises(user, access.MODERATE)
     return (
-        TrackReport.objects.filter(status=ReportStatus.OUVERT, track__source__node__in=nodes)
-        .select_related("track__source")
+        TrackReport.objects.filter(status=ReportStatus.OUVERT)
+        .filter(Q(track__source__node__in=nodes) | Q(album__source__node__in=nodes))
+        .select_related("track__source", "track__album", "album__source", "album__cover")
         .order_by("created_at")
     )

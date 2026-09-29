@@ -1,6 +1,8 @@
 # API de la sonothèque paroissiale (`/api/v1/audio/`)
 
-Contrat JSON de la sonothèque (plan suite V2, §5). Lot B3, 27/09/2026. Le schéma OpenAPI
+Contrat JSON de la sonothèque (plan suite V2, §5). Lot B3, 27/09/2026 ; compléments B3b
+(espace staff, progression de l'encodage, pochettes, accueil, signalement d'album, limite de débit
+des événements), 29/09/2026. Le schéma OpenAPI
 (`schema.yml`, tag `audio`) fait foi pour les types ; ce document donne le sens et des exemples.
 
 ## Conventions
@@ -56,8 +58,18 @@ Objet **piste** (auditeur), repris partout sous le nom `Track` :
 `careme`, `triduum`, `paques`, `ordinaire` ou `""`.
 
 Objet **piste staff** (`StaffTrack`) : `Track` plus `own_visibility`, `status` (`brouillon`,
-`en_file`, `encodage`, `pret`, `echec`), `failure_reason`, `version`, `encoded_version`,
-`encoded_at`, `hidden_at`, `created_at`.
+`en_file`, `encodage`, `pret`, `echec`), `failure_reason`, `encoding_step`, `encoding_percent`,
+`version`, `encoded_version`, `encoded_at`, `hidden_at`, `created_at`, `plays_30d`.
+
+- `encoding_step` : `""` (pas encore commencé), `analyse`, `normalisation`, `qualites`,
+  `forme_onde`, `termine`. `encoding_percent` : 0 à 100. Voir §2.
+- `plays_30d` : débuts d'écoute (`start`) des 30 derniers jours, lus dans `PlayEvent`. Renseigné
+  seulement dans les listes staff d'**une** source (`GET /audio/staff/pistes/?source=…`,
+  `GET /audio/staff/albums/<id>/`) ; `null` ailleurs (suivi d'envoi, publication…). Jamais exposé
+  aux auditeurs, jamais comparé entre sources.
+
+Objet **album staff** (`StaffAlbum`) : l'album plus `track_count` (toutes ses pistes, brouillons
+compris), `hidden_at` (retiré par la modération), `created_at`, `updated_at`.
 
 ---
 
@@ -214,8 +226,31 @@ n'est pas encore arrivé.
 ### `GET /audio/uploads/<id>/` — suivi de l'encodage
 
 ```json
-{"id": "f7a2c9e4-…", "status": "echec", "failure_reason": "Aucune piste audio dans ce fichier.",
- "version": 1, "encoded_version": null, "…": "…"}
+{"id": "f7a2c9e4-…", "status": "encodage", "encoding_step": "qualites", "encoding_percent": 45,
+ "failure_reason": "", "version": 1, "encoded_version": null, "plays_30d": null, "…": "…"}
+```
+
+`transcode_track` écrit l'étape et l'avancement au début de chaque étape, hors transaction (visible
+tout de suite) :
+
+| `encoding_step` | `encoding_percent` | Étape |
+|---|---|---|
+| `""` | 0 | en file (`en_file`), ou relancé après une erreur technique |
+| `analyse` | 0 puis 5 | ffprobe (durée, tags) |
+| `normalisation` | 15 | loudnorm EBU R128 |
+| `qualites` | 30, 41, 52, 63 | les trois débits HLS puis le MP3 |
+| `forme_onde` | 80 puis 90 | forme d'onde, puis dépôt des fichiers dans le stockage |
+| `termine` | 100 | `status: "pret"` |
+
+En cas d'échec, `status: "echec"` et l'étape atteinte restent affichées (`failure_reason` dit
+pourquoi). Interroger toutes les 2 à 3 s pendant l'encodage suffit ; la notification
+`audio.encodage_termine` arrive de toute façon à la fin.
+
+Exemple d'échec :
+
+```json
+{"id": "f7a2c9e4-…", "status": "echec", "encoding_step": "analyse", "encoding_percent": 5,
+ "failure_reason": "Aucune piste audio dans ce fichier.", "version": 1, "encoded_version": null, "…": "…"}
 ```
 
 À la fin de l'encodage, l'auteur reçoit une notification (`audio.encodage_termine` ou
@@ -224,7 +259,83 @@ notifications et sur son WebSocket `ws/notifications/`.
 
 ### `GET /audio/staff/sources/` et `GET /audio/staff/pistes/?source=<id>&status=<etat>`
 
-Sources où l'on peut publier ; toutes les pistes d'une source avec leur état (`StaffTrack[]`).
+Sources où l'on peut publier ; toutes les pistes d'une source avec leur état, leur progression
+d'encodage et `plays_30d` (`StaffTrack[]`, 200 au plus, les plus récentes d'abord — jamais triées
+par écoutes). `source` est obligatoire (`400` sinon) : pas de liste d'écoutes à cheval sur
+plusieurs sources. `403 audio_forbidden` sans `audio.publier` sur le nœud de la source.
+
+```json
+[{"id": "c4f1a8e2-…", "title": "Kyrie", "status": "pret", "encoding_step": "termine",
+  "encoding_percent": 100, "published_at": "2026-09-27T13:05:00Z", "plays_30d": 42, "…": "…"}]
+```
+
+---
+
+## 2 bis. Espace staff : albums et pochettes (`audio.publier`)
+
+### `GET /audio/staff/albums/?source=<id>&kind=<type>`
+
+Tous les albums des sources où l'on peut publier (ou d'une seule avec `source`), **brouillons
+compris** (`published_at: null`) et albums retirés (`hidden_at`), les plus récents d'abord (500 au
+plus). Sans aucune source gérée : `[]`. Avec une `source` non gérée : `403`.
+
+```json
+[{"id": "b8e2f4a6-1d3c-4b9e-8a7f-5c2d9e1b6a40",
+  "source": {"id": "7c1e4b2a-…", "name": "Paroisse Saint-Dominique", "kind": "paroisse"},
+  "kind": "homelies", "title": "Homélies du Père Emmanuel Tine",
+  "description": "Homélies des messes dominicales à Saint-Dominique.", "visibility": "paroisse",
+  "cover_url": null, "recorded_on": null, "liturgical_season": "", "published_at": null,
+  "track_count": 4, "hidden_at": null, "created_at": "2026-09-20T09:00:00Z",
+  "updated_at": "2026-09-27T11:20:00Z"}]
+```
+
+### `POST /audio/staff/albums/`
+
+Même corps que `POST /audio/albums/` (`source_id`, `kind`, `title`, `visibility`, `description`,
+et facultativement `recorded_on`, `liturgical_season`). `201` : `StaffAlbum`, non publié.
+
+### `GET /audio/staff/albums/<id>/`
+
+`{"album": StaffAlbum, "tracks": StaffTrack[]}` : toutes les pistes de l'album (brouillons, en
+encodage, en échec) par position, avec `plays_30d`.
+
+### `PATCH /audio/staff/albums/<id>/`
+
+`kind`, `title`, `description`, `visibility`, `recorded_on`, `liturgical_season`. Changer la
+visibilité recalcule celle des pistes. `200` : `StaffAlbum`. La publication reste
+`POST /audio/albums/<id>/publier/`.
+
+### `POST /audio/staff/albums/<id>/pochette/` — envoi de la pochette
+
+```json
+{"file_name": "homelies-saint-dominique.jpg", "file_type": "image/jpeg", "file_size": 812345}
+```
+
+`201` : POST présigné vers `audio-covers/<album_id>/…` (bucket privé), comme l'audio :
+
+```json
+{"file_id": 1289, "method": "POST", "url": "https://stockage.jangubi.sn/jangubi-media",
+ "fields": {"acl": "private", "Content-Type": "image/jpeg", "key": "audio-covers/b8e2f4a6-…/9d1c….jpg", "…": "…"},
+ "max_size": 5242880, "expires_in": 3600}
+```
+
+En stockage local (développement), `url` vaut `…/api/v1/audio/staff/albums/<id>/pochette/<file_id>/local/`
+et `fields` est vide (champ `file` seul, jeton requis, réponse `204`).
+
+Erreurs `400` : `format_image` (jpg, png, webp seulement ; extension et type cohérents),
+`image_trop_grosse` (5 Mo), `fichier_vide`. `403 audio_forbidden`.
+
+### `POST /audio/staff/albums/<id>/pochette/terminer/`
+
+```json
+{"file_id": 1289}
+```
+
+Vérifie la présence de l'objet, sa taille et sa signature (JPEG, PNG ou WebP), le marque valide
+(`apps.files`, `upload_finished_at`) et en fait la pochette ; invalide le cache du catalogue.
+Idempotent. `200` : `StaffAlbum` avec `cover_url`. `400 upload_absent` (pas encore arrivé),
+`400 format_image` (contenu qui n'est pas une image), `404 pochette_introuvable` (fichier d'un
+autre album).
 
 ---
 
@@ -296,6 +407,43 @@ Toutes les 15 s, à la pause et à la fermeture :
 
   L'appareil qui a écrit reconnaît son `device_id` et ignore le message ; les autres proposent
   « Reprendre sur cet appareil ». Aucun enregistrement dans la liste des notifications.
+
+---
+
+## 3 bis. Accueil
+
+### `GET /audio/accueil/` — compte facultatif
+
+Toutes les sections de l'écran d'accueil en un seul appel (10 éléments au plus par section) :
+
+```json
+{
+  "paroisse": {"id": "5b7d2c1e-8a41-4f0b-9d7e-2c3f1a6b9e01", "name": "Saint-Dominique"},
+  "reprendre": [
+    {"track": {"id": "…", "title": "Homélie du 26e dimanche du temps ordinaire", "…": "…"},
+     "position_seconds": 73.5, "updated_at": "2026-09-27T10:42:10Z"}
+  ],
+  "nouveautes_ma_paroisse": [{"id": "c4f1a8e2-…", "title": "Kyrie", "…": "…"}],
+  "pour_vous": [{"track": {"id": "d2b7e9c4-…", "title": "Gloria", "…": "…"}, "reason": "Parce que vous avez écouté « Kyrie »"}],
+  "playlists_paroisse": [{"id": "e1c7…", "title": "Chants de la Toussaint", "is_editorial": true, "track_count": 8, "…": "…"}],
+  "temps_liturgique": {"code": "ordinaire", "label": "Temps ordinaire",
+                       "tracks": [{"id": "c4f1a8e2-…", "title": "Kyrie", "…": "…"}]}
+}
+```
+
+- `reprendre` : pistes commencées et pas finies (reprise par piste), les plus récentes d'abord.
+  Toujours calculé à l'appel (jamais en cache). `[]` sans compte.
+- `nouveautes_ma_paroisse` : dernières publications des sources de la paroisse suivie (et de son
+  sous-arbre). `[]` sans compte ou sans paroisse (`paroisse: null`).
+- `pour_vous` : les 10 premières recommandations de `GET /audio/pour-vous/` (cache par
+  utilisateur) ; sans compte, la liste de démarrage à froid publique.
+- `playlists_paroisse` : playlists éditoriales publiées des sources de la paroisse suivie.
+- `temps_liturgique` : pistes dont le temps liturgique (ou celui de l'album) est le temps du jour
+  (`apps.liturgy`).
+- `nouveautes_ma_paroisse`, `playlists_paroisse` et `temps_liturgique` sont **mis en cache 10 min
+  par paroisse** (et par temps liturgique), invalidés à chaque publication. Ils sont calculés avec
+  les droits d'un simple fidèle de la paroisse : un membre du staff n'y voit pas ses brouillons ni
+  les contenus d'autres nœuds où il a un office (ils restent dans la page de la source).
 
 ---
 
@@ -374,7 +522,13 @@ ligne, jusqu'à 7 jours).
 ```
 
 Idempotent par `client_event_id` **et** `occurred_at` : en cas de reprise réseau, renvoyer le lot
-à l'identique. Rejetés : piste inconnue ou non autorisée, horodatage de plus de 7 jours ou de plus
+à l'identique.
+
+**Limite de débit** (throttling DRF) : 30 lots par minute par adresse IP sans compte
+(`AUDIO_EVENTS_THROTTLE_RATE_ANON`), 60 lots par minute par compte connecté
+(`AUDIO_EVENTS_THROTTLE_RATE_USER`). Au-delà : `429` `{"error": {"code": "throttled", …}}` avec
+l'en-tête `Retry-After` (secondes). Le client garde le lot et le renvoie après ce délai (mêmes
+`client_event_id`, sans double comptage). Rejetés : piste inconnue ou non autorisée, horodatage de plus de 7 jours ou de plus
 de 5 minutes dans le futur. Signaux utilisés par les recommandations : écoute complète (`complete`,
 ou `progress` au-delà de 70 %), passe (`skip`, moins de 30 s), likes, ajouts en playlist.
 
@@ -416,7 +570,21 @@ Désactiver efface tout de suite les recommandations calculées de la personne.
 
 - `POST /audio/pistes/<id>/signaler/` : `{"motif": "droits", "comment": "Enregistrement d'un disque du commerce"}`
   (`motif` : `droits`, `inapproprie`, `qualite`, `autre`) → `201`.
-- `GET /audio/moderation/signalements/` (`audio.moderer`) : signalements ouverts du sous-arbre.
+- `POST /audio/albums/<id>/signaler/` : même corps, pour un album entier (pochette, présentation,
+  ensemble des pistes) → `201`. `404 album_introuvable` si l'album n'est pas visible.
+- Objet signalement :
+
+```json
+{"id": 12, "cible": "album", "track": null,
+ "album": {"id": "a3d9e7f1-…", "title": "Messe du 27 septembre 2026", "…": "…"},
+ "motif": "droits", "comment": "Disque du commerce", "status": "ouvert",
+ "created_at": "2026-09-28T08:00:00Z", "handled_at": null}
+```
+
+  `cible` : `piste` (alors `track` rempli, `album: null`) ou `album` (l'inverse).
+- `GET /audio/moderation/signalements/` (`audio.moderer`) : signalements ouverts (pistes et albums)
+  du sous-arbre.
 - `POST /audio/moderation/signalements/<id>/traiter/` : `{"resolution": "retire"}` (la piste
-  disparaît du catalogue, `hidden_at`) ou `{"resolution": "rejete"}`. Tous les signalements
-  ouverts de la piste sont clos ensemble ; l'action est journalisée (`AuditEvent`).
+  disparaît du catalogue, `hidden_at` ; pour un album : l'album **et toutes ses pistes**) ou
+  `{"resolution": "rejete"}`. Tous les signalements ouverts de la même cible sont clos ensemble ;
+  l'action est journalisée (`AuditEvent`).
