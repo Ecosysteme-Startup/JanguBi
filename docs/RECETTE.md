@@ -35,8 +35,8 @@ avec trois écarts :
 Les ports sont décalés par rapport à la pile de dev (`docker-compose.yml`) : les deux peuvent
 tourner sur le même poste.
 
-Le worker `celery-media` est construit depuis le même `docker/production.Dockerfile`, avec
-l'argument `EXTRA_APT_PACKAGES=ffmpeg` ; les autres images restent sans ffmpeg.
+Le worker `celery-media` utilise la même image que l'API : `docker/production.Dockerfile` installe
+ffmpeg pour l'encodage de la sonothèque.
 
 ## Démarrage
 

@@ -74,6 +74,10 @@ jobs:
           path: /opt/hostedtoolcache/Python/3.12.4/x64/
           key: python-${{ hashFiles('requirements/local.txt') }}-${{ hashFiles('requirements/base.txt') }}
 
+      - name: Install ffmpeg
+        # Encodage audio réel dans les tests de la sonothèque (apps/audio).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Install dependencies
         run: pip install -r requirements/local.txt
 

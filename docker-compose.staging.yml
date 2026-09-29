@@ -232,15 +232,9 @@ services:
     command: ["celery", "-A", "apps.tasks", "worker", "-Q", "default,celery,reco", "-n", "default@%h", "-l", "info",
               "--concurrency=2", "--without-gossip", "--without-mingle", "--without-heartbeat"]
 
-  # File « media » : encodage audio. Même image, avec ffmpeg installé (EXTRA_APT_PACKAGES).
+  # File « media » : encodage audio (ffmpeg est dans l'image).
   celery-media:
     <<: *worker-base
-    build:
-      context: .
-      dockerfile: docker/production.Dockerfile
-      args:
-        EXTRA_APT_PACKAGES: ffmpeg
-    image: jangubi-backend:staging-media
     command: ["celery", "-A", "apps.tasks", "worker", "-Q", "media", "-n", "media@%h", "-l", "info",
               "--concurrency=1", "--prefetch-multiplier=1", "--without-gossip", "--without-mingle", "--without-heartbeat"]
 
