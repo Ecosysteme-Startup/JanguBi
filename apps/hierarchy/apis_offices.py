@@ -13,7 +13,7 @@ from apps.api.pagination import LimitOffsetPagination, get_paginated_response, p
 from apps.api.v1 import V1ApiMixin
 from apps.core.exceptions import ApplicationError, NotFoundError
 from apps.core.request_context import client_ip
-from apps.hierarchy import authz, selectors, selectors_offices, services_offices
+from apps.hierarchy import authz, selectors, selectors_offices, services_memberships, services_offices
 from apps.hierarchy.authz import HasCapability
 from apps.hierarchy.imports import assignments_import_csv
 from apps.hierarchy.models import Capability, CapabilityOverride
@@ -394,7 +394,7 @@ class MeParoisseSuivieApi(AuthedV1Api):
 
     @extend_schema(
         tags=ME_TAG,
-        summary="Changer de paroisse suivie (libre, sans validation — RG-01)",
+        summary="Remplacer ma paroisse principale (historique ; voir me/paroisses/)",
         request=ParoisseSuivieInputSerializer,
         responses=ParoisseSuivieOutputSerializer,
     )
@@ -403,5 +403,5 @@ class MeParoisseSuivieApi(AuthedV1Api):
         serializer.is_valid(raise_exception=True)
         node_id = serializer.validated_data["node_id"]
         node = selectors.node_get(node_id=node_id) if node_id else None
-        person = services_offices.paroisse_suivie_set(person=request.user, node=node)
+        person = services_memberships.paroisse_suivie_set(person=request.user, node=node)
         return Response(ParoisseSuivieOutputSerializer({"node": person.paroisse_suivie}).data)

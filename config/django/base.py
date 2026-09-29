@@ -81,9 +81,29 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.donations.tasks.donations_payouts_sync_task",
         "schedule": crontab(hour=5, minute=10),
     },
+    "donations_month_close": {
+        "task": "apps.donations.tasks.donations_month_close_task",
+        "schedule": crontab(hour=3, minute=40),
+    },
     "donations_donor_email_purge": {
         "task": "apps.donations.tasks.donations_donor_email_purge_task",
         "schedule": crontab(hour=4, minute=20),
+    },
+    "bible_reco_recompute": {
+        # « Pour vous aujourd'hui » (plan V2 §6), file dédiée `reco`.
+        "task": "apps.bible.tasks.bible_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=30),
+        "options": {"queue": "reco"},
+    },
+    # Sonothèque (plan suite V2, §5) : recommandations précalculées la nuit (file « reco »),
+    # partitions mensuelles des événements d'écoute créées d'avance et purgées après 13 mois.
+    "audio_reco_recompute": {
+        "task": "apps.audio.tasks.audio_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=5),
+    },
+    "audio_play_event_partitions": {
+        "task": "apps.audio.tasks.audio_play_event_partitions_task",
+        "schedule": crontab(day_of_month=1, hour=1, minute=10),
     },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
@@ -137,6 +157,8 @@ LOCAL_APPS = [
     "apps.dashboards.apps.DashboardsConfig",
     "apps.contact.apps.ContactConfig",
     "apps.donations.apps.DonationsConfig",
+    "apps.audio.apps.AudioConfig",
+    "apps.realtime.apps.RealtimeConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -149,6 +171,7 @@ THIRD_PARTY_APPS = [
     "django_extensions",
     "drf_spectacular",
     "channels",
+    "django_prometheus",
 ]
 
 INSTALLED_APPS = [
@@ -168,6 +191,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Métriques Prometheus (/metrics, lot B2) : la première et la dernière couche mesurent tout.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -180,6 +205,7 @@ MIDDLEWARE = [
     "apps.authentication.middleware.KeycloakProvisioningMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -384,6 +410,8 @@ from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa
 from config.settings.dons import *  # noqa
+from config.settings.audio import *  # noqa
+from config.settings.temps_reel import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa

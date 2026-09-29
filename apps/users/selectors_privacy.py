@@ -19,6 +19,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
     from django.db.models import Prefetch
 
     from apps.agenda.models import EventRegistration
+    from apps.bible.selectors import parole_personal_data
     from apps.confessions.models import ConfessionBooking
     from apps.documents.models import DocumentRequest
     from apps.messaging.models import Conversation, Message, NotificationPreference
@@ -39,6 +40,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
             "etat_de_vie": user.etat_de_vie,
             "degre_ordre": user.degre_ordre,
             "paroisse_suivie": user.paroisse_suivie.name if user.paroisse_suivie else None,
+            "paroisses": _parishes(user),
             "consent_version": user.consent_version,
             "consent_at": _iso(user.consent_at),
         },
@@ -80,6 +82,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
             {"event": r.event.title, "start_at": _iso(r.event.start_at), "registered_at": _iso(r.registered_at)}
             for r in EventRegistration.objects.filter(user=user).select_related("event")
         ],
+        "parole": parole_personal_data(user=user),
         "conversations": [
             {
                 "id": str(c.pk),
@@ -89,3 +92,18 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
             for c in conversations.order_by("created_at")
         ],
     }
+
+
+def _parishes(user: Any) -> list[dict[str, Any]]:
+    """Paroisses multiples (décisions 6-8) : principale et secondaires, retraits par la paroisse compris."""
+    from apps.hierarchy.models import ParishMembership
+
+    return [
+        {
+            "paroisse": m.node.name,
+            "principale": m.is_primary,
+            "membre_depuis": _iso(m.joined_at),
+            "retire_par_la_paroisse_le": _iso(m.removed_by_parish_at),
+        }
+        for m in ParishMembership.objects.filter(user=user).select_related("node").order_by("joined_at")
+    ]

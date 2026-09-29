@@ -20,19 +20,34 @@ from apps.api.pagination import LimitOffsetPagination, get_paginated_response, p
 from apps.api.v1 import V1ApiMixin, error_body
 from apps.authentication.keycloak import KeycloakJWTAuthentication
 from apps.core.exceptions import ApplicationError, NotFoundError
-from apps.donations import access, exports, selectors, services
+from apps.donations import (
+    access,
+    exports,
+    selectors,
+    selectors_analyse,
+    services,
+    services_cloture,
+    services_tresorerie,
+)
 from apps.donations.enums import DonationStatus
+from apps.donations.models import Fund
 from apps.donations.providers import known_provider
 from apps.donations.serializers import (
     ActivationInputSerializer,
     ActivationSerializer,
+    AdjustmentInputSerializer,
+    AdjustmentSerializer,
     CashCollectionFilterSerializer,
     CashCollectionInputSerializer,
     CashCollectionSerializer,
+    CashDepositInputSerializer,
+    CashDepositSerializer,
     CashRejectInputSerializer,
     CheckoutInputSerializer,
     CheckoutOutputSerializer,
     DonationStatusSerializer,
+    DonorRevealInputSerializer,
+    DonorRevealSerializer,
     DonorSummarySerializer,
     ExportQuerySerializer,
     FundCreateInputSerializer,
@@ -44,6 +59,11 @@ from apps.donations.serializers import (
     ImpereeCreateInputSerializer,
     ImpereeFollowRowSerializer,
     ImpereeSerializer,
+    IncidentFilterSerializer,
+    IncidentResolveInputSerializer,
+    MassFundsQuerySerializer,
+    MonthClosingInputSerializer,
+    MonthClosingSerializer,
     MonthQuerySerializer,
     MyDonationSerializer,
     MyDonationsFilterSerializer,
@@ -51,16 +71,26 @@ from apps.donations.serializers import (
     OperationSerializer,
     OperationsFilterSerializer,
     ParishSummarySerializer,
+    PaymentIncidentSerializer,
     PayoutSerializer,
     PeriodQuerySerializer,
     PublicFundDetailSerializer,
     PublicParishSerializer,
     ReconciliationSerializer,
     RefundInputSerializer,
+    RemittanceFilterSerializer,
+    RemittanceInputSerializer,
+    RemittanceSerializer,
     StaffFundSerializer,
     YearQuerySerializer,
     amounts_payload,
     authorization_payload,
+)
+from apps.donations.serializers_analyse import (
+    ActiviteQuerySerializer,
+    ActiviteSerializer,
+    AnalyseQuerySerializer,
+    AnalyseSerializer,
 )
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasAnyCapability, HasCapability
@@ -98,6 +128,10 @@ def _parish(node_id: Any) -> Any:
     if not access.is_parish(node):
         raise ApplicationError("Ce nœud n'est pas une paroisse.", code="not_a_parish")
     return node
+
+
+def _place_or_none(place_id: Any) -> Any:
+    return hierarchy_selectors.place_get(place_id=place_id) if place_id else None
 
 
 def _query(serializer_class: Any, request: Request) -> dict[str, Any]:
@@ -184,6 +218,8 @@ class CheckoutApi(V1ApiMixin, APIView):
             donor=request.user,
             donor_email=data["email"],
             idempotency_key=key,
+            source=data["source"],
+            place=_place_or_none(data.get("place_id")),
         )
         payload = CheckoutOutputSerializer({"donation": donation, "attempt": attempt}).data
         return Response(payload, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -197,7 +233,8 @@ class CheckoutStatusApi(_PublicApi):
         responses=DonationStatusSerializer,
     )
     def get(self, request: Request, donation_id: str) -> Response:
-        return Response(DonationStatusSerializer(selectors.donation_public_get(donation_id=donation_id)).data)
+        donation = services.donation_mark_returned(donation=selectors.donation_public_get(donation_id=donation_id))
+        return Response(DonationStatusSerializer(donation).data)
 
 
 class WebhookApi(APIView):
@@ -310,7 +347,8 @@ class FundListCreateApi(_StaffApi):
         data = _body(FundCreateInputSerializer, request)
         node = _parish(data.pop("node"))
         image = selectors.image_get(file_id=data.pop("image_id"), user=request.user)
-        fund = services.fund_create(actor=request.user, node=node, image=image, **data)
+        place = _place_or_none(data.pop("place_id"))
+        fund = services.fund_create(actor=request.user, node=node, image=image, place=place, **data)
         return Response(StaffFundSerializer(selectors.fund_get(fund_id=fund.pk)).data, status=status.HTTP_201_CREATED)
 
 
@@ -334,6 +372,8 @@ class FundDetailApi(_StaffApi):
         data = _body(FundUpdateInputSerializer, request)
         if "image_id" in data:
             data["image"] = selectors.image_get(file_id=data.pop("image_id"), user=request.user)
+        if "place_id" in data:
+            data["place"] = _place_or_none(data.pop("place_id"))
         services.fund_update(fund=fund, actor=request.user, **data)
         return Response(StaffFundSerializer(selectors.fund_get(fund_id=fund_id)).data)
 
@@ -449,10 +489,42 @@ class CashCollectionListCreateApi(_StaffApi):
         data = _body(CashCollectionInputSerializer, request)
         node = _parish(data.pop("node"))
         fund = selectors.fund_get(fund_id=data.pop("fund_id"))
-        place_id = data.pop("place_id")
-        place = hierarchy_selectors.place_get(place_id=place_id) if place_id else None
+        place = _place_or_none(data.pop("place_id"))
         collection = services.cash_collection_create(actor=request.user, node=node, fund=fund, place=place, **data)
         return Response(CashCollectionSerializer(collection).data, status=status.HTTP_201_CREATED)
+
+
+class MassFundsApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_cash_funds",
+        summary="Fonds proposés pour la quête d'une messe (quête impérée d'abord, messe anticipée selon le diocèse)",
+        parameters=[MassFundsQuerySerializer],
+        responses=StaffFundSerializer(many=True),
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(MassFundsQuerySerializer, request)
+        node = _parish(filters["node"])
+        access.require_parish_level(request.user, "dons.saisir_quete", node)
+        funds = selectors.funds_for_mass(node=node, mass_date=filters["date"])
+        with_totals = {f.pk: f for f in selectors.funds_with_totals(Fund.objects.filter(pk__in=[f.pk for f in funds]))}
+        return Response(StaffFundSerializer([with_totals[f.pk] for f in funds], many=True).data)
+
+
+class DonorRevealApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_donor_reveal",
+        summary="Consulter le nom d'un donateur anonyme (curé seulement, motif obligatoire, journalisé)",
+        request=DonorRevealInputSerializer,
+        responses=DonorRevealSerializer,
+    )
+    def post(self, request: Request, donation_id: str) -> Response:
+        data = _body(DonorRevealInputSerializer, request)
+        result = services.donor_reveal(
+            donation=selectors.operation_get(donation_id=donation_id), actor=request.user, reason=data["motif"]
+        )
+        return Response(DonorRevealSerializer(result).data)
 
 
 class CashCollectionValidateApi(_StaffApi):
@@ -475,6 +547,222 @@ class CashCollectionRejectApi(_StaffApi):
             collection=selectors.cash_collection_get(collection_id=collection_id), actor=request.user, **data
         )
         return Response(CashCollectionSerializer(selectors.cash_collection_get(collection_id=collection.pk)).data)
+
+
+class CashDepositListCreateApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_deposits_list",
+        summary="Dépôts en banque des espèces d'une paroisse",
+        parameters=[NodeQuerySerializer, *_PAGINATION],
+        responses=paginated_response_serializer(CashDepositSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=CashDepositSerializer,
+            queryset=selectors.cash_deposits_for_parish(node=node),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_deposits_create",
+        summary="Déclarer le dépôt en banque de quêtes validées (montant = somme des quêtes)",
+        request=CashDepositInputSerializer,
+        responses={201: CashDepositSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(CashDepositInputSerializer, request)
+        node = _parish(data.pop("node"))
+        deposit = services_tresorerie.cash_deposit_declare(actor=request.user, node=node, **data)
+        return Response(
+            CashDepositSerializer(selectors.cash_deposit_get(deposit_id=deposit.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RemittanceListCreateApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (
+        IsAuthenticated,
+        HasAnyCapability("dons.voir_fonds", "dons.gerer_fonds", "dons.definir_quete_imperee"),
+    )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_remittances_list",
+        summary="Remises à la curie des espèces de quête impérée (d'une paroisse, ou de tout le diocèse)",
+        parameters=[RemittanceFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(RemittanceSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(RemittanceFilterSerializer, request)
+        node = hierarchy_selectors.node_get(node_id=filters["node"])
+        if access.is_diocese(node):
+            access.require_diocese(request.user, "dons.definir_quete_imperee", node)
+        else:
+            access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=RemittanceSerializer,
+            queryset=selectors.remittances_for(node=node, status=filters.get("status")),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_remittances_create",
+        summary="Déclarer une remise à la curie (espèces d'une quête impérée)",
+        request=RemittanceInputSerializer,
+        responses={201: RemittanceSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(RemittanceInputSerializer, request)
+        fund = selectors.fund_get(fund_id=data.pop("fund_id"))
+        remittance = services_tresorerie.curia_remittance_declare(actor=request.user, fund=fund, **data)
+        return Response(
+            RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class RemittanceConfirmApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (IsAuthenticated, HasCapability("dons.definir_quete_imperee"))
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_remittances_confirm",
+                   summary="Confirmer la réception d'une remise (curie, autre personne que la déclaration)",
+                   request=None, responses=RemittanceSerializer)  # fmt: skip
+    def post(self, request: Request, remittance_id: int) -> Response:
+        remittance = services_tresorerie.curia_remittance_confirm(
+            remittance=selectors.remittance_get(remittance_id=remittance_id), actor=request.user
+        )
+        return Response(RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data)
+
+
+class RemittanceContestApi(V1ApiMixin, ApiAuthMixin, APIView):
+    permission_classes = (IsAuthenticated, HasCapability("dons.definir_quete_imperee"))
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_remittances_contest",
+                   summary="Contester une remise (motif obligatoire)", request=CashRejectInputSerializer,
+                   responses=RemittanceSerializer)  # fmt: skip
+    def post(self, request: Request, remittance_id: int) -> Response:
+        data = _body(CashRejectInputSerializer, request)
+        remittance = services_tresorerie.curia_remittance_contest(
+            remittance=selectors.remittance_get(remittance_id=remittance_id), actor=request.user, **data
+        )
+        return Response(RemittanceSerializer(selectors.remittance_get(remittance_id=remittance.pk)).data)
+
+
+class AnalysisApi(V1ApiMixin, ApiAuthMixin, APIView):
+    """Tableaux de bord : paroisse (nomination locale, exact) ou diocèse / doyenné (agrégats arrondis)."""
+
+    permission_classes = (IsAuthenticated, HasAnyCapability("dons.voir_fonds", "dons.voir_agregats"))
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_analysis",
+        summary="Analyse des dons : synthèse, tendance, à traiter (contrat : docs/API-DONS-ANALYSE.md)",
+        description=(
+            "niveau=paroisse : `dons.voir_fonds` par une nomination sur la paroisse même, montants exacts. "
+            "niveau=diocese : `dons.voir_agregats` sur le diocèse ou le doyenné, montants arrondis au millier. "
+            "Aucun nom de donateur ; paroisses en ordre alphabétique ; aucun tri par montant ; « à traiter » "
+            "trié par échéance croissante."
+        ),
+        parameters=[AnalyseQuerySerializer],
+        responses=AnalyseSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(AnalyseQuerySerializer, request)
+        node = hierarchy_selectors.node_get(node_id=filters["noeud"])
+        level = filters["niveau"]
+        if level == "paroisse":
+            access.require_parish_level(request.user, "dons.voir_fonds", node)
+        else:
+            access.require_aggregates(request.user, node)
+            if filters["periode"] == "semaine":
+                raise ApplicationError(
+                    "Au-dessus de la paroisse, la période minimale est le mois.", code="period_not_allowed"
+                )
+        period = selectors_analyse.period_parse(filters["periode"], filters["date"] or None)
+        data = selectors_analyse.donations_analysis(node=node, level=level, period=period)
+        return Response(AnalyseSerializer(data).data)
+
+
+class MonthClosingApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_closings_list", summary="Mois clos d'une paroisse",
+                   parameters=[NodeQuerySerializer], responses=MonthClosingSerializer(many=True))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return Response(MonthClosingSerializer(selectors.closings_for_parish(node=node), many=True).data)
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_closings_create",
+        summary="Clore un mois écoulé (totaux figés ; plus aucune quête ne s'y saisit)",
+        request=MonthClosingInputSerializer,
+        responses={201: MonthClosingSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        data = _body(MonthClosingInputSerializer, request)
+        node = _parish(data["node"])
+        month = datetime.date.fromisoformat(f"{data['month']}-01")
+        closing = services_cloture.month_close(node=node, month=month, actor=request.user)
+        return Response(MonthClosingSerializer(closing).data, status=status.HTTP_201_CREATED)
+
+
+class AdjustmentApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_adjustments_list",
+                   summary="Écritures d'ajustement (remboursements, corrections de mois clos)",
+                   parameters=[NodeQuerySerializer, *_PAGINATION],
+                   responses=paginated_response_serializer(AdjustmentSerializer))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        node = _parish(_query(NodeQuerySerializer, request)["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=AdjustmentSerializer,
+            queryset=selectors.adjustments_for_parish(node=node),
+            request=request,
+            view=self,
+        )
+
+    @extend_schema(tags=TAG, operation_id="staff_dons_adjustments_create",
+                   summary="Passer une écriture de correction (datée du jour, motif obligatoire)",
+                   request=AdjustmentInputSerializer, responses={201: AdjustmentSerializer})  # fmt: skip
+    def post(self, request: Request) -> Response:
+        data = _body(AdjustmentInputSerializer, request)
+        fund = selectors.fund_get(fund_id=data.pop("fund_id"))
+        adjustment = services_cloture.adjustment_create(actor=request.user, fund=fund, **data)
+        return Response(AdjustmentSerializer(adjustment).data, status=status.HTTP_201_CREATED)
+
+
+class IncidentListApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_incidents_list",
+                   summary="Incidents de paiement (paiements tardifs, montants incohérents) d'une paroisse",
+                   parameters=[IncidentFilterSerializer], responses=PaymentIncidentSerializer(many=True))  # fmt: skip
+    def get(self, request: Request) -> Response:
+        filters = _query(IncidentFilterSerializer, request)
+        node = _parish(filters["node"])
+        access.require_parish_level(request.user, "dons.voir_fonds", node)
+        incidents = selectors.incidents_for_parish(node=node, status=filters.get("status"))
+        return Response(PaymentIncidentSerializer(incidents, many=True).data)
+
+
+class IncidentResolveApi(_StaffApi):
+    @extend_schema(tags=TAG, operation_id="staff_dons_incidents_resolve",
+                   summary="Régulariser un incident (intégrer le paiement tardif, remboursé, sans suite)",
+                   request=IncidentResolveInputSerializer, responses=PaymentIncidentSerializer)  # fmt: skip
+    def post(self, request: Request, incident_id: int) -> Response:
+        data = _body(IncidentResolveInputSerializer, request)
+        incident = services_cloture.incident_resolve(
+            incident=selectors.incident_get(incident_id=incident_id), actor=request.user, **data
+        )
+        return Response(PaymentIncidentSerializer(selectors.incident_get(incident_id=incident.pk)).data)
 
 
 class ExportApi(V1ApiMixin, ApiAuthMixin, APIView):
@@ -626,6 +914,20 @@ class HealthApi(_PlatformApi):
     )
     def get(self, request: Request) -> Response:
         return Response(HealthSerializer(selectors.platform_health()).data)
+
+
+class ActivityApi(_PlatformApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="platform_dons_activity",
+        summary="Activité des paiements : nombres, taux, délais, incidents — aucun montant (docs/API-DONS-ANALYSE.md)",
+        parameters=[ActiviteQuerySerializer],
+        responses=ActiviteSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(ActiviteQuerySerializer, request)
+        period = selectors_analyse.period_parse(filters["periode"], filters["date"] or None)
+        return Response(ActiviteSerializer(selectors_analyse.platform_activity(period=period)).data)
 
 
 class ActivationApi(_PlatformApi):

@@ -2,7 +2,7 @@ from django.contrib import admin
 from treebeard.admin import TreeAdmin
 from treebeard.forms import movenodeform_factory
 
-from apps.hierarchy.models import MassSchedule, Node, NodeType, PlaceOfWorship, ScheduleException
+from apps.hierarchy.models import MassSchedule, Node, NodeType, ParishMembership, PlaceOfWorship, ScheduleException
 
 
 @admin.register(NodeType)
@@ -39,3 +39,10 @@ class ScheduleExceptionAdmin(admin.ModelAdmin):
     list_display = ["place", "date", "kind", "cancelled", "start_time"]
     list_filter = ["kind", "cancelled"]
     raw_id_fields = ["place"]
+
+
+@admin.register(ParishMembership)
+class ParishMembershipAdmin(admin.ModelAdmin):
+    list_display = ("user", "node", "is_primary", "joined_at", "removed_by_parish_at")
+    list_filter = ("is_primary",)
+    raw_id_fields = ("user", "node", "removed_by")

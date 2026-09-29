@@ -18,6 +18,14 @@ DONATIONS_PENDING_CHECK_MINUTES = env.int("DONATIONS_PENDING_CHECK_MINUTES", def
 DONATIONS_EXPIRE_HOURS = env.int("DONATIONS_EXPIRE_HOURS", default=24)
 DONATIONS_DONOR_EMAIL_RETENTION_DAYS = env.int("DONATIONS_DONOR_EMAIL_RETENTION_DAYS", default=90)
 
+# Échéances du bloc « À traiter » (tableaux de bord V2) et clôture mensuelle.
+DONATIONS_CASH_VALIDATE_DAYS = env.int("DONATIONS_CASH_VALIDATE_DAYS", default=2)  # quête à confirmer : 48 h
+DONATIONS_CASH_DEPOSIT_DAYS = env.int("DONATIONS_CASH_DEPOSIT_DAYS", default=7)  # espèces à déposer
+DONATIONS_REMITTANCE_CONFIRM_DAYS = env.int("DONATIONS_REMITTANCE_CONFIRM_DAYS", default=7)  # remise à confirmer
+DONATIONS_INCIDENT_DAYS = env.int("DONATIONS_INCIDENT_DAYS", default=7)  # paiement tardif à régulariser
+# Jour du mois à partir duquel le mois précédent est clos automatiquement (s'il n'a plus de quête à valider).
+DONATIONS_MONTH_CLOSE_DAY = env.int("DONATIONS_MONTH_CLOSE_DAY", default=10)
+
 # URLs du parcours : retour navigateur (lien universel côté front) et notification serveur.
 DONATIONS_RETURN_URL = env.str("DONATIONS_RETURN_URL", default="http://localhost:3000/dons/retour")
 DONATIONS_CALLBACK_BASE_URL = env.str("DONATIONS_CALLBACK_BASE_URL", default="http://localhost:8001")

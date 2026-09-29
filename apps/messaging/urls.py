@@ -20,6 +20,7 @@ from apps.messaging.apis import (
     NotificationReadApi,
     PriestListApi,
 )
+from apps.messaging.apis_presence import PresenceApi
 
 urlpatterns = [
     # Prêtres joignables et disponibilités (V1)
@@ -43,6 +44,8 @@ urlpatterns = [
     # Blocks
     path("blocks/", BlockListCreateApi.as_view(), name="block-list-create"),
     path("blocks/<uuid:block_id>/", BlockDeleteApi.as_view(), name="block-delete"),
+    # Présence des interlocuteurs (docs/TEMPS-REEL.md)
+    path("presence/", PresenceApi.as_view(), name="presence"),
     # Notifications
     path("notifications/", NotificationListApi.as_view(), name="notification-list"),
     path("notifications/<uuid:notification_id>/read/", NotificationReadApi.as_view(), name="notification-read"),

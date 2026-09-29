@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from django.core.cache import cache
+from freezegun import freeze_time
 from rest_framework.test import APIClient
 
 from apps.donations import services
@@ -86,3 +87,15 @@ def pay(donation: Any, *, status: str = "completed", amount: int | None = None, 
     headers, body = FakeProvider.simulate(attempt.external_ref, status, amount=amount, method=method, fee=fee)
     extra: dict[str, Any] = {f"HTTP_{k.upper().replace('-', '_')}": v for k, v in headers.items()}
     return client_for().post("/api/v1/dons/webhooks/fake/", data=body, content_type="application/json", **extra)
+
+
+@pytest.fixture
+def sept(world):
+    """Jeu de référence de septembre 2026 (spec §2), sous le temps figé au dim. 27 septembre, 20 h."""
+    from apps.donations import apis
+    from apps.donations.tests import dataset_septembre
+
+    # Modules HTTP importés avant le gel du temps : sinon DRF garderait l'horloge figée (quotas).
+    assert apis.AnalysisApi is not None
+    with freeze_time("2026-09-27 20:00:00"):
+        yield dataset_septembre.build(world)

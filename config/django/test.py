@@ -60,6 +60,10 @@ REST_FRAMEWORK = {
 # Formulaire de contact : quota coupé (réactivé par override_settings dans ses tests).
 CONTACT_THROTTLE_RATE = None
 DONATIONS_CHECKOUT_THROTTLE_RATE = None
+AUDIO_EVENTS_THROTTLE_RATE_ANON = None
+AUDIO_EVENTS_THROTTLE_RATE_USER = None
+AUDIO_DOWNLOAD_THROTTLE_RATE = None
+AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE = None
 DONATIONS_PROVIDER = "fake"
 
 # Mot de passe plus rapide à hasher en test

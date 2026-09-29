@@ -7,6 +7,8 @@ SPECTACULAR_SETTINGS = {
     # les collisions « status », « kind »… et le client généré change à chaque lot).
     'ENUM_NAME_OVERRIDES': {
         'NodeStatusEnum': 'apps.hierarchy.enums.NodeStatus',
+        'ReadingEventKindEnum': 'apps.bible.models.ReadingEvent.Kind',
+        'BookmarkColorEnum': 'apps.bible.models.Bookmark.Color',
         'PlaceKindEnum': 'apps.hierarchy.enums.PlaceKind',
         'ScheduleKindEnum': 'apps.hierarchy.enums.ScheduleKind',
         'WeekdayEnum': 'apps.hierarchy.enums.Weekday',
@@ -36,5 +38,16 @@ SPECTACULAR_SETTINGS = {
         'PayoutStatusEnum': 'apps.donations.enums.PayoutStatus',
         'ReconciliationIssueKindEnum': 'apps.donations.serializers.ISSUE_KINDS',
         'ExportFileEnum': 'apps.donations.serializers.EXPORT_FILES',
+        # Sonothèque (plan suite V2, §5).
+        'AudioSourceKindEnum': 'apps.audio.enums.SourceKind',
+        'AudioAlbumKindEnum': 'apps.audio.enums.AlbumKind',
+        'AudioVisibilityEnum': 'apps.audio.enums.Visibility',
+        'AudioTrackStatusEnum': 'apps.audio.enums.TrackStatus',
+        'AudioLanguageEnum': 'apps.audio.enums.Language',
+        'AudioLiturgicalSeasonEnum': 'apps.audio.enums.LiturgicalSeason',
+        'AudioPlayEventKindEnum': 'apps.audio.enums.PlayEventKind',
+        'AudioReportReasonEnum': 'apps.audio.enums.ReportReason',
+        'AudioReportStatusEnum': 'apps.audio.enums.ReportStatus',
+        'AudioReportDecisionEnum': 'apps.audio.serializers.REPORT_DECISIONS',
     },
 }
