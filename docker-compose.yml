@@ -57,6 +57,18 @@ services:
   # ===========================================
   db:
     image: pgvector/pgvector:pg17
+    # pg_stat_statements : mesurer avant d'indexer (docs/SCALING.md). Le chargement au démarrage
+    # est obligatoire ; l'extension est créée par docker/postgres/init à la création du volume.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=top"
+      - "-c"
+      - "pg_stat_statements.max=10000"
+      - "-c"
+      - "track_io_timing=on"
     environment:
       # Bonne pratique : On utilise les variables du .env plutôt que de les écrire en dur
       POSTGRES_DB: ${POSTGRES_DB}
@@ -64,6 +76,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5433:5432"
     healthcheck:
@@ -183,10 +196,24 @@ services:
   # ===========================================
   # Workers Asynchrones
   # ===========================================
+  # File « default » : e-mails, notifications, push, webhooks (config/settings/celery.py).
   celery:
     <<: *app-base
     container_name: celery_worker
-    command: celery -A apps.tasks worker -l info --concurrency=1 --without-gossip --without-mingle --without-heartbeat
+    command: celery -A apps.tasks worker -Q default,celery -l info --concurrency=1 --without-gossip --without-mingle --without-heartbeat
+
+  # File « media » : encodage audio ffmpeg (lot B3). Séparé pour qu'un encodage ne retarde
+  # jamais un e-mail ; concurrence 1 à 2 (CPU), une tâche réservée à la fois.
+  celery-media:
+    <<: *app-base
+    container_name: celery_worker_media
+    command: celery -A apps.tasks worker -Q media -n media@%h -l info --concurrency=1 --prefetch-multiplier=1 --without-gossip --without-mingle --without-heartbeat
+
+  # File « reco » : recommandations précalculées (lots B3/B4).
+  celery-reco:
+    <<: *app-base
+    container_name: celery_worker_reco
+    command: celery -A apps.tasks worker -Q reco -n reco@%h -l info --concurrency=1 --prefetch-multiplier=1 --without-gossip --without-mingle --without-heartbeat
 
   # ===========================================
   # Planificateur Tâches
@@ -198,6 +225,28 @@ services:
     # django-celery-beat, pas dans un fichier gdbm local. Évite l'erreur de
     # file-locking sur le bind mount Docker Desktop (FS "fakeowner").
     command: celery -A apps.tasks beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+  # ===========================================
+  # Exploitation — profil « ops » : docker compose --profile ops up flower
+  # ===========================================
+  # Flower : files et workers Celery. Écoute sur 127.0.0.1 seulement ; définir un mot de passe
+  # (FLOWER_BASIC_AUTH=utilisateur:motdepasse). Ne jamais l'exposer par Traefik sans authentification.
+  flower:
+    image: mher/flower:2.0
+    profiles: ["ops"]
+    container_name: flower
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-}
+      FLOWER_PORT: "5555"
+      FLOWER_PURGE_OFFLINE_WORKERS: "300"
+    ports:
+      - "127.0.0.1:5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app_network
 
   # ===========================================
   # Keycloak (ADR-004) — profil « keycloak » : make kc-up

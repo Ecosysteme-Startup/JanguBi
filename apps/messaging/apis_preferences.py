@@ -14,7 +14,7 @@ from apps.messaging.services_notifications import preferences_get, preferences_u
 class NotificationPreferenceSerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationPreference
-        fields = ["in_app", "email", "topic_annonces", "topic_evenements", "quiet_start", "quiet_end"]
+        fields = ["in_app", "email", "push", "topic_annonces", "topic_evenements", "quiet_start", "quiet_end"]
 
 
 class NotificationPreferenceApi(V1ApiMixin, ApiAuthMixin, APIView):

@@ -176,6 +176,10 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
     # Activité au jour près (tableaux de bord, EF-DASH-01/03) : une écriture par jour au plus.
     last_seen_on = models.DateField(_("dernière activité le"), null=True, blank=True)
     last_mfa_on = models.DateField(_("dernière connexion MFA le"), null=True, blank=True)
+    # Présence (messagerie) : « vu à », écrit à la fermeture de la dernière connexion temps réel.
+    last_seen_at = models.DateTimeField(_("vu à"), null=True, blank=True)
+    # « Montrer ma présence » : vide = valeur par défaut (oui pour le clergé et le staff, non sinon).
+    montrer_presence = models.BooleanField(_("montrer ma présence"), null=True, blank=True)
 
     groups = models.ManyToManyField(  # type: ignore[assignment]  # django-stubs : redéclaration M2M de PermissionsMixin (related_name custom)
         Group,

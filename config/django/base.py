@@ -137,6 +137,7 @@ LOCAL_APPS = [
     "apps.dashboards.apps.DashboardsConfig",
     "apps.contact.apps.ContactConfig",
     "apps.donations.apps.DonationsConfig",
+    "apps.realtime.apps.RealtimeConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -149,6 +150,7 @@ THIRD_PARTY_APPS = [
     "django_extensions",
     "drf_spectacular",
     "channels",
+    "django_prometheus",
 ]
 
 INSTALLED_APPS = [
@@ -168,6 +170,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Métriques Prometheus (/metrics, lot B2) : la première et la dernière couche mesurent tout.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -180,6 +184,7 @@ MIDDLEWARE = [
     "apps.authentication.middleware.KeycloakProvisioningMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -384,6 +389,7 @@ from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa
 from config.settings.dons import *  # noqa
+from config.settings.temps_reel import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
