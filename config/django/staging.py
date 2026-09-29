@@ -1,4 +1,4 @@
-"""Environnement de RECETTE (staging) : docs/RECETTE.md, docker-compose.staging.yml.
+"""Environnement de RECETTE (staging) : docs/RECETTE.md (déployé par le dépôt Infrastructure).
 
 Mêmes garde-fous que la production (DEBUG coupé, SECRET_KEY et MESSAGING_ENCRYPTION_KEY
 obligatoires et distinctes, statiques WhiteNoise, admin Django fermée par défaut), avec trois

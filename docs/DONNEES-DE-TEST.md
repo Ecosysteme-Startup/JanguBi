@@ -12,9 +12,9 @@ Plan de référence : `JanguBIMobileApp/docs/PLAN-DONNEES-DE-TEST.md` (décision
 make seed-realiste                 # local : échelle petite, médias légers, vérification (< 1 min)
 make seed-realiste-reset           # retire exactement le lot (graine 2026 par défaut)
 make seed-charge                   # échelle grande (COPY en masse), sans fichiers audio
-make seed-recette                  # recette : médias du manifeste puis échelle moyenne, médias complets
-make seed-recette-reset            # remise à zéro de la recette (MANUELLE uniquement)
-make seed-recette-trafic           # 10 min de dons confirmés et d'écoutes en continu (SSE, temps réel)
+make seed-realiste APP=jangubi ENV=staging          # (serveur, dépôt Infrastructure) médias puis échelle moyenne
+make seed-realiste APP=jangubi ENV=staging RESET=1   # (serveur, dépôt Infrastructure) remise à zéro MANUELLE
+make seed-realiste APP=jangubi ENV=staging TRAFIC=10min  # (serveur) dons et écoutes simulés en continu
 ```
 
 Hors Docker :
@@ -176,8 +176,8 @@ quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) c
 
 - **Local** : `make seed-realiste` ; web `NEXT_PUBLIC_API_MOCKING=false` ; mobile `USE_MOCKS=false` avec
   `API_URL=http://10.0.2.2:8000/api` (émulateur Android) ou l'IP du poste.
-- **Recette** : `make seed-recette` (voir `docs/RECETTE.md`). Remise à zéro **manuelle uniquement**
-  (`make seed-recette-reset`, puis `make seed-recette SEED_ARGS="--graine 2027"` pour une nouvelle graine) ;
+- **Recette** : `make seed-realiste APP=jangubi ENV=staging` sur le serveur (voir `docs/RECETTE.md`). Remise à zéro **manuelle uniquement**
+  (`RESET=1`, puis `SEED_ARGS="--graine 2027"` pour une nouvelle graine) ;
   aucune tâche planifiée.
 - Les écoutes semées tombent dans les partitions mensuelles ; celles de plus de 13 mois sont purgées par
   la tâche mensuelle, comme en production.
