@@ -181,6 +181,27 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
     # « Montrer ma présence » : vide = valeur par défaut (oui pour le clergé et le staff, non sinon).
     montrer_presence = models.BooleanField(_("montrer ma présence"), null=True, blank=True)
 
+    # --- Administration des comptes et synchronisation Keycloak (docs/ADMIN-KEYCLOAK.md) ---
+    # Nœud dont l'administration a créé le compte : il fixe la portée de gestion du compte
+    # (avec les nœuds de ses nominations). Vide pour un fidèle inscrit seul : la plateforme.
+    admin_node = models.ForeignKey(
+        "hierarchy.Node",
+        verbose_name=_("nœud gestionnaire du compte"),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="administered_accounts",
+    )
+    # Miroir du rôle de realm ``platform_admin`` (lu par la synchronisation) : sert aux contrôles
+    # de portée sans appel réseau. L'autorisation réelle vient toujours du jeton.
+    keycloak_platform_admin = models.BooleanField(
+        _("administrateur plateforme (Keycloak)"), default=False, db_default=False
+    )
+    keycloak_synced_at = models.DateTimeField(_("synchronisé avec Keycloak le"), null=True, blank=True)
+    keycloak_sync_error = models.CharField(
+        _("écart de synchronisation"), max_length=64, blank=True, default="", db_default=""
+    )
+
     groups = models.ManyToManyField(  # type: ignore[assignment]  # django-stubs : redéclaration M2M de PermissionsMixin (related_name custom)
         Group,
         verbose_name=_("groupes"),
@@ -248,3 +269,78 @@ class Profile(BaseModel):
     def __str__(self) -> str:
         full_name = f"{self.first_name} {self.last_name}".strip()
         return full_name or str(self.user.email)
+
+
+# ---------------------------------------------------------------------------
+# Synchronisation Keycloak (docs/ADMIN-KEYCLOAK.md)
+# ---------------------------------------------------------------------------
+
+
+class KeycloakEventStatus(models.TextChoices):
+    RECU = "recu", _("Reçu")
+    TRAITE = "traite", _("Traité")
+    IGNORE = "ignore", _("Ignoré")
+    ECHEC = "echec", _("Échec")
+
+
+class KeycloakEvent(models.Model):
+    """Événement reçu du SPI Keycloak (webhook signé). On ne garde que le nécessaire au
+    traitement idempotent : identifiant, type, compte concerné. Jamais la représentation."""
+
+    uid = models.CharField(_("identifiant de l'événement"), max_length=128, unique=True)
+    event_type = models.CharField(_("type"), max_length=80)
+    keycloak_user_id = models.CharField(_("compte Keycloak"), max_length=64, blank=True, default="", db_index=True)
+    status = models.CharField(
+        max_length=10, choices=KeycloakEventStatus.choices, default=KeycloakEventStatus.RECU, db_index=True
+    )
+    result = models.CharField(max_length=64, blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    received_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("événement Keycloak")
+        verbose_name_plural = _("événements Keycloak")
+        ordering = ["-received_at"]
+
+    def __str__(self) -> str:
+        return f"{self.event_type} {self.uid}"
+
+
+class KeycloakSyncRun(models.Model):
+    """Passe de réconciliation Keycloak ↔ application, avec son rapport."""
+
+    started_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    dry_run = models.BooleanField(default=True)
+    trigger = models.CharField(max_length=20, default="tache")  # tache | commande | admin
+    triggered_by = models.ForeignKey(BaseUser, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    success = models.BooleanField(default=False)
+    error = models.CharField(max_length=255, blank=True, default="")
+    counts = models.JSONField(default=dict, blank=True)
+    report = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        verbose_name = _("réconciliation Keycloak")
+        verbose_name_plural = _("réconciliations Keycloak")
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        return f"Réconciliation {self.started_at:%Y-%m-%d %H:%M}"
+
+
+class KeycloakSyncCursor(models.Model):
+    """Curseur de lecture des événements Keycloak (Admin REST API) : horodatage (ms) du dernier
+    événement traité, par flux (``utilisateur``, ``admin``)."""
+
+    name = models.CharField(max_length=20, unique=True)
+    last_event_ms = models.BigIntegerField(default=0)
+    last_polled_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        verbose_name = _("curseur des événements Keycloak")
+        verbose_name_plural = _("curseurs des événements Keycloak")
+
+    def __str__(self) -> str:
+        return f"{self.name} @ {self.last_event_ms}"

@@ -27,6 +27,9 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("hierarchy", "public/", "apps.hierarchy.urls_public", "public"),
     ("users", "me/", "apps.users.urls_me", "me-profile"),
     ("users", "platform/accounts/", "apps.users.urls_platform", "platform-accounts"),
+    # Administration des comptes synchronisée avec Keycloak (docs/ADMIN-KEYCLOAK.md).
+    ("users", "admin/", "apps.users.urls_admin", "admin-accounts"),
+    ("users", "integrations/keycloak/", "apps.users.urls_integrations", "keycloak-integration"),
     ("authentication", "me/", "apps.authentication.urls_me", "me-auth"),
     ("hierarchy", "me/", "apps.hierarchy.urls_me", "me"),
     ("hierarchy", "audit/", "apps.hierarchy.urls_audit", "audit"),

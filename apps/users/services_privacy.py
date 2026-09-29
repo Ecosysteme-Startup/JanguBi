@@ -214,14 +214,37 @@ def account_delete(*, user: Any) -> None:
     """EF-CONF-03 : suppression par la personne elle-même. Un titulaire d'office doit d'abord
     voir ses nominations prendre fin (sinon les files de son nœud perdraient un responsable
     sans que l'autorité de nomination le sache)."""
-    from apps.hierarchy.audit import audit_log
-
     if not user.is_active:
         raise ApplicationError("Ce compte est déjà supprimé.", code="account_deleted")
     if _active_offices(user):
         raise ConflictError(
             "Vous avez une nomination en cours : demandez d'abord qu'elle prenne fin.", code="active_office"
         )
+    keycloak_sub = account_erase(user=user, actor=user, action="conformite.suppression_compte")
+    if keycloak_sub:
+        from apps.authentication.tasks import keycloak_user_delete_task
+
+        transaction.on_commit(partial(keycloak_user_delete_task.delay, keycloak_sub))
+
+
+def account_has_active_offices(user: Any) -> bool:
+    return _active_offices(user)
+
+
+def account_is_erased(user: Any) -> bool:
+    return (user.email or "").endswith(ERASED_EMAIL_SUFFIX)
+
+
+ERASED_EMAIL_SUFFIX = "@deleted.invalid"
+
+
+@transaction.atomic
+def account_erase(*, user: Any, actor: Any, action: str, metadata: dict[str, Any] | None = None) -> str | None:
+    """Effacement RGPD côté application (anonymisation) ; renvoie l'ancien identifiant Keycloak.
+    La suppression dans Keycloak incombe à l'appelant (tâche différée, appel direct ou rien si
+    le compte n'existe déjà plus dans Keycloak). Les contrôles (offices, portée) aussi."""
+    from apps.hierarchy.audit import audit_log
+
     now = timezone.now()
     conversations = _purge_conversations(user)
     documents = _anonymize_document_requests(user, now)
@@ -233,12 +256,9 @@ def account_delete(*, user: Any) -> None:
     _declaration_forget(user)
     keycloak_sub = _anonymize_identity(user)
     audit_log(
-        actor=user,
-        action="conformite.suppression_compte",
+        actor=actor,
+        action=action,
         target=user,
-        metadata={"conversations_purgees": conversations, "demandes_anonymisees": documents},
+        metadata={"conversations_purgees": conversations, "demandes_anonymisees": documents, **(metadata or {})},
     )
-    if keycloak_sub:
-        from apps.authentication.tasks import keycloak_user_delete_task
-
-        transaction.on_commit(partial(keycloak_user_delete_task.delay, keycloak_sub))
+    return keycloak_sub

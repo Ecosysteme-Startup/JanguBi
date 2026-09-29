@@ -14,14 +14,57 @@ from django.conf import settings
 
 
 class KeycloakAdminError(Exception):
-    pass
+    """Erreur de l'API d'administration Keycloak. ``status`` : code HTTP (0 = réseau)."""
+
+    def __init__(self, message: str = "", *, status: int = 0) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class KeycloakUnavailableError(KeycloakAdminError):
+    """Keycloak injoignable, lent (délai dépassé) ou en erreur 5xx : réessayer plus tard."""
+
+
+class KeycloakNotFoundError(KeycloakAdminError):
+    """Ressource absente (404)."""
+
+
+class KeycloakConflictError(KeycloakAdminError):
+    """Conflit (409) : e-mail ou identifiant déjà pris."""
+
+
+class KeycloakForbiddenError(KeycloakAdminError):
+    """Le compte de service n'a pas le rôle ``realm-management`` requis (401/403)."""
+
+
+class KeycloakBadRequestError(KeycloakAdminError):
+    """Requête refusée par Keycloak (400), p. ex. action requise inconnue."""
+
+
+def keycloak_error_for(status: int, message: str) -> KeycloakAdminError:
+    if status == 404:
+        return KeycloakNotFoundError(message, status=status)
+    if status == 409:
+        return KeycloakConflictError(message, status=status)
+    if status in (401, 403):
+        return KeycloakForbiddenError(message, status=status)
+    if status >= 500 or status == 0:
+        return KeycloakUnavailableError(message, status=status)
+    return KeycloakBadRequestError(message, status=status)
+
+
+def _default_timeout() -> httpx.Timeout:
+    return httpx.Timeout(
+        float(getattr(settings, "KEYCLOAK_ADMIN_TIMEOUT_SECONDS", 10.0)),
+        connect=float(getattr(settings, "KEYCLOAK_ADMIN_CONNECT_TIMEOUT_SECONDS", 3.0)),
+    )
 
 
 class KeycloakAdmin:
     def __init__(self, *, client: httpx.Client | None = None) -> None:
         self.base = settings.KEYCLOAK_INTERNAL_URL
         self.realm = settings.KEYCLOAK_REALM
-        self._client = client or httpx.Client(timeout=10.0)
+        self._client = client or httpx.Client(timeout=_default_timeout())
         self._token: str | None = None
         self._token_expires_at = 0.0
 
@@ -32,16 +75,22 @@ class KeycloakAdmin:
             return self._token
         if not settings.KEYCLOAK_ADMIN_CLIENT_SECRET:
             raise KeycloakAdminError("KEYCLOAK_ADMIN_CLIENT_SECRET n'est pas configuré.")
-        response = self._client.post(
-            f"{self.base}/realms/{self.realm}/protocol/openid-connect/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_ADMIN_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_ADMIN_CLIENT_SECRET,
-            },
-        )
+        try:
+            response = self._client.post(
+                f"{self.base}/realms/{self.realm}/protocol/openid-connect/token",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": settings.KEYCLOAK_ADMIN_CLIENT_ID,
+                    "client_secret": settings.KEYCLOAK_ADMIN_CLIENT_SECRET,
+                },
+            )
+        except httpx.HTTPError as exc:
+            raise KeycloakUnavailableError(f"Keycloak injoignable ({type(exc).__name__}).") from exc
         if response.status_code != 200:
-            raise KeycloakAdminError(f"Jeton d'administration refusé ({response.status_code}).")
+            raise keycloak_error_for(
+                response.status_code if response.status_code >= 500 else 403,
+                f"Jeton d'administration refusé ({response.status_code}).",
+            )
         payload = response.json()
         self._token = payload["access_token"]
         self._token_expires_at = time.monotonic() + float(payload.get("expires_in", 60))
@@ -50,9 +99,12 @@ class KeycloakAdmin:
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         url = f"{self.base}/admin/realms/{self.realm}{path}"
         headers = {"Authorization": f"Bearer {self._access_token()}"}
-        response = self._client.request(method, url, headers=headers, **kwargs)
+        try:
+            response = self._client.request(method, url, headers=headers, **kwargs)
+        except httpx.HTTPError as exc:
+            raise KeycloakUnavailableError(f"{method} {path} : Keycloak injoignable ({type(exc).__name__}).") from exc
         if response.status_code >= 400 and response.status_code != 409:
-            raise KeycloakAdminError(f"{method} {path} → {response.status_code}")
+            raise keycloak_error_for(response.status_code, f"{method} {path} → {response.status_code}")
         return response
 
     # --- rôles -------------------------------------------------------------------------
@@ -127,10 +179,10 @@ class KeycloakAdmin:
 
     def user_delete(self, user_id: str) -> None:
         """Suppression du compte Keycloak (EF-CONF-03). Absent (404) : déjà supprimé."""
-        url = f"{self.base}/admin/realms/{self.realm}/users/{user_id}"
-        response = self._client.request("DELETE", url, headers={"Authorization": f"Bearer {self._access_token()}"})
-        if response.status_code >= 400 and response.status_code != 404:
-            raise KeycloakAdminError(f"DELETE /users/{user_id} → {response.status_code}")
+        try:
+            self._request("DELETE", f"/users/{user_id}")
+        except KeycloakNotFoundError:
+            return
 
     def user_id_by_email(self, email: str) -> str | None:
         users = self._request("GET", "/users", params={"email": email, "exact": "true"}).json()

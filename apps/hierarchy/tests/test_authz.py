@@ -348,6 +348,8 @@ def test_frozen_catalogue_migration_matches_the_runtime_profile():
     capabilities += [c[0] for c in membres.CAPABILITIES]
     v1_routes = importlib.import_module("apps.hierarchy.migrations.0014_v1_routes_capacites")
     capabilities += [c[0] for c in v1_routes.CAPABILITIES]
+    comptes = importlib.import_module("apps.hierarchy.migrations.0015_comptes_gerer")
+    capabilities += [c[0] for c in comptes.CAPABILITIES]
     assert capabilities == [c["code"] for c in CAPABILITIES]
     office_caps = {o[0]: set(o[8]) for o in frozen.OFFICES}
     appointed = {o[0]: sorted(o[5]) for o in frozen.OFFICES}
@@ -361,6 +363,8 @@ def test_frozen_catalogue_migration_matches_the_runtime_profile():
     for code, extra in membres.OFFICE_CAPABILITIES.items():
         office_caps[code] |= set(extra)
     for code, extra in v1_routes.OFFICE_CAPABILITIES.items():
+        office_caps[code] |= set(extra)
+    for code, extra in comptes.OFFICE_CAPABILITIES.items():
         office_caps[code] |= set(extra)
     appointed[dons.ECONOME["code"]] = sorted(dons.ECONOME["appointed_by"])
     assert {k: sorted(v) for k, v in office_caps.items()} == {o["code"]: sorted(o["capabilities"]) for o in OFFICES}
