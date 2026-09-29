@@ -11,6 +11,7 @@ urlpatterns = [
     path("<uuid:request_id>/register-ref/", apis.RegisterRefApi.as_view(), name="register-ref"),
     path("<uuid:request_id>/notes/", apis.NotesApi.as_view(), name="notes"),
     path("<uuid:request_id>/logs/", apis.LogsApi.as_view(), name="logs"),
+    path("<uuid:request_id>/conversation/", apis.RequestConversationApi.as_view(), name="conversation"),
     path("<uuid:request_id>/assign/", apis.AssignApi.as_view(), name="assign"),
     path("<uuid:request_id>/assignees/", apis.AssigneesApi.as_view(), name="assignees"),
     path(

@@ -34,6 +34,9 @@ FREEZABLE_MODULES: tuple[str, ...] = (
     "dashboards",
     "donations",  # ADR-017 : actif, mais la collecte exige aussi l'activation du nœud
     "audio",  # sonothèque paroissiale (plan suite V2, §5)
+    "invitations",  # lot V1-routes : invitations et validation des comptes du clergé
+    "intentions",  # lot V1-routes : intentions de messe (aucun montant, aucun paiement)
+    "search",  # lot V1-routes : recherche transverse
 )
 
 # Périmètre V1 (plan L0.4) : tout sauf les modules gelés par l'ADR-006.

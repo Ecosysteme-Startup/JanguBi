@@ -298,10 +298,54 @@ def article_unpublish(*, article: Article, editor: Any, reason: str = "") -> Art
     article.unpublished_by = editor
     article.unpublish_reason = reason
     article.publish_at = None
+    article.pinned_until = None
+    article.pinned_at = None
     article.save(
-        update_fields=["status", "unpublished_at", "unpublished_by", "unpublish_reason", "publish_at", "updated_at"]
+        update_fields=[
+            "status", "unpublished_at", "unpublished_by", "unpublish_reason", "publish_at",
+            "pinned_until", "pinned_at", "updated_at",
+        ]
     )
     audit_log(actor=editor, action="annonce.retrait", target=article, node=article.scope_node)
+    return article
+
+
+PIN_MAX_DAYS = 60
+
+
+@transaction.atomic
+def article_pin(*, article: Article, editor: Any, until: datetime.datetime) -> Article:
+    """Épingle un contenu publié ou programmé en tête des listes jusqu'à ``until`` (G06).
+    Au-delà de la date de fin, il reprend sa place chronologique (aucune tâche à lancer)."""
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.status not in (Article.Status.PUBLISHED, Article.Status.SCHEDULED):
+        raise ApplicationError("Seul un contenu publié ou programmé peut être épinglé.", code="not_published")
+    now = timezone.now()
+    if until <= now:
+        raise ApplicationError("La date de fin de l'épinglage doit être future.", code="pin_until_past")
+    if until > now + datetime.timedelta(days=PIN_MAX_DAYS):
+        raise ApplicationError(
+            f"Un contenu s'épingle pour {PIN_MAX_DAYS} jours au plus.", code="pin_until_too_far"
+        )
+    article.pinned_until = until
+    article.pinned_at = now
+    article.save(update_fields=["pinned_until", "pinned_at", "updated_at"])
+    audit_log(
+        actor=editor, action="annonce.epinglage", target=article, node=article.scope_node,
+        metadata={"until": until.isoformat()},
+    )
+    return article
+
+
+@transaction.atomic
+def article_unpin(*, article: Article, editor: Any) -> Article:
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.pinned_until is None:
+        return article
+    article.pinned_until = None
+    article.pinned_at = None
+    article.save(update_fields=["pinned_until", "pinned_at", "updated_at"])
+    audit_log(actor=editor, action="annonce.desepinglage", target=article, node=article.scope_node)
     return article
 
 

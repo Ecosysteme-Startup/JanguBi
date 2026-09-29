@@ -3,8 +3,21 @@
 import datetime
 from typing import Any
 
-from django.db.models import Count, Exists, IntegerField, OuterRef, Q, QuerySet, Subquery, Value
+from django.db.models import (
+    BooleanField,
+    Case,
+    Count,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Q,
+    QuerySet,
+    Subquery,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from apps.core.exceptions import NotFoundError, PermissionDeniedError
 from apps.hierarchy import authz
@@ -51,6 +64,19 @@ def annotate_reactions(qs: QuerySet[Article], *, viewer: Any = None) -> QuerySet
     return qs.annotate(**annotations)
 
 
+def annotate_pinned(qs: QuerySet[Article]) -> QuerySet[Article]:
+    """``is_pinned`` : épinglé et date de fin non dépassée (G06)."""
+    return qs.annotate(
+        is_pinned=Case(
+            When(pinned_until__gt=timezone.now(), then=Value(True)), default=Value(False), output_field=BooleanField()
+        )
+    )
+
+
+def _pinned_first(qs: QuerySet[Article]) -> QuerySet[Article]:
+    return annotate_pinned(qs).order_by("-is_pinned", "-published_at")
+
+
 def article_list_published(
     *,
     node: Node | None = None,
@@ -69,13 +95,13 @@ def article_list_published(
         qs = qs.filter(content_type=content_type)
     if category_id:
         qs = qs.filter(category_id=category_id)
-    return annotate_reactions(qs, viewer=viewer).order_by("-published_at")
+    return _pinned_first(annotate_reactions(qs, viewer=viewer))
 
 
 def article_get_published(*, article_id: Any, viewer: Any = None) -> Article:
-    qs = annotate_reactions(
+    qs = annotate_pinned(annotate_reactions(
         Article.objects.filter(status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED), viewer=viewer
-    )
+    ))
     try:
         return qs.get(pk=article_id)
     except (Article.DoesNotExist, ValueError) as exc:
@@ -91,7 +117,7 @@ def feed_for(*, user: Any) -> QuerySet[Article]:
         lineage = [parish.pk, *node_ancestors(node=parish).values_list("pk", flat=True)]
         scope |= Q(scope_node_id__in=lineage)
     qs = Article.objects.filter(scope, status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED)
-    return annotate_reactions(qs, viewer=user).order_by("-published_at")
+    return _pinned_first(annotate_reactions(qs, viewer=user))
 
 
 def feed_secondary_for(*, user: Any, parish_id: Any = None) -> QuerySet[Article]:
@@ -109,7 +135,7 @@ def feed_secondary_for(*, user: Any, parish_id: Any = None) -> QuerySet[Article]
     for parish in parishes:
         scope |= Q(scope_node__path__startswith=parish.path)
     qs = Article.objects.filter(scope, status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED)
-    return annotate_reactions(qs, viewer=user).order_by("-published_at")
+    return _pinned_first(annotate_reactions(qs, viewer=user))
 
 
 # --- Staff ----------------------------------------------------------------------------------
@@ -122,7 +148,9 @@ def article_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) 
     scope = Q(scope_node__in=allowed)
     if authz.peut(user, "plateforme.admin", None):
         scope |= Q(scope_node__isnull=True)
-    qs = Article.objects.filter(scope).select_related(*_BASE_RELATED).annotate(reads_count=Count("reads", distinct=True))
+    qs = annotate_pinned(
+        Article.objects.filter(scope).select_related(*_BASE_RELATED).annotate(reads_count=Count("reads", distinct=True))
+    )
     if node_id := filters.get("node"):
         node = Node.objects.filter(pk=node_id).first()
         if node is None:

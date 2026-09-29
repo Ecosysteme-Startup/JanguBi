@@ -50,6 +50,15 @@ class RuleCreateInputSerializer(serializers.Serializer):
     valid_to = serializers.DateField(required=False, allow_null=True)
 
 
+class SessionOpenInputSerializer(serializers.Serializer):
+    place_id = serializers.IntegerField()
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    end_time = serializers.TimeField()
+    slot_minutes = serializers.IntegerField(min_value=5, max_value=60, default=10)
+    priest_id = serializers.UUIDField(required=False, allow_null=True, default=None, help_text="Par défaut : moi")
+
+
 class SlotCancelInputSerializer(serializers.Serializer):
     message = serializers.CharField(
         max_length=300, required=False, allow_blank=True, default="", help_text="Message transmis au réservant"

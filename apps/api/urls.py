@@ -44,6 +44,11 @@ API_V1_ROUTES: tuple[tuple[str, str, str, str], ...] = (
     ("donations", "staff/dons/flux/", "apps.realtime.urls_dons", "staff-dons-flux"),
     ("donations", "platform/dons/", "apps.donations.urls_platform", "platform-dons"),
     ("audio", "audio/", "apps.audio.urls", "audio"),
+    # Lot V1-routes (docs/API-V1-COMPLEMENTS.md).
+    ("invitations", "clergy-accounts/", "apps.invitations.urls", "clergy-accounts"),
+    ("intentions", "mass-intentions/", "apps.intentions.urls", "mass-intentions"),
+    ("search", "search/", "apps.search.urls", "search"),
+    ("dashboards", "staff/taches-du-jour/", "apps.dashboards.urls_taches", "staff-taches"),
 )
 
 

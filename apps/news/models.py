@@ -160,6 +160,10 @@ class Article(BaseModel):
 
     views_count = models.PositiveIntegerField(default=0, verbose_name=_("Nombre de vues"))
 
+    # Épinglage en tête des listes publiques jusqu'à une date de fin (lot V1-routes, G06).
+    pinned_until = models.DateTimeField(_("épinglé jusqu'au"), null=True, blank=True)
+    pinned_at = models.DateTimeField(_("épinglé le"), null=True, blank=True)
+
     class Meta:
         verbose_name = _("Article")
         verbose_name_plural = _("Articles")
@@ -176,6 +180,9 @@ class Article(BaseModel):
                 fields=["publish_at"], condition=models.Q(status="scheduled"), name="article_scheduled_idx"
             ),
             models.Index(fields=["author", "-created_at"], name="article_author_idx"),
+            models.Index(
+                fields=["pinned_until"], condition=models.Q(pinned_until__isnull=False), name="article_pinned_idx"
+            ),
         ]
 
     def __str__(self) -> str:
