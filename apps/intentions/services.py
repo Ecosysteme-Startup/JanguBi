@@ -16,7 +16,7 @@ from apps.hierarchy import authz
 from apps.hierarchy.audit import audit_log
 from apps.hierarchy.models import Node, PlaceOfWorship
 from apps.intentions.enums import OPEN_STATUSES, IntentionStatus
-from apps.intentions.models import MassIntention
+from apps.intentions.models import IntentionSettings, MassIntention
 
 PARISH_TYPES = ("paroisse", "quasi_paroisse")
 MAX_OPEN_PER_PERSON = 10
@@ -30,7 +30,7 @@ def _notify(*, user_ids: list[Any], intention: MassIntention, event: str) -> Non
         "intention_id": str(intention.pk),
         "status": intention.status,
         "node_id": str(intention.node_id),
-        "date": (intention.scheduled_date or intention.requested_date).isoformat(),
+        "date": d.isoformat() if (d := intention.scheduled_date or intention.requested_date) else None,
     }
     people_notify(user_ids=user_ids, topic=None, event_type=f"intention.{event}", payload=payload)
 
@@ -61,7 +61,7 @@ def intention_create(
     node: Node,
     kind: str,
     intention: str,
-    requested_date: datetime.date,
+    requested_date: datetime.date | None = None,
     requested_mass: str = "",
     place: PlaceOfWorship | None = None,
     is_anonymous: bool = False,
@@ -71,7 +71,8 @@ def intention_create(
     if not node.is_active_on_platform:
         raise ApplicationError("Cette paroisse ne reçoit pas encore d'intentions par Jàngu Bi.", code="parish_inactive")
     _place_check(node, place)
-    _date_check(requested_date)
+    if requested_date is not None:
+        _date_check(requested_date)
     text = " ".join((intention or "").split())
     if not text:
         raise ApplicationError("Écrivez l'intention.", code="intention_required")
@@ -124,18 +125,40 @@ def intention_schedule(
     actor: Any,
     scheduled_date: datetime.date,
     scheduled_mass: str = "",
+    scheduled_time: datetime.time | None = None,
     place: PlaceOfWorship | None = None,
 ) -> MassIntention:
-    """Planifie (ou déplace) l'intention à une messe ; le fidèle est prévenu."""
+    """Planifie (ou déplace) l'intention à une messe ; le fidèle est prévenu.
+
+    Avec ``scheduled_time``, la messe (lieu, date, heure) ne peut dépasser le plafond de la paroisse.
+    """
     obj = _lock_for_staff(intention, actor)
     if obj.status not in OPEN_STATUSES:
         raise ApplicationError("Cette intention n'est plus modifiable.", code="invalid_transition")
     _place_check(obj.node, place)
     _date_check(scheduled_date)
+    if scheduled_time is not None:
+        target_place = place or obj.place
+        if target_place is None:
+            raise ApplicationError("Indiquez le lieu de la messe.", code="place_required")
+        taken = (
+            MassIntention.objects.filter(
+                node=obj.node,
+                scheduled_date=scheduled_date,
+                scheduled_time=scheduled_time,
+                place=target_place,
+                status__in=(IntentionStatus.PLANIFIEE, IntentionStatus.CELEBREE),
+            )
+            .exclude(pk=obj.pk)
+            .count()
+        )
+        if taken >= max_per_mass(node=obj.node):
+            raise ApplicationError("Cette messe a déjà toutes ses intentions.", code="mass_full")
     moved = obj.status == IntentionStatus.PLANIFIEE
     obj.status = IntentionStatus.PLANIFIEE
     obj.scheduled_date = scheduled_date
     obj.scheduled_mass = scheduled_mass.strip()
+    obj.scheduled_time = scheduled_time
     if place is not None:
         obj.place = place
     obj.decided_by = actor
@@ -193,3 +216,21 @@ def intentions_forget(*, user: Any) -> int:
         status=IntentionStatus.ANNULEE, cancelled_at=now, updated_at=now
     )
     return MassIntention.objects.filter(requester=user).update(requester=None, is_anonymous=True, updated_at=now)
+
+
+def max_per_mass(*, node: Node) -> int:
+    from apps.intentions.models import DEFAULT_MAX_PER_MASS
+
+    value = IntentionSettings.objects.filter(node=node).values_list("max_per_mass", flat=True).first()
+    return value or DEFAULT_MAX_PER_MASS
+
+
+@transaction.atomic
+def intention_settings_update(*, node: Node, actor: Any, max_per_mass: int) -> IntentionSettings:
+    if not authz.peut(actor, "intentions.gerer", node):
+        raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
+    if not 1 <= max_per_mass <= 50:
+        raise ApplicationError("Le plafond va de 1 à 50 intentions par messe.", code="max_invalid")
+    obj, _ = IntentionSettings.objects.update_or_create(node=node, defaults={"max_per_mass": max_per_mass})
+    audit_log(actor=actor, action="intention.reglages", target=obj, node=node, metadata={"max_per_mass": max_per_mass})
+    return obj

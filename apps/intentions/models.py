@@ -28,11 +28,14 @@ class MassIntention(BaseModel):
     intention = models.CharField(_("intention"), max_length=500)
     # Annoncée sans le nom du demandeur (« à une intention particulière »).
     is_anonymous = models.BooleanField(_("sans mon nom"), default=False)
-    requested_date = models.DateField(_("date souhaitée"))
+    # Nulle : « Pas de date précise » (le secrétariat choisit la messe).
+    requested_date = models.DateField(_("date souhaitée"), null=True, blank=True)
     requested_mass = models.CharField(_("messe souhaitée"), max_length=120, blank=True, default="")
     status = models.CharField(max_length=12, choices=IntentionStatus.choices, default=IntentionStatus.RECUE)
     scheduled_date = models.DateField(_("date retenue"), null=True, blank=True)
     scheduled_mass = models.CharField(_("messe retenue"), max_length=120, blank=True, default="")
+    # Heure de la messe retenue (issue des horaires du lieu) : sert au décompte par messe et à la feuille.
+    scheduled_time = models.TimeField(_("heure de la messe retenue"), null=True, blank=True)
     decided_by = models.ForeignKey(
         "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
@@ -58,3 +61,25 @@ class MassIntention(BaseModel):
 
     def __str__(self) -> str:
         return f"Intention {self.pk} ({self.status})"
+
+
+DEFAULT_MAX_PER_MASS = 5
+
+
+class IntentionSettings(BaseModel):
+    """Réglages des intentions d'une paroisse : plafond d'intentions par messe (5 par défaut)."""
+
+    node = models.OneToOneField("hierarchy.Node", on_delete=models.CASCADE, related_name="intention_settings")
+    max_per_mass = models.PositiveSmallIntegerField(_("intentions par messe au plus"), default=DEFAULT_MAX_PER_MASS)
+
+    class Meta:
+        verbose_name = _("réglages des intentions")
+        verbose_name_plural = _("réglages des intentions")
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(max_per_mass__gte=1) & Q(max_per_mass__lte=50), name="intention_settings_max_range"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Réglages intentions {self.node_id}"

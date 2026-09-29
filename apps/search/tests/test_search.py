@@ -98,6 +98,9 @@ def test_audio_respects_visibility(world):
 def test_bible_and_pagination_per_type(world):
     bible = client_for().get(URL, {"q": "commencement", "types": "bible"}).json()["results"]["bible"]
     assert bible["items"][0]["book_name"] == "Jean" and bible["next_offset"] is None
+    first = bible["items"][0]
+    assert first["book_id"] == Book.objects.get(name="Jean").pk
+    assert first["chapter_id"] and first["chapter"] >= 1 and first["verse"] >= 1
     page = client_for(world.fidele).get(URL, {"q": "Kyrie", "types": "audio", "limit": 1}).json()["results"]["audio"]
     assert len(page["items"]) == 1 and page["next_offset"] == 1
     last = client_for(world.fidele).get(URL, {"q": "Kyrie", "types": "audio", "limit": 1, "offset": 1}).json()

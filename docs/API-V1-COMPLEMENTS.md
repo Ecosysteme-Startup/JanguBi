@@ -158,8 +158,8 @@ Publique ; connecté, s'ajoutent les prêtres joignables et les pistes réservé
                             "city": "Dakar", "on_platform": true}], "next_offset": null},
    "lieux": {"items": [{"id": 7, "name": "…", "kind": "chapelle", "city": "Dakar", "node_id": "uuid",
                         "node_name": "…"}], "next_offset": 5},
-   "bible": {"items": [{"id": 1, "book_name": "Jean", "book_slug": "jean", "chapter": 1, "verse": 1,
-                        "text": "…"}], "next_offset": null},
+   "bible": {"items": [{"id": 1, "book_id": 43, "book_name": "Jean", "book_slug": "jean",
+                        "chapter_id": 1021, "chapter": 1, "verse": 1, "text": "…"}], "next_offset": null},
    "annonces": {"items": [{"id": "uuid", "title": "…", "excerpt": "…", "content_type": "announcement",
                            "published_at": "…", "node_id": "uuid", "node_name": "…"}], "next_offset": null},
    "pretres": {"items": [{"id": "uuid", "name": "Emmanuel Tine", "office": "Curé", "node_id": "uuid",
@@ -218,7 +218,75 @@ l'offrande de messe se remet directement au secrétariat de la paroisse. »
   `intention.refusee`, `intention.celebree` au fidèle. Journal : `intention.demande`, `.annulation`,
   `.planification`, `.refus`, `.celebration`.
 
-## 5. Indicateurs à basculer côté fronts
+## 5. Compléments demandés par le web (migrations `intentions.0002`, `invitations.0002`)
+
+### 5.1 Recherche : résultats Bible
+
+Chaque verset porte `book_id` (identifiant du livre, celui des routes `bible/`), `chapter_id`, `chapter`
+(numéro) et `verse` (numéro), en plus de `book_name` / `book_slug` : le front ouvre directement le
+lecteur au bon verset.
+
+### 5.2 Intentions de messe : messes du jour, plafond, feuille
+
+**Demande sans date précise** : `requested_date` (« date souhaitée ») est facultatif et peut valoir
+`null` ; le front affiche alors « Pas de date précise » et le secrétariat choisit la messe. Le filtre
+`date_from`/`date_to` de `parish/` ne retient pas ces demandes (liste sans filtre de date pour les voir).
+
+| Méthode et chemin | Droit | Réponse |
+| --- | --- | --- |
+| `GET mass-intentions/parish/messes/?node=&date=` | `intentions.gerer` | `DayMasses` |
+| `GET mass-intentions/parish/feuille/?node=&date=` | `intentions.gerer` | `Sheet` (imprimable) |
+| `GET mass-intentions/parish/reglages/?node=` | `intentions.gerer` | `{"node", "max_per_mass"}` |
+| `PATCH mass-intentions/parish/reglages/` | `intentions.gerer` | `{"node", "max_per_mass": 1..50}` → idem |
+
+```json
+// GET mass-intentions/parish/messes/?node=…&date=2026-10-04
+{"node": {"id": "uuid", "name": "Saint-Dominique"}, "date": "2026-10-04", "max_per_mass": 5,
+ "masses": [{"place_id": 12, "place_name": "Église Saint-Dominique", "start_time": "10:00:00",
+             "label": "Messe de 10 h", "language": "fr", "note": "", "intentions_count": 2,
+             "max_intentions": 5, "remaining": 3, "is_full": false}],
+ "without_time_count": 0}
+// GET mass-intentions/parish/feuille/?node=…&date=2026-10-04
+{"node": {…}, "date": "2026-10-04",
+ "masses": [{…mêmes champs que ci-dessus…, "intentions": [
+   {"id": "uuid", "kind": "defunt", "kind_label": "Pour un défunt",
+    "intention": "Pour le repos de l'âme de Joseph Diouf", "announced_as": "Une personne", "status": "planifiee"}]}],
+ "other_intentions": [{…, "scheduled_mass": "Messe des jeunes"}]}
+```
+
+- Les messes viennent des horaires existants (`MassSchedule` de type messe des lieux actifs, exceptions
+  datées comprises : annulations retirées, messes supplémentaires ajoutées), triées par heure.
+- Une intention compte pour une messe quand elle est `planifiee` ou `celebree` à cette date, ce lieu
+  et cette heure. `accept` prend un champ facultatif **`scheduled_time`** (`"10:00"`) : avec lui, le
+  lieu est obligatoire (`place_id` ou lieu de la demande, sinon `place_required`) et le plafond
+  s'applique (`mass_full`, l'intention déplacée elle-même n'est pas comptée). Sans heure, l'intention
+  reste possible et figure dans `other_intentions` / `without_time_count`.
+- Plafond : 5 par défaut (`IntentionSettings`), réglable de 1 à 50 (`max_invalid` hors bornes ;
+  journal `intention.reglages`). La réponse `MassIntention` porte aussi `scheduled_time`.
+- Feuille : texte des intentions et nom à annoncer (« Une personne » si anonyme), **jamais de
+  montant** (il n'en existe aucun). 403 `intentions_forbidden` hors de mes paroisses.
+
+### 5.3 Comptes du clergé : pièce justificative et filtres
+
+- Pièce jointe **facultative** : le fichier est d'abord déposé par `files/upload/standard/` (ou
+  `direct/`), puis son identifiant est passé en `justificatif_id` à `POST clergy-accounts/invitations/`
+  (par l'invitant) ou à `POST clergy-accounts/invitations/accept/` (`{"token", "justificatif_id"}`, par
+  la personne invitée). Le fichier doit appartenir à qui l'envoie (`file_forbidden`), être entièrement
+  envoyé (`file_incomplete`) et exister (`file_not_found`).
+- `Invitation` et `ClergyAccount` portent `justificatif` : `{"id", "file_name", "file_type", "url"}` ou `null`.
+- Filtres (tous facultatifs) : `node` (nœud exact de l'invitation), `diocese` (UUID d'un diocèse ou de
+  tout nœud : son sous-arbre, toujours borné à mon périmètre), `role` (`diacre_transitoire`,
+  `diacre_permanent`, `pretre`, `eveque`, `consacre`), `q` (nom ou e-mail), et `statut` sur la liste générale.
+
+| Méthode et chemin | Droit | Réponse |
+| --- | --- | --- |
+| `GET clergy-accounts/?diocese=&role=&statut=&node=&q=` | `comptes.valider` | liste paginée de `ClergyAccount` |
+| `GET clergy-accounts/validated/?diocese=&role=&node=&q=` | `comptes.valider` | comptes `verifie` |
+| `GET clergy-accounts/pending/?diocese=&role=&node=&q=` | `comptes.valider` | comptes en attente |
+
+`statut` : `declare`, `verifie`, `rejete`, `complement`, ou `en_attente` (déclaré + complément demandé).
+
+## 6. Indicateurs à basculer côté fronts
 
 | Front | Indicateur | Route |
 | --- | --- | --- |

@@ -20,7 +20,7 @@ def invitation_list(*, user: Any, filters: dict[str, Any] | None = None) -> Quer
     dont la date est dépassée ; ``status=en_attente`` : seulement les encore valables."""
     filters = filters or {}
     qs = ClergyInvitation.objects.filter(node__in=_allowed_nodes(user)).select_related(
-        "node", "invited_by__profile", "accepted_by"
+        "node", "invited_by__profile", "accepted_by", "justificatif"
     )
     now = timezone.now()
     status = filters.get("status")
@@ -44,22 +44,54 @@ def invitation_get(*, user: Any, invitation_id: Any) -> ClergyInvitation:
     return obj
 
 
-def pending_accounts(*, user: Any, node_id: Any = None) -> QuerySet[Any]:
-    """Comptes invités, acceptés, en attente de validation (déclarés ou complément demandé)."""
+ROLE_CHOICES = ("diacre_transitoire", "diacre_permanent", "pretre", "eveque", "consacre")
+
+
+def accounts_list(*, user: Any, filters: dict[str, Any] | None = None) -> QuerySet[Any]:
+    """Comptes invités (invitation acceptée) des nœuds où ``user`` a ``comptes.valider``.
+
+    Filtres : ``node`` (nœud exact de l'invitation), ``diocese`` (sous-arbre d'un nœud), ``role``
+    (degré d'ordre, ou ``consacre``), ``statut`` (statut de vérification, ou ``en_attente`` pour
+    déclaré + complément demandé), ``q`` (nom ou e-mail).
+    """
+    from django.db.models import Q
+
+    from apps.hierarchy.models import Node
     from apps.users.models import BaseUser
 
+    filters = filters or {}
     invitations = ClergyInvitation.objects.filter(
         accepted_by=OuterRef("pk"), status=InvitationStatus.ACCEPTEE, node__in=_allowed_nodes(user)
     )
-    if node_id:
+    if node_id := filters.get("node"):
         invitations = invitations.filter(node_id=node_id)
-    return (
-        BaseUser.objects.filter(statut_verification__in=PENDING_STATUSES)
-        .filter(Exists(invitations))
-        .exclude(pk=user.pk)
-        .select_related("profile")
-        .order_by("declared_at", "email")
-    )
+    if diocese_id := filters.get("diocese"):
+        root = Node.objects.filter(pk=diocese_id).values_list("path", flat=True).first()
+        invitations = invitations.filter(node__path__startswith=root) if root else invitations.none()
+    qs = BaseUser.objects.filter(Exists(invitations)).exclude(pk=user.pk).select_related("profile")
+    statut = filters.get("statut")
+    if statut == "en_attente":
+        qs = qs.filter(statut_verification__in=PENDING_STATUSES)
+    elif statut:
+        qs = qs.filter(statut_verification=statut)
+    role = filters.get("role")
+    if role == "consacre":
+        qs = qs.filter(etat_de_vie="consacre")
+    elif role:
+        qs = qs.filter(degre_ordre=role)
+    if q := (filters.get("q") or "").strip():
+        qs = qs.filter(
+            Q(email__icontains=q) | Q(profile__first_name__icontains=q) | Q(profile__last_name__icontains=q)
+        )
+    return qs.order_by("declared_at", "email")
+
+
+def pending_accounts(*, user: Any, node_id: Any = None, filters: dict[str, Any] | None = None) -> QuerySet[Any]:
+    """Comptes invités, acceptés, en attente de validation (déclarés ou complément demandé)."""
+    filters = {**(filters or {}), "statut": "en_attente"}
+    if node_id:
+        filters["node"] = node_id
+    return accounts_list(user=user, filters=filters)
 
 
 def account_get(*, user: Any, person_id: Any, scoped: bool = True) -> Any:

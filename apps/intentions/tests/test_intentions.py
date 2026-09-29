@@ -132,3 +132,62 @@ def test_account_deletion_detaches_intentions(world):
     account_delete(user=world.fidele)
     obj = MassIntention.objects.get(pk=intention_id)
     assert obj.requester is None and obj.status == "annulee" and obj.is_anonymous
+
+
+def _sunday_masses(world):
+    import datetime
+
+    from apps.hierarchy.models import MassSchedule, PlaceOfWorship
+
+    place = PlaceOfWorship.objects.create(node=world.saint_dominique, name="Église Saint-Dominique", is_main=True)
+    for hour in (8, 10):
+        MassSchedule.objects.create(place=place, kind="messe", weekday=6, start_time=datetime.time(hour, 0))
+    MassSchedule.objects.create(place=place, kind="confession", weekday=6, start_time=datetime.time(17, 0))
+    return place
+
+
+@freeze_time(NOW)
+def test_request_without_precise_date(world):
+    created = ask(world, requested_date=None)
+    assert created.status_code == 201, created.content
+    assert created.json()["requested_date"] is None
+    payload = {k: v for k, v in {"node": str(world.saint_dominique.pk), "kind": "particuliere", "intention": "Pour ma famille"}.items()}
+    assert client_for(world.fidele).post("/api/v1/mass-intentions/", payload, format="json").status_code == 201
+
+
+@freeze_time(NOW)
+def test_masses_of_day_cap_and_sheet(world):
+    place = _sunday_masses(world)
+    staff = client_for(world.secretaire)
+    node = str(world.saint_dominique.pk)
+    assert staff.get("/api/v1/mass-intentions/parish/reglages/", {"node": node}).json()["max_per_mass"] == 5
+    assert staff.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 0}, format="json").status_code == 400
+    assert staff.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 2}, format="json").json()["max_per_mass"] == 2
+
+    ids = [ask(world, intention=f"Intention {i}", is_anonymous=i != 0).json()["id"] for i in range(3)]
+    body = {"scheduled_date": "2026-10-04", "scheduled_time": "10:00", "place_id": place.pk, "scheduled_mass": "Messe de 10 h"}
+    for intention_id in ids[:2]:
+        assert staff.post(f"/api/v1/mass-intentions/{intention_id}/accept/", body, format="json").status_code == 200
+    full = staff.post(f"/api/v1/mass-intentions/{ids[2]}/accept/", body, format="json")
+    assert full.json()["error"]["code"] == "mass_full"
+    no_place = staff.post(f"/api/v1/mass-intentions/{ids[2]}/accept/", {**body, "place_id": None, "scheduled_time": "08:00"}, format="json")
+    assert no_place.json()["error"]["code"] == "place_required"
+    # Déplacer une intention déjà retenue sur la même messe ne compte pas deux fois.
+    assert staff.post(f"/api/v1/mass-intentions/{ids[0]}/accept/", body, format="json").status_code == 200
+
+    day = staff.get("/api/v1/mass-intentions/parish/messes/", {"node": node, "date": "2026-10-04"}).json()
+    assert [m["label"] for m in day["masses"]] == ["Messe de 8 h", "Messe de 10 h"]
+    ten = day["masses"][1]
+    assert ten["intentions_count"] == 2 and ten["is_full"] and ten["remaining"] == 0 and ten["max_intentions"] == 2
+    assert day["masses"][0]["intentions_count"] == 0
+
+    sheet = staff.get("/api/v1/mass-intentions/parish/feuille/", {"node": node, "date": "2026-10-04"})
+    assert sheet.status_code == 200
+    texts = [i["intention"] for i in sheet.json()["masses"][1]["intentions"]]
+    assert sorted(texts) == ["Intention 0", "Intention 1"]
+    assert "montant" not in sheet.content.decode() and "amount" not in sheet.content.decode()
+    assert {i["announced_as"] for i in sheet.json()["masses"][1]["intentions"]} >= {"Une personne"}
+
+    other = client_for(world.secretaire_st)
+    assert other.get("/api/v1/mass-intentions/parish/feuille/", {"node": node, "date": "2026-10-04"}).status_code == 403
+    assert other.patch("/api/v1/mass-intentions/parish/reglages/", {"node": node, "max_per_mass": 3}, format="json").status_code == 403

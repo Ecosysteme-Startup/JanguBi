@@ -1,6 +1,7 @@
 from typing import Any
 
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.hierarchy.enums import DegreOrdre, EtatDeVie, StatutVerification
@@ -19,6 +20,9 @@ class InvitationCreateInputSerializer(serializers.Serializer):
     etat_de_vie = serializers.ChoiceField(choices=[EtatDeVie.CLERC, EtatDeVie.CONSACRE])
     degre_ordre = serializers.ChoiceField(choices=DegreOrdre.choices, default=DegreOrdre.AUCUN)
     ttl_days = serializers.IntegerField(min_value=1, max_value=services.MAX_TTL_DAYS, default=services.DEFAULT_TTL_DAYS)
+    justificatif_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None, help_text="Fichier déposé par files/upload/ (facultatif)"
+    )
 
 
 class InvitationFilterSerializer(serializers.Serializer):
@@ -31,8 +35,27 @@ class TokenInputSerializer(serializers.Serializer):
     token = serializers.CharField(max_length=200)
 
 
+class AcceptInputSerializer(TokenInputSerializer):
+    justificatif_id = serializers.IntegerField(
+        required=False, allow_null=True, default=None, help_text="Fichier déposé par files/upload/ (facultatif)"
+    )
+
+
+_ROLES = [("diacre_transitoire", "Diacre (transitoire)"), ("diacre_permanent", "Diacre permanent"),
+          ("pretre", "Prêtre"), ("eveque", "Évêque"), ("consacre", "Consacré")]
+
+
 class PendingFilterSerializer(serializers.Serializer):
-    node = serializers.UUIDField(required=False)
+    node = serializers.UUIDField(required=False, help_text="Nœud exact de l'invitation")
+    diocese = serializers.UUIDField(required=False, help_text="Diocèse (ou tout nœud) : son sous-arbre")
+    role = serializers.ChoiceField(choices=_ROLES, required=False)
+    q = serializers.CharField(required=False, allow_blank=True, max_length=100, help_text="Nom ou e-mail")
+
+
+class AccountFilterSerializer(PendingFilterSerializer):
+    statut = serializers.ChoiceField(
+        choices=[*StatutVerification.choices, ("en_attente", "En attente (déclaré ou complément)")], required=False
+    )
 
 
 class RefuseInputSerializer(serializers.Serializer):
@@ -40,6 +63,17 @@ class RefuseInputSerializer(serializers.Serializer):
 
 
 # --- Sorties ------------------------------------------------------------------------------
+
+
+class JustificatifSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    file_name = serializers.CharField(source="original_file_name")
+    file_type = serializers.CharField()
+    url = serializers.CharField()
+
+
+def _justificatif(file_obj: Any) -> dict[str, Any] | None:
+    return JustificatifSerializer(file_obj).data if file_obj is not None and file_obj.is_valid else None
 
 
 def _status(obj: ClergyInvitation) -> str:
@@ -52,6 +86,7 @@ class InvitationOutputSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
     node = serializers.SerializerMethodField()
     invited_by_name = serializers.SerializerMethodField()
+    justificatif = serializers.SerializerMethodField()
 
     class Meta:
         model = ClergyInvitation
@@ -69,7 +104,12 @@ class InvitationOutputSerializer(serializers.ModelSerializer):
             "accepted_at",
             "revoked_at",
             "created_at",
+            "justificatif",
         ]
+
+    @extend_schema_field(JustificatifSerializer(allow_null=True))
+    def get_justificatif(self, obj: ClergyInvitation) -> dict[str, Any] | None:
+        return _justificatif(obj.justificatif)
 
     def get_status(self, obj: ClergyInvitation) -> str:
         return _status(obj)
@@ -123,6 +163,7 @@ class ClergyAccountOutputSerializer(serializers.Serializer):
     declared_at = serializers.DateTimeField(allow_null=True)
     is_active = serializers.BooleanField()
     node = serializers.SerializerMethodField(help_text="Nœud de l'invitation acceptée")
+    justificatif = serializers.SerializerMethodField(help_text="Pièce justificative de l'invitation, ou null")
 
     def get_full_name(self, obj: Any) -> str:
         return full_name(obj)
@@ -130,3 +171,8 @@ class ClergyAccountOutputSerializer(serializers.Serializer):
     def get_node(self, obj: Any) -> dict[str, Any] | None:
         invitation = services.account_scope(person=obj)
         return {"id": str(invitation.node_id), "name": invitation.node.name} if invitation else None
+
+    @extend_schema_field(JustificatifSerializer(allow_null=True))
+    def get_justificatif(self, obj: Any) -> dict[str, Any] | None:
+        invitation = services.account_scope(person=obj)
+        return _justificatif(invitation.justificatif) if invitation else None

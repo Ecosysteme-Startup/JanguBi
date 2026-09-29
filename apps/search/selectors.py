@@ -39,8 +39,10 @@ def search_bible(*, q: str, offset: int, limit: int, user: Any) -> tuple[list[di
     items = [
         {
             "id": r["id"],
+            "book_id": r["book_id"],
             "book_name": r["book_name"],
             "book_slug": r["book_slug"],
+            "chapter_id": r["chapter_id"],
             "chapter": r["chapter_number"],
             "verse": r["verse_number"],
             "text": r["text"],

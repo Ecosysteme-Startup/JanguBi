@@ -15,7 +15,9 @@ class IntentionCreateInputSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=IntentionKind.choices)
     intention = serializers.CharField(max_length=500)
     is_anonymous = serializers.BooleanField(default=False, help_text="Annoncée sans mon nom")
-    requested_date = serializers.DateField()
+    requested_date = serializers.DateField(
+        required=False, allow_null=True, default=None, help_text="null : « Pas de date précise »"
+    )
     requested_mass = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
 
 
@@ -26,8 +28,25 @@ class ParishFilterSerializer(serializers.Serializer):
     date_to = serializers.DateField(required=False)
 
 
+class DayFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+    date = serializers.DateField()
+
+
+class SettingsInputSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+    max_per_mass = serializers.IntegerField(min_value=1, max_value=50)
+
+
+class SettingsFilterSerializer(serializers.Serializer):
+    node = serializers.UUIDField(help_text="Paroisse")
+
+
 class ScheduleInputSerializer(serializers.Serializer):
     scheduled_date = serializers.DateField()
+    scheduled_time = serializers.TimeField(
+        required=False, allow_null=True, default=None, help_text="Heure de la messe (plafond appliqué)"
+    )
     scheduled_mass = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
     place_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
@@ -65,6 +84,7 @@ class MassIntentionOutputSerializer(serializers.ModelSerializer):
             "status",
             "scheduled_date",
             "scheduled_mass",
+            "scheduled_time",
             "refusal_reason",
             "celebrated_at",
             "cancelled_at",
@@ -107,3 +127,53 @@ class StaffMassIntentionOutputSerializer(MassIntentionOutputSerializer):
 
 class NoticeOutputSerializer(serializers.Serializer):
     notice = serializers.CharField()
+
+
+class DayMassOutputSerializer(serializers.Serializer):
+    place_id = serializers.IntegerField()
+    place_name = serializers.CharField()
+    start_time = serializers.TimeField()
+    label = serializers.CharField()
+    language = serializers.CharField()
+    note = serializers.CharField()
+    intentions_count = serializers.IntegerField()
+    max_intentions = serializers.IntegerField()
+    remaining = serializers.IntegerField()
+    is_full = serializers.BooleanField()
+
+
+class DayMassesOutputSerializer(serializers.Serializer):
+    node = _RefSerializer()
+    date = serializers.DateField()
+    max_per_mass = serializers.IntegerField()
+    masses = DayMassOutputSerializer(many=True)
+    without_time_count = serializers.IntegerField()
+
+
+class SheetLineSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    kind = serializers.CharField()
+    kind_label = serializers.CharField()
+    intention = serializers.CharField()
+    announced_as = serializers.CharField()
+    status = serializers.CharField()
+
+
+class SheetOtherLineSerializer(SheetLineSerializer):
+    scheduled_mass = serializers.CharField()
+
+
+class SheetMassSerializer(DayMassOutputSerializer):
+    intentions = SheetLineSerializer(many=True)
+
+
+class SheetOutputSerializer(serializers.Serializer):
+    node = _RefSerializer()
+    date = serializers.DateField()
+    masses = SheetMassSerializer(many=True)
+    other_intentions = SheetOtherLineSerializer(many=True)
+
+
+class SettingsOutputSerializer(serializers.Serializer):
+    node = serializers.CharField()
+    max_per_mass = serializers.IntegerField()

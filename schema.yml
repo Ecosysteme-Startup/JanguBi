@@ -2673,6 +2673,86 @@ paths:
                 items:
                   $ref: '#/components/schemas/BookMetadataOutput'
           description: ''
+  /api/v1/clergy-accounts/:
+    get:
+      operationId: clergy_accounts_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Comptes du clergé invités dans mon périmètre (filtres diocèse, rôle,
+        statut)
+      parameters:
+      - in: query
+        name: diocese
+        schema:
+          type: string
+          format: uuid
+        description: 'Diocèse (ou tout nœud) : son sous-arbre'
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud exact de l'invitation
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: Nom ou e-mail
+      - in: query
+        name: role
+        schema:
+          enum:
+          - diacre_transitoire
+          - diacre_permanent
+          - pretre
+          - eveque
+          - consacre
+          type: string
+          minLength: 1
+        description: |-
+          * `diacre_transitoire` - Diacre (transitoire)
+          * `diacre_permanent` - Diacre permanent
+          * `pretre` - Prêtre
+          * `eveque` - Évêque
+          * `consacre` - Consacré
+      - in: query
+        name: statut
+        schema:
+          enum:
+          - declare
+          - verifie
+          - rejete
+          - complement
+          - en_attente
+          type: string
+          minLength: 1
+        description: |-
+          * `declare` - Déclaré
+          * `verifie` - Vérifié
+          * `rejete` - Rejeté
+          * `complement` - Complément demandé
+          * `en_attente` - En attente (déclaré ou complément)
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClergyAccountOutputList'
+          description: ''
   /api/v1/clergy-accounts/{person_id}/activate/:
     post:
       operationId: clergy_accounts_activate
@@ -2896,13 +2976,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenInput'
+              $ref: '#/components/schemas/AcceptInput'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TokenInput'
+              $ref: '#/components/schemas/AcceptInput'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/TokenInput'
+              $ref: '#/components/schemas/AcceptInput'
         required: true
       security:
       - keycloakBearer: []
@@ -2953,6 +3033,12 @@ paths:
       summary: Comptes du clergé en attente de validation
       parameters:
       - in: query
+        name: diocese
+        schema:
+          type: string
+          format: uuid
+        description: 'Diocèse (ou tout nœud) : son sous-arbre'
+      - in: query
         name: limit
         schema:
           type: integer
@@ -2962,11 +3048,97 @@ paths:
         schema:
           type: string
           format: uuid
+        description: Nœud exact de l'invitation
       - in: query
         name: offset
         schema:
           type: integer
         description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: Nom ou e-mail
+      - in: query
+        name: role
+        schema:
+          enum:
+          - diacre_transitoire
+          - diacre_permanent
+          - pretre
+          - eveque
+          - consacre
+          type: string
+          minLength: 1
+        description: |-
+          * `diacre_transitoire` - Diacre (transitoire)
+          * `diacre_permanent` - Diacre permanent
+          * `pretre` - Prêtre
+          * `eveque` - Évêque
+          * `consacre` - Consacré
+      tags:
+      - clergy-accounts
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClergyAccountOutputList'
+          description: ''
+  /api/v1/clergy-accounts/validated/:
+    get:
+      operationId: clergy_accounts_validated
+      description: À placer en premier dans les bases des vues V1.
+      summary: Comptes du clergé validés (filtres diocèse, rôle)
+      parameters:
+      - in: query
+        name: diocese
+        schema:
+          type: string
+          format: uuid
+        description: 'Diocèse (ou tout nœud) : son sous-arbre'
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Nœud exact de l'invitation
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: q
+        schema:
+          type: string
+          maxLength: 100
+        description: Nom ou e-mail
+      - in: query
+        name: role
+        schema:
+          enum:
+          - diacre_transitoire
+          - diacre_permanent
+          - pretre
+          - eveque
+          - consacre
+          type: string
+          minLength: 1
+        description: |-
+          * `diacre_transitoire` - Diacre (transitoire)
+          * `diacre_permanent` - Diacre permanent
+          * `pretre` - Prêtre
+          * `eveque` - Évêque
+          * `consacre` - Consacré
       tags:
       - clergy-accounts
       security:
@@ -5195,6 +5367,118 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedStaffMassIntentionOutputList'
+          description: ''
+  /api/v1/mass-intentions/parish/feuille/:
+    get:
+      operationId: mass_intentions_parish_sheet
+      description: À placer en premier dans les bases des vues V1.
+      summary: Feuille imprimable des intentions d'un jour, par messe (texte des intentions,
+        sans montant)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse
+        required: true
+      tags:
+      - intentions
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SheetOutput'
+          description: ''
+  /api/v1/mass-intentions/parish/messes/:
+    get:
+      operationId: mass_intentions_parish_masses
+      description: À placer en premier dans les bases des vues V1.
+      summary: Messes d'un jour (horaires des lieux) avec nombre d'intentions retenues
+        et plafond
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        required: true
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse
+        required: true
+      tags:
+      - intentions
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayMassesOutput'
+          description: ''
+  /api/v1/mass-intentions/parish/reglages/:
+    get:
+      operationId: mass_intentions_settings_get
+      description: À placer en premier dans les bases des vues V1.
+      summary: Réglages des intentions d'une paroisse (plafond par messe, 5 par défaut)
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse
+        required: true
+      tags:
+      - intentions
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsOutput'
+          description: ''
+    patch:
+      operationId: mass_intentions_settings_update
+      description: À placer en premier dans les bases des vues V1.
+      summary: Changer le plafond d'intentions par messe (1 à 50)
+      tags:
+      - intentions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSettingsInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSettingsInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSettingsInput'
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsOutput'
           description: ''
   /api/v1/me/:
     get:
@@ -10214,6 +10498,18 @@ components:
         * `remise_curie` - Espèces de quête impérée à remettre à la curie — échéance : Fund.remit_by
         * `remise_a_confirmer` - Remise à la curie à confirmer (diocèse) — échéance : remise + 7 jours
         * `cloture_mois` - Mois à clore — échéance : jour DONATIONS_MONTH_CLOSE_DAY du mois suivant
+    AcceptInput:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 200
+        justificatif_id:
+          type: integer
+          nullable: true
+          description: Fichier déposé par files/upload/ (facultatif)
+      required:
+      - token
     AccountDetailOutput:
       type: object
       properties:
@@ -13608,6 +13904,12 @@ components:
           nullable: true
           readOnly: true
           description: Nœud de l'invitation acceptée
+        justificatif:
+          allOf:
+          - $ref: '#/components/schemas/Justificatif'
+          nullable: true
+          readOnly: true
+          description: Pièce justificative de l'invitation, ou null
       required:
       - declared_at
       - degre_ordre
@@ -13616,6 +13918,7 @@ components:
       - full_name
       - id
       - is_active
+      - justificatif
       - node
       - statut_verification
       - verification_note
@@ -13898,6 +14201,63 @@ components:
       required:
       - counts
       - total
+    DayMassOutput:
+      type: object
+      properties:
+        place_id:
+          type: integer
+        place_name:
+          type: string
+        start_time:
+          type: string
+          format: time
+        label:
+          type: string
+        language:
+          type: string
+        note:
+          type: string
+        intentions_count:
+          type: integer
+        max_intentions:
+          type: integer
+        remaining:
+          type: integer
+        is_full:
+          type: boolean
+      required:
+      - intentions_count
+      - is_full
+      - label
+      - language
+      - max_intentions
+      - note
+      - place_id
+      - place_name
+      - remaining
+      - start_time
+    DayMassesOutput:
+      type: object
+      properties:
+        node:
+          $ref: '#/components/schemas/_Ref'
+        date:
+          type: string
+          format: date
+        max_per_mass:
+          type: integer
+        masses:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayMassOutput'
+        without_time_count:
+          type: integer
+      required:
+      - date
+      - masses
+      - max_per_mass
+      - node
+      - without_time_count
     DecisionEnum:
       enum:
       - verifie
@@ -14990,6 +15350,8 @@ components:
         requested_date:
           type: string
           format: date
+          nullable: true
+          description: 'null : « Pas de date précise »'
         requested_mass:
           type: string
           default: ''
@@ -14998,7 +15360,6 @@ components:
       - intention
       - kind
       - node
-      - requested_date
     IntentionInput:
       type: object
       properties:
@@ -15054,6 +15415,10 @@ components:
           maximum: 30
           minimum: 1
           default: 14
+        justificatif_id:
+          type: integer
+          nullable: true
+          description: Fichier déposé par files/upload/ (facultatif)
       required:
       - email
       - etat_de_vie
@@ -15119,6 +15484,11 @@ components:
         created_at:
           type: string
           format: date-time
+        justificatif:
+          allOf:
+          - $ref: '#/components/schemas/Justificatif'
+          nullable: true
+          readOnly: true
         accept_url:
           type: string
           description: Lien d'acceptation (montré une seule fois, aussi envoyé par
@@ -15131,6 +15501,7 @@ components:
       - expires_at
       - id
       - invited_by_name
+      - justificatif
       - node
       - status
     InvitationOutput:
@@ -15186,6 +15557,11 @@ components:
         created_at:
           type: string
           format: date-time
+        justificatif:
+          allOf:
+          - $ref: '#/components/schemas/Justificatif'
+          nullable: true
+          readOnly: true
       required:
       - degre_ordre
       - email
@@ -15193,6 +15569,7 @@ components:
       - expires_at
       - id
       - invited_by_name
+      - justificatif
       - node
       - status
     InvitationPublicOutput:
@@ -15224,6 +15601,22 @@ components:
       - first_name
       - node_name
       - register_url
+    Justificatif:
+      type: object
+      properties:
+        id:
+          type: integer
+        file_name:
+          type: string
+        file_type:
+          type: string
+        url:
+          type: string
+      required:
+      - file_name
+      - file_type
+      - id
+      - url
     LastMessage:
       type: object
       properties:
@@ -15390,6 +15783,7 @@ components:
         requested_date:
           type: string
           format: date
+          nullable: true
           title: Date souhaitée
         requested_mass:
           type: string
@@ -15406,6 +15800,11 @@ components:
           type: string
           title: Messe retenue
           maxLength: 120
+        scheduled_time:
+          type: string
+          format: time
+          nullable: true
+          title: Heure de la messe retenue
         refusal_reason:
           type: string
           title: Motif du refus
@@ -15431,7 +15830,6 @@ components:
       - notice
       - parish
       - place
-      - requested_date
     MassIntentionStatusEnum:
       enum:
       - recue
@@ -17808,6 +18206,17 @@ components:
           nullable: true
         is_active:
           type: boolean
+    PatchedSettingsInput:
+      type: object
+      properties:
+        node:
+          type: string
+          format: uuid
+          description: Paroisse
+        max_per_mass:
+          type: integer
+          maximum: 50
+          minimum: 1
     PaymentIncident:
       type: object
       properties:
@@ -20085,6 +20494,11 @@ components:
         scheduled_date:
           type: string
           format: date
+        scheduled_time:
+          type: string
+          format: time
+          nullable: true
+          description: Heure de la messe (plafond appliqué)
         scheduled_mass:
           type: string
           default: ''
@@ -20250,6 +20664,124 @@ components:
       - end_time
       - place_id
       - start_time
+    SettingsOutput:
+      type: object
+      properties:
+        node:
+          type: string
+        max_per_mass:
+          type: integer
+      required:
+      - max_per_mass
+      - node
+    SheetLine:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        kind_label:
+          type: string
+        intention:
+          type: string
+        announced_as:
+          type: string
+        status:
+          type: string
+      required:
+      - announced_as
+      - id
+      - intention
+      - kind
+      - kind_label
+      - status
+    SheetMass:
+      type: object
+      properties:
+        place_id:
+          type: integer
+        place_name:
+          type: string
+        start_time:
+          type: string
+          format: time
+        label:
+          type: string
+        language:
+          type: string
+        note:
+          type: string
+        intentions_count:
+          type: integer
+        max_intentions:
+          type: integer
+        remaining:
+          type: integer
+        is_full:
+          type: boolean
+        intentions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SheetLine'
+      required:
+      - intentions
+      - intentions_count
+      - is_full
+      - label
+      - language
+      - max_intentions
+      - note
+      - place_id
+      - place_name
+      - remaining
+      - start_time
+    SheetOtherLine:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        kind_label:
+          type: string
+        intention:
+          type: string
+        announced_as:
+          type: string
+        status:
+          type: string
+        scheduled_mass:
+          type: string
+      required:
+      - announced_as
+      - id
+      - intention
+      - kind
+      - kind_label
+      - scheduled_mass
+      - status
+    SheetOutput:
+      type: object
+      properties:
+        node:
+          $ref: '#/components/schemas/_Ref'
+        date:
+          type: string
+          format: date
+        masses:
+          type: array
+          items:
+            $ref: '#/components/schemas/SheetMass'
+        other_intentions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SheetOtherLine'
+      required:
+      - date
+      - masses
+      - node
+      - other_intentions
     SlotCancelInput:
       type: object
       properties:
@@ -20571,6 +21103,7 @@ components:
         requested_date:
           type: string
           format: date
+          nullable: true
           title: Date souhaitée
         requested_mass:
           type: string
@@ -20587,6 +21120,11 @@ components:
           type: string
           title: Messe retenue
           maxLength: 120
+        scheduled_time:
+          type: string
+          format: time
+          nullable: true
+          title: Heure de la messe retenue
         refusal_reason:
           type: string
           title: Motif du refus
@@ -20621,7 +21159,6 @@ components:
       - kind
       - parish
       - place
-      - requested_date
       - requester_name
     StatsOutput:
       type: object
@@ -21326,6 +21863,16 @@ components:
         id:
           type: string
           format: uuid
+        name:
+          type: string
+      required:
+      - id
+      - name
+    _Ref:
+      type: object
+      properties:
+        id:
+          type: string
         name:
           type: string
       required:

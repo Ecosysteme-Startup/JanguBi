@@ -86,6 +86,7 @@ def invitation_create(
     first_name: str = "",
     last_name: str = "",
     ttl_days: int = DEFAULT_TTL_DAYS,
+    justificatif_id: int | None = None,
 ) -> tuple[ClergyInvitation, str]:
     """Crée l'invitation et envoie le lien par e-mail. Renvoie ``(invitation, jeton)`` : le jeton
     en clair n'est connu qu'ici (réponse de création, e-mail), jamais relu ensuite."""
@@ -98,6 +99,7 @@ def invitation_create(
         raise ApplicationError("Un consacré non ordonné n'a pas de degré d'ordre.", code="degre_ordre_invalid")
     if not 1 <= ttl_days <= MAX_TTL_DAYS:
         raise ApplicationError(f"Validité de 1 à {MAX_TTL_DAYS} jours.", code="ttl_invalid")
+    justificatif = justificatif_get(file_id=justificatif_id, user=actor) if justificatif_id else None
     token = secrets.token_urlsafe(32)
     invitation = ClergyInvitation(
         email=email.strip().lower(),
@@ -106,6 +108,7 @@ def invitation_create(
         node=node,
         etat_de_vie=etat_de_vie,
         degre_ordre=degre_ordre,
+        justificatif=justificatif,
         token_hash=token_hash(token),
         expires_at=timezone.now() + datetime.timedelta(days=ttl_days),
         invited_by=actor,
@@ -150,7 +153,7 @@ def invitation_from_token(*, token: str, lock: bool = False) -> ClergyInvitation
 
 
 @transaction.atomic
-def invitation_accept(*, token: str, user: Any) -> ClergyInvitation:
+def invitation_accept(*, token: str, user: Any, justificatif_id: int | None = None) -> ClergyInvitation:
     """La personne, connectée par Keycloak avec l'adresse invitée, accepte : son état de vie est
     déclaré et son compte entre dans la file des comptes en attente de validation."""
     invitation = invitation_from_token(token=token, lock=True)
@@ -159,10 +162,14 @@ def invitation_accept(*, token: str, user: Any) -> ClergyInvitation:
             "Connectez-vous avec l'adresse e-mail qui a reçu l'invitation.", code="invitation_email_mismatch"
         )
     now = timezone.now()
+    fields = ["status", "accepted_by", "accepted_at", "updated_at"]
+    if justificatif_id:
+        invitation.justificatif = justificatif_get(file_id=justificatif_id, user=user)
+        fields.append("justificatif")
     invitation.status = InvitationStatus.ACCEPTEE
     invitation.accepted_by = user
     invitation.accepted_at = now
-    invitation.save(update_fields=["status", "accepted_by", "accepted_at", "updated_at"])
+    invitation.save(update_fields=fields)
     if user.statut_verification != StatutVerification.VERIFIE:
         user.etat_de_vie = invitation.etat_de_vie
         user.degre_ordre = invitation.degre_ordre
@@ -185,7 +192,7 @@ def account_scope(*, person: Any) -> ClergyInvitation | None:
     """Dernière invitation acceptée par la personne : son nœud fixe qui décide de son compte."""
     return (
         ClergyInvitation.objects.filter(accepted_by=person, status=InvitationStatus.ACCEPTEE)
-        .select_related("node")
+        .select_related("node", "justificatif")
         .order_by("-accepted_at")
         .first()
     )
@@ -241,3 +248,17 @@ def account_set_active(*, actor: Any, person: Any, active: bool, ip: str | None 
         actor=actor, action="compte.activation" if active else "compte.desactivation", target=person, node=invitation.node, ip=ip
     )
     return person
+
+
+def justificatif_get(*, file_id: int, user: Any) -> Any:
+    """Fichier déposé par ``user`` via apps/files et entièrement envoyé."""
+    from apps.files.models import File
+
+    file_obj = File.objects.filter(pk=file_id).first()
+    if file_obj is None:
+        raise ApplicationError("Fichier introuvable.", {"file_id": file_id}, code="file_not_found")
+    if file_obj.uploaded_by_id is None or file_obj.uploaded_by_id != user.pk:
+        raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
+    if not file_obj.is_valid:
+        raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
+    return file_obj

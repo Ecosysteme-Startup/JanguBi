@@ -1,6 +1,7 @@
 """Invitations et validation des comptes du clergé (lot V1-routes)."""
 
 import datetime
+import uuid
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -139,3 +140,65 @@ def test_expired_revoked_and_rights(world):
     assert laic.json()["error"]["code"] == "degre_ordre_required"
     dup = invite(world, email="autre@test.sn")
     assert dup.json()["error"]["code"] == "invitation_duplicate"
+
+
+def _file(owner, *, finished=True):
+    from apps.files.models import File
+
+    return File.objects.create(
+        original_file_name="celebret.pdf", file_name=f"f-{uuid.uuid4()}.pdf", file_type="application/pdf",
+        uploaded_by=owner, upload_finished_at=timezone.now() if finished else None, file="files/celebret.pdf",
+    )
+
+
+def test_optional_justificatif_on_invite_and_accept(world):
+    other = _file(world.cure)
+    assert invite(world, justificatif_id=other.pk).json()["error"]["code"] == "file_forbidden"
+    mine = _file(world.chancelier)
+    created = invite(world, justificatif_id=mine.pk)
+    assert created.status_code == 201, created.content
+    assert created.json()["justificatif"]["id"] == mine.pk
+    assert created.json()["justificatif"]["file_name"] == "celebret.pdf"
+
+    token = token_of(invite(world, email="diacre@test.sn", degre_ordre="diacre_permanent"))
+    newcomer = BaseUserFactory(email="diacre@test.sn")
+    incomplete = _file(newcomer, finished=False)
+    bad = client_for(newcomer).post(
+        f"{BASE}invitations/accept/", {"token": token, "justificatif_id": incomplete.pk}, format="json"
+    )
+    assert bad.json()["error"]["code"] == "file_incomplete"
+    proof = _file(newcomer)
+    ok = client_for(newcomer).post(f"{BASE}invitations/accept/", {"token": token, "justificatif_id": proof.pk}, format="json")
+    assert ok.status_code == 200 and ok.json()["justificatif"]["id"] == proof.pk
+    # Sans pièce : reste facultatif.
+    token2 = token_of(invite(world, email="sans@test.sn"))
+    plain = client_for(BaseUserFactory(email="sans@test.sn")).post(f"{BASE}invitations/accept/", {"token": token2}, format="json")
+    assert plain.status_code == 200 and plain.json()["justificatif"] is None
+
+
+def test_account_filters_and_validated_list(world):
+    people = {}
+    for email, degre, node in (
+        ("pretre@test.sn", "pretre", world.saint_dominique),
+        ("diacre@test.sn", "diacre_permanent", world.saint_dominique),
+        ("thies@test.sn", "pretre", world.thies),
+    ):
+        actor = SuperAdminFactory() if node == world.thies else world.chancelier
+        token = token_of(invite(world, actor=actor, email=email, degre_ordre=degre, node=str(node.pk)))
+        people[email] = BaseUserFactory(email=email)
+        client_for(people[email]).post(f"{BASE}invitations/accept/", {"token": token}, format="json")
+    manager = client_for(world.chancelier)
+    manager.post(f"{BASE}{people['pretre@test.sn'].pk}/validate/")
+
+    validated = manager.get(f"{BASE}validated/").json()
+    assert [a["email"] for a in validated["results"]] == ["pretre@test.sn"]
+    assert manager.get(f"{BASE}", {"role": "diacre_permanent"}).json()["results"][0]["email"] == "diacre@test.sn"
+    assert manager.get(f"{BASE}", {"statut": "en_attente"}).json()["count"] == 1
+    assert manager.get(f"{BASE}", {"statut": "verifie"}).json()["count"] == 1
+    assert manager.get(f"{BASE}pending/", {"role": "pretre"}).json()["count"] == 0
+    assert manager.get(f"{BASE}", {"diocese": str(world.dakar.pk)}).json()["count"] == 2
+    # Thiès est hors du périmètre du chancelier de Dakar ; la plateforme voit tout.
+    assert manager.get(f"{BASE}", {"diocese": str(world.thies.pk)}).json()["count"] == 0
+    platform = client_for(SuperAdminFactory())
+    assert platform.get(f"{BASE}", {"diocese": str(world.thies.pk)}).json()["count"] == 1
+    assert manager.get(f"{BASE}", {"role": "inconnu"}).status_code == 400

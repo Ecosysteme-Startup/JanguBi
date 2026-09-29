@@ -10,17 +10,25 @@ from rest_framework.views import APIView
 from apps.api.mixins import ApiAuthMixin, PermissionClassesType
 from apps.api.pagination import LimitOffsetPagination, get_paginated_response, paginated_response_serializer
 from apps.api.v1 import V1ApiMixin
+from apps.core.exceptions import PermissionDeniedError
+from apps.hierarchy import authz
 from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
 from apps.intentions import selectors, services
 from apps.intentions.enums import OFFERING_NOTICE
 from apps.intentions.serializers import (
+    DayFilterSerializer,
+    DayMassesOutputSerializer,
     DeclineInputSerializer,
     IntentionCreateInputSerializer,
     MassIntentionOutputSerializer,
     NoticeOutputSerializer,
     ParishFilterSerializer,
     ScheduleInputSerializer,
+    SettingsFilterSerializer,
+    SettingsInputSerializer,
+    SettingsOutputSerializer,
+    SheetOutputSerializer,
     StaffMassIntentionOutputSerializer,
 )
 
@@ -184,3 +192,68 @@ class IntentionCelebrateApi(_StaffApi):
         obj = selectors.intention_get_for_staff(user=request.user, intention_id=intention_id)
         services.intention_celebrate(intention=obj, actor=request.user)
         return _staff_response(request, intention_id)
+
+
+def _day(request: Request):  # noqa: ANN202
+    filters = DayFilterSerializer(data=request.query_params)
+    filters.is_valid(raise_exception=True)
+    return hierarchy_selectors.node_get(node_id=filters.validated_data["node"]), filters.validated_data["date"]
+
+
+class ParishMassesApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_parish_masses",
+        summary="Messes d'un jour (horaires des lieux) avec nombre d'intentions retenues et plafond",
+        parameters=[DayFilterSerializer],
+        responses=DayMassesOutputSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        node, day = _day(request)
+        return Response(DayMassesOutputSerializer(selectors.parish_masses_of_day(user=request.user, node=node, day=day)).data)
+
+
+class ParishSheetApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_parish_sheet",
+        summary="Feuille imprimable des intentions d'un jour, par messe (texte des intentions, sans montant)",
+        parameters=[DayFilterSerializer],
+        responses=SheetOutputSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        node, day = _day(request)
+        return Response(SheetOutputSerializer(selectors.parish_sheet(user=request.user, node=node, day=day)).data)
+
+
+class ParishSettingsApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_settings_get",
+        summary="Réglages des intentions d'une paroisse (plafond par messe, 5 par défaut)",
+        parameters=[SettingsFilterSerializer],
+        responses=SettingsOutputSerializer,
+    )
+    def get(self, request: Request) -> Response:
+        filters = SettingsFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        node = hierarchy_selectors.node_get(node_id=filters.validated_data["node"])
+        if not authz.peut(request.user, "intentions.gerer", node):
+            raise PermissionDeniedError("Vous ne gérez pas les intentions de cette paroisse.", code="intentions_forbidden")
+        return Response({"node": str(node.pk), "max_per_mass": services.max_per_mass(node=node)})
+
+    @extend_schema(
+        tags=TAG,
+        operation_id="mass_intentions_settings_update",
+        summary="Changer le plafond d'intentions par messe (1 à 50)",
+        request=SettingsInputSerializer,
+        responses=SettingsOutputSerializer,
+    )
+    def patch(self, request: Request) -> Response:
+        serializer = SettingsInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        node = hierarchy_selectors.node_get(node_id=serializer.validated_data["node"])
+        obj = services.intention_settings_update(
+            node=node, actor=request.user, max_per_mass=serializer.validated_data["max_per_mass"]
+        )
+        return Response({"node": str(node.pk), "max_per_mass": obj.max_per_mass})

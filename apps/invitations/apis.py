@@ -15,6 +15,8 @@ from apps.hierarchy import selectors as hierarchy_selectors
 from apps.hierarchy.authz import HasCapability
 from apps.invitations import selectors, services
 from apps.invitations.serializers import (
+    AcceptInputSerializer,
+    AccountFilterSerializer,
     ClergyAccountOutputSerializer,
     InvitationCreateInputSerializer,
     InvitationCreatedOutputSerializer,
@@ -118,13 +120,17 @@ class InvitationAcceptApi(V1ApiMixin, ApiAuthMixin, APIView):
         tags=TAG,
         operation_id="clergy_invitations_accept",
         summary="Accepter l'invitation (connecté par Keycloak avec l'adresse invitée) : compte en attente",
-        request=TokenInputSerializer,
+        request=AcceptInputSerializer,
         responses={200: ClergyAccountOutputSerializer, 410: _GONE},
     )
     def post(self, request: Request) -> Response:
-        serializer = TokenInputSerializer(data=request.data)
+        serializer = AcceptInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        invitation = services.invitation_accept(token=serializer.validated_data["token"], user=request.user)
+        invitation = services.invitation_accept(
+            token=serializer.validated_data["token"],
+            user=request.user,
+            justificatif_id=serializer.validated_data["justificatif_id"],
+        )
         person = selectors.account_get(user=None, person_id=invitation.accepted_by_id, scoped=False)
         return Response(ClergyAccountOutputSerializer(person).data)
 
@@ -143,7 +149,47 @@ class PendingAccountsApi(_ManagerApi):
         return get_paginated_response(
             pagination_class=LimitOffsetPagination,
             serializer_class=ClergyAccountOutputSerializer,
-            queryset=selectors.pending_accounts(user=request.user, node_id=filters.validated_data.get("node")),
+            queryset=selectors.pending_accounts(user=request.user, filters=filters.validated_data),
+            request=request,
+            view=self,
+        )
+
+
+class AccountListApi(_ManagerApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="clergy_accounts_list",
+        summary="Comptes du clergé invités dans mon périmètre (filtres diocèse, rôle, statut)",
+        parameters=[AccountFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(ClergyAccountOutputSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = AccountFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=ClergyAccountOutputSerializer,
+            queryset=selectors.accounts_list(user=request.user, filters=filters.validated_data),
+            request=request,
+            view=self,
+        )
+
+
+class ValidatedAccountsApi(_ManagerApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="clergy_accounts_validated",
+        summary="Comptes du clergé validés (filtres diocèse, rôle)",
+        parameters=[PendingFilterSerializer, *_PAGINATION],
+        responses=paginated_response_serializer(ClergyAccountOutputSerializer),
+    )
+    def get(self, request: Request) -> Response:
+        filters = PendingFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        return get_paginated_response(
+            pagination_class=LimitOffsetPagination,
+            serializer_class=ClergyAccountOutputSerializer,
+            queryset=selectors.accounts_list(user=request.user, filters={**filters.validated_data, "statut": "verifie"}),
             request=request,
             view=self,
         )

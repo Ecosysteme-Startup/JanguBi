@@ -43,6 +43,12 @@ class ClergyInvitation(BaseModel):
     accepted_at = models.DateTimeField(null=True, blank=True)
     revoked_by = models.ForeignKey("users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     revoked_at = models.DateTimeField(null=True, blank=True)
+    # Pièce justificative facultative (celebret, lettre de l'ordinaire…), déposée par apps/files
+    # par l'invitant à la création ou par la personne à l'acceptation.
+    justificatif = models.ForeignKey(
+        "files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        verbose_name=_("pièce justificative"),
+    )
 
     class Meta:
         verbose_name = _("invitation du clergé")
