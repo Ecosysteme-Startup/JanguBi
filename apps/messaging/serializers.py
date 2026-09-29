@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.messaging.models import (
@@ -7,45 +8,9 @@ from apps.messaging.models import (
     MessageAttachment,
     MessageBlock,
     MessageReaction,
+    MessagingAvailability,
     Notification,
-    PriestProfile,
 )
-
-
-class PriestProfileOutputSerializer(serializers.ModelSerializer):
-    user_id = serializers.UUIDField(source="user.id", read_only=True)
-    full_name = serializers.SerializerMethodField()
-    email = serializers.EmailField(source="user.email", read_only=True)
-
-    class Meta:
-        model = PriestProfile
-        fields = [
-            "id",
-            "user_id",
-            "full_name",
-            "email",
-            "accepts_pastoral_chat",
-            "cgu_accepted_at",
-            "ordination_year",
-            "bio",
-            "created_at",
-        ]
-
-    def get_full_name(self, obj) -> str:
-        profile = getattr(obj.user, "profile", None)
-        if profile:
-            return f"{profile.first_name} {profile.last_name}".strip() or obj.user.email
-        return obj.user.email
-
-
-class PriestProfileCreateInputSerializer(serializers.Serializer):
-    user_id = serializers.UUIDField()
-
-
-class PriestProfileUpdateInputSerializer(serializers.Serializer):
-    accepts_pastoral_chat = serializers.BooleanField(required=False)
-    ordination_year = serializers.IntegerField(required=False, min_value=1900, max_value=2100)
-    bio = serializers.CharField(required=False, max_length=1000, allow_blank=True)
 
 
 class MessagingCguStatusSerializer(serializers.Serializer):
@@ -67,6 +32,7 @@ class ConversationParticipantSerializer(serializers.Serializer):
 
 class LastMessageSerializer(serializers.Serializer):
     id = serializers.UUIDField()
+    sender_id = serializers.UUIDField(help_text="Expéditeur (pour l'aperçu « Vous : »)")
     content = serializers.CharField(allow_null=True)
     sent_at = serializers.DateTimeField(source="created_at")
 
@@ -76,6 +42,9 @@ class ConversationOutputSerializer(serializers.ModelSerializer):
     participant_b = ConversationParticipantSerializer(read_only=True)
     unread_count = serializers.IntegerField(default=0)
     last_message = serializers.SerializerMethodField()
+    confession_notice = serializers.SerializerMethodField(
+        help_text="Bandeau permanent : pas de confession par message (EF-PRE-05, RG-08)"
+    )
 
     class Meta:
         model = Conversation
@@ -90,9 +59,16 @@ class ConversationOutputSerializer(serializers.ModelSerializer):
             "cgu_accepted_by_b",
             "scheduled_purge_at",
             "unread_count",
+            "confession_notice",
             "created_at",
         ]
 
+    def get_confession_notice(self, obj) -> str:
+        from apps.messaging.services import CONFESSION_NOTICE
+
+        return CONFESSION_NOTICE
+
+    @extend_schema_field(LastMessageSerializer(allow_null=True))
     def get_last_message(self, obj):
         msg = obj.messages.filter(deleted_at__isnull=True).order_by("-created_at").first()
         if msg is None:
@@ -235,32 +211,38 @@ class PushDeviceOutputSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
-class ClergicalMessageSendInputSerializer(serializers.Serializer):
-    subject = serializers.CharField(max_length=200)
-    body = serializers.CharField()
-    recipient_scope = serializers.ChoiceField(choices=[
-        ("individual", "Individuel"),
-        ("parish_clergy", "Clergé de la paroisse"),
-        ("diocese_clergy", "Clergé du diocèse"),
-        ("province_bishops", "Évêques de la province"),
-    ])
-    scope_id = serializers.IntegerField(required=False, allow_null=True)
-    individual_recipient_id = serializers.IntegerField(required=False, allow_null=True)
-
-
-class ClergicalMessageOutputSerializer(serializers.ModelSerializer):
-    sender_email = serializers.EmailField(source="sender.email", read_only=True)
-    recipient_email = serializers.SerializerMethodField()
+class AvailabilitySerializer(serializers.ModelSerializer):
+    reply_windows = serializers.ListField(child=serializers.DictField(), required=False)
 
     class Meta:
-        from apps.messaging.models import ClergicalMessage
-        model = ClergicalMessage
-        fields = [
-            "id", "sender_email", "recipient_scope", "scope_id",
-            "recipient_email", "subject", "body", "read_at", "created_at",
-        ]
+        model = MessagingAvailability
+        fields = ["accepts_new_conversations", "absent_until", "reply_windows", "note"]
 
-    def get_recipient_email(self, obj) -> str | None:
-        if obj.individual_recipient:
-            return obj.individual_recipient.email
-        return None
+    def validate_reply_windows(self, value):
+        for window in value:
+            if set(window) != {"weekday", "start", "end"} or not 0 <= int(window["weekday"]) <= 6:
+                raise serializers.ValidationError("Chaque plage : {weekday: 0-6, start: 'HH:MM', end: 'HH:MM'}.")
+        return value
+
+
+class PriestOfficeOutputSerializer(serializers.Serializer):
+    code = serializers.SlugField(help_text="Code de l'office (cure, vicaire_paroissial, aumonier…)")
+    label = serializers.CharField(help_text="Titre du prêtre : Curé, Administrateur paroissial, Vicaire paroissial…")  # type: ignore[assignment]  # drf-stubs: champ « label » vs Field.label
+
+
+class ReachablePriestOutputSerializer(serializers.Serializer):
+    user_id = serializers.UUIDField(source="user.id")
+    full_name = serializers.SerializerMethodField()
+    nodes = serializers.SerializerMethodField()
+    availability = AvailabilitySerializer(allow_null=True)
+    office = PriestOfficeOutputSerializer(
+        allow_null=True, help_text="Office de la nomination active principale (paroisse suivie d'abord)"
+    )
+
+    def get_full_name(self, row) -> str:
+        profile = getattr(row["user"], "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip()
+        return name or "Prêtre"
+
+    def get_nodes(self, row) -> list[dict]:
+        return [{"id": str(n.pk), "name": n.name, "type": n.type.code} for n in row["nodes"]]

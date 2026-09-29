@@ -14,10 +14,10 @@ class ArticleCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Article)
 class ArticleAdmin(admin.ModelAdmin):
-    list_display = ["id", "title", "category", "scope_type", "status", "author", "published_at", "created_at"]
-    list_filter = ["status", "scope_type", "category"]
+    list_display = ["id", "title", "category", "scope_node", "status", "author", "published_at", "created_at"]
+    list_filter = ["status", "category"]
     search_fields = ["title", "slug", "content"]
-    raw_id_fields = ["author", "cover_image", "unpublished_by"]
+    raw_id_fields = ["author", "cover_image", "unpublished_by", "scope_node", "scope_place"]
     readonly_fields = [
         "id", "slug", "views_count", "published_at", "unpublished_at", "created_at", "updated_at"
     ]
@@ -26,7 +26,7 @@ class ArticleAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ("Contenu", {"fields": ("title", "slug", "excerpt", "content", "cover_image", "category")}),
-        ("Portée", {"fields": ("scope_type", "scope_parish_id", "scope_diocese_id")}),
+        ("Portée", {"fields": ("scope_node", "scope_place")}),
         ("Publication", {"fields": ("status", "author", "published_at")}),
         (
             "Dépublication",

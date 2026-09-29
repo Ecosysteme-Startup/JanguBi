@@ -1,0 +1,13 @@
+{% autoescape off %}Bonjour{% if invitation.first_name %} {{ invitation.first_name }}{% endif %},
+
+{{ invitation.node.name }} vous invite à rejoindre l'espace du clergé de Jàngu Bi.
+
+1. Créez votre compte (ou connectez-vous) avec cette adresse e-mail :
+{{ register_url }}
+
+2. Acceptez l'invitation :
+{{ accept_url }}
+
+Votre compte sera ensuite validé par le diocèse. Ce lien est valable jusqu'au {{ invitation.expires_at|date:"d/m/Y" }}.
+
+Si vous n'attendiez pas cette invitation, ignorez ce message.{% endautoescape %}

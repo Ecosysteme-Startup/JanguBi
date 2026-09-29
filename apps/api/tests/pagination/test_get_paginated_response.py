@@ -10,7 +10,6 @@ from apps.api.pagination import (
     get_paginated_response,
 )
 from apps.users.models import BaseUser
-from apps.users.services import user_create
 
 
 class ExampleListApi(APIView):
@@ -40,8 +39,8 @@ class GetPaginatedResponseTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
 
-        self.user1 = user_create(email="user1@hacksoft.io")
-        self.user2 = user_create(email="user2@hacksoft.io")
+        self.user1 = BaseUser.objects.create_user(email="user1@hacksoft.io")
+        self.user2 = BaseUser.objects.create_user(email="user2@hacksoft.io")
 
     def test_response_is_paginated_correctly(self):
         first_page_request = self.factory.get("/some/path")

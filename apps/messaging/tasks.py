@@ -71,3 +71,20 @@ def generate_conversation_export(self, export_id, conversation_id=None):
         conversation_export_generate(export_id=export_id, conversation_id=conversation_id)
     except Exception as exc:
         raise self.retry(exc=exc, countdown=60)
+
+
+@shared_task(bind=True, max_retries=4, acks_late=True)
+def push_deliver(self, *, device_ids, title, body, data, collapse_id=""):
+    """Envoi push (file ``default``). Les erreurs passagères (429, 5xx, réseau) sont relancées
+    pour les seuls appareils concernés ; un jeton refusé est désactivé, jamais relancé."""
+    from apps.messaging.services_push import push_deliver_now
+
+    result = push_deliver_now(device_ids=device_ids, title=title, body=body, data=data, collapse_id=collapse_id)
+    if result["retry"] and self.request.retries < self.max_retries:
+        self.retry(
+            kwargs={"device_ids": result["retry"], "title": title, "body": body, "data": data, "collapse_id": collapse_id},
+            countdown=60 * (2 ** self.request.retries),
+            throw=False,
+        )
+    logger.info("push_delivered", sent=len(result["sent"]), invalid=len(result["invalid"]), retry=len(result["retry"]))
+    return {k: len(v) for k, v in result.items()}

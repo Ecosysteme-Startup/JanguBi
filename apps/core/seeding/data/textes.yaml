@@ -1,0 +1,117 @@
+# Banque de phrases des données de test (plan §5, « Textes ») : écrites à la main dans le ton de l'app
+# (sobre, chaleureux, jamais culpabilisant ; pas d'emoji ; aucun classement). Combinées de façon
+# déterministe par la graine. Textes rédigés pour le projet : aucun droit de tiers.
+
+annonces:
+  titres:
+    - "Annonces du dimanche"
+    - "La semaine à la paroisse"
+    - "Annonces de la messe dominicale"
+  lignes:
+    - "Les inscriptions au catéchisme sont ouvertes au secrétariat, du mardi au samedi, de 9 h à 12 h."
+    - "Réunion des parents des enfants de la première communion samedi à 16 h, salle Saint-Joseph."
+    - "Adoration du Saint-Sacrement jeudi de 19 h à 20 h, suivie des confessions."
+    - "La chorale accueille de nouvelles voix : répétition vendredi à 18 h 30."
+    - "Les CEB se retrouvent cette semaine chez leurs responsables pour le partage de la Parole."
+    - "Merci à toutes les personnes qui ont aidé au nettoyage de l'église samedi dernier."
+    - "Le secrétariat sera fermé lundi ; les demandes d'actes reprennent mardi matin."
+    - "Chapelet médité tous les soirs du mois de mai, à 18 h, devant la grotte."
+    - "Les servants d'autel se retrouvent samedi à 10 h pour la répétition."
+    - "Quête impérée dimanche prochain : elle sera intégralement reversée à la curie."
+    - "Les jeunes préparent la veillée de louange : toutes les bonnes volontés sont les bienvenues."
+    - "Visite des malades par l'équipe de la pastorale de la santé : signalez-nous les personnes isolées."
+articles:
+  - titre: "Inscriptions au catéchisme"
+    texte: "Le catéchisme reprend pour les enfants et les adolescents. Les familles peuvent passer au secrétariat avec l'extrait de naissance et, le cas échéant, le certificat de baptême. Les catéchistes seront heureux de vous accueillir."
+  - titre: "Retour sur la fête paroissiale"
+    texte: "Merci à chacun pour cette belle journée : la messe, le repas partagé et les chants des enfants. Rendez-vous l'an prochain, dans la même joie."
+  - titre: "Préparation au mariage"
+    texte: "Les fiancés qui souhaitent se marier dans l'année sont invités à prendre contact avec le curé au moins six mois à l'avance. Un parcours de quatre rencontres est proposé."
+  - titre: "Pèlerinage de Popenguine"
+    texte: "Le pèlerinage marial approche. Les groupes de marcheurs se forment dans les CEB ; les personnes âgées pourront rejoindre le sanctuaire en car."
+  - titre: "Journée de la pastorale de la santé"
+    texte: "Une messe sera célébrée pour les malades et les soignants, avec le sacrement des malades pour ceux qui le demandent."
+  - titre: "Travaux dans l'église"
+    texte: "Des travaux d'entretien auront lieu cette semaine. Les messes de semaine seront célébrées à la chapelle."
+meditations:
+  - titre: "La foi comme une graine de moutarde"
+    texte: "Jésus ne nous demande pas une foi immense, mais une foi vivante. Une petite graine, confiée à la terre, devient un arbre où les oiseaux viennent se poser."
+  - titre: "Rester avec lui"
+    texte: "Avant d'envoyer ses disciples, Jésus les appelle pour qu'ils soient avec lui. Prendre le temps de rester près de lui, c'est déjà répondre à son appel."
+  - titre: "La paix donnée"
+    texte: "La paix que le Christ nous laisse n'est pas l'absence de difficultés. C'est une présence qui demeure au milieu de nos journées."
+  - titre: "Marcher ensemble"
+    texte: "Sur la route d'Emmaüs, Jésus marche avec deux disciples découragés. Il écoute d'abord, puis il ouvre les Écritures. Il fait encore ainsi avec nous."
+diocese:
+  - titre: "Lettre de l'Archevêque pour la rentrée pastorale"
+    texte: "Chers frères et sœurs, la rentrée pastorale nous invite à renouveler notre attention aux plus fragiles et à la vie de nos communautés."
+  - titre: "Ordinations sacerdotales"
+    texte: "L'archidiocèse se réjouit des ordinations prochaines. Prions pour les ordinands et pour les vocations."
+  - titre: "Journée diocésaine de la jeunesse"
+    texte: "Les jeunes de toutes les paroisses sont invités à une journée de rencontre, de prière et de partage."
+global:
+  - titre: "Bienvenue sur Jàngu Bi"
+    texte: "Retrouvez la Parole du jour, la vie de votre paroisse et vos démarches, au même endroit."
+evenements:
+  - ["Veillée de prière", "other", 120]
+  - ["Conférence sur la famille", "conference", 150]
+  - ["Récollection des jeunes", "retreat", 60]
+  - ["Messe des familles", "mass", 400]
+  - ["Retraite de Carême", "retreat", 80]
+  - ["Soirée de louange", "other", 200]
+  - ["Rencontre des servants d'autel", "other", 40]
+  - ["Messe d'action de grâce", "mass", 500]
+messages:
+  # Fils courts, prêtre et fidèle. Aucun contenu de confession (RG-08).
+  - - ["fidele", "Bonjour mon Père, je voudrais faire baptiser notre fille. Comment faut-il procéder ?"]
+    - ["pretre", "Bonjour, quelle bonne nouvelle. Passez au secrétariat pour l'inscription ; la préparation a lieu le premier samedi du mois."]
+    - ["fidele", "Merci beaucoup, nous passerons mardi."]
+  - - ["fidele", "Bonsoir mon Père, mon père est hospitalisé à Fann. Serait-il possible de lui rendre visite ?"]
+    - ["pretre", "Bonsoir. Bien sûr. Je peux passer jeudi après-midi. Dites-moi le service et la chambre."]
+    - ["fidele", "Service de cardiologie, chambre 12. Merci de tout cœur."]
+    - ["pretre", "Je prie pour lui. À jeudi."]
+  - - ["fidele", "Bonjour, je souhaite demander une messe pour ma défunte mère. À qui dois-je m'adresser ?"]
+    - ["pretre", "Bonjour, le secrétariat enregistre les intentions de messe. Vous pouvez aussi passer après la messe de 7 h."]
+  - - ["fidele", "Mon Père, pouvons-nous nous voir pour parler de mon projet de mariage ?"]
+    - ["pretre", "Avec joie. Je vous propose samedi à 11 h au presbytère."]
+    - ["fidele", "C'est parfait, merci."]
+  - - ["fidele", "Bonjour, je voudrais m'engager dans la pastorale de la santé. Qui dois-je contacter ?"]
+    - ["pretre", "Merci pour votre disponibilité. La responsable est présente après la messe de 9 h 30, je vous présenterai."]
+documents:
+  motifs_complement:
+    - "Merci de préciser l'année approximative du baptême et le nom du parrain."
+    - "Le nom de jeune fille de la mère est nécessaire pour retrouver l'acte."
+    - "Pouvez-vous joindre une copie de la pièce d'identité ?"
+  motifs_rejet:
+    - "Aucun acte correspondant n'a été trouvé dans nos registres. Le baptême a peut-être été célébré dans une autre paroisse."
+homelies:
+  # Textes lus en synthèse vocale pour les homélies, lectures et retraites (plan §5).
+  - titre: "Homélie du dimanche : la graine de moutarde"
+    texte: "Frères et sœurs, le Seigneur nous parle aujourd'hui d'une graine toute petite. Nous aimerions souvent une foi spectaculaire, capable de tout changer d'un coup. Mais le Royaume de Dieu grandit comme une graine confiée à la terre : lentement, en silence, sans que l'on sache comment. Ce qui compte, c'est de la semer chaque jour, dans nos familles, dans notre travail, dans nos quartiers. Que le Seigneur fasse grandir en nous ce qu'il y a semé."
+  - titre: "Homélie : le bon Samaritain"
+    texte: "Qui est mon prochain ? La question du docteur de la Loi est aussi la nôtre. Jésus ne répond pas par une définition. Il raconte une histoire, et il retourne la question : de qui vas-tu te faire proche ? Le Samaritain voit, il est saisi de compassion, il s'approche. Voir, être touché, s'approcher : voilà le chemin que le Seigneur nous propose cette semaine."
+  - titre: "Homélie : les disciples d'Emmaüs"
+    texte: "Ils marchaient tristes, et Jésus marchait avec eux sans qu'ils le reconnaissent. Combien de fois marchons-nous ainsi, découragés, sans voir qu'il est là ? Il nous rejoint par sa Parole, qui réchauffe le cœur, et par le pain rompu, qui ouvre les yeux. Chaque dimanche, nous refaisons ce chemin. Et, comme eux, nous sommes envoyés annoncer qu'il est vivant."
+  - titre: "Retraite : apprendre à prier"
+    texte: "Prier, ce n'est pas d'abord dire beaucoup de mots. C'est se tenir devant Dieu, tel que l'on est. Commencez par quelques minutes de silence. Confiez au Seigneur votre journée, ce qui vous réjouit et ce qui vous pèse. Puis laissez une parole de l'Évangile vous accompagner. La prière devient alors une amitié, et l'amitié grandit avec le temps."
+  - titre: "Lecture : la parabole du semeur"
+    texte: "Le semeur sortit pour semer. Une partie du grain tomba au bord du chemin, une autre sur le sol pierreux, une autre dans les ronces, une autre enfin dans la bonne terre, où elle donna du fruit. Que celui qui a des oreilles pour entendre, qu'il entende."
+  - titre: "Méditation : Notre Père"
+    texte: "Notre Père, qui es aux cieux, que ton nom soit sanctifié, que ton règne vienne, que ta volonté soit faite sur la terre comme au ciel. Donne-nous aujourd'hui notre pain de ce jour. Pardonne-nous nos offenses, comme nous pardonnons aussi à ceux qui nous ont offensés. Et ne nous laisse pas entrer en tentation, mais délivre-nous du Mal. Amen."
+chants:
+  - "Ave Maria"
+  - "Salve Regina"
+  - "Magnificat"
+  - "Kyrie de la messe des anges"
+  - "Gloria"
+  - "Sanctus"
+  - "Agnus Dei"
+  - "Ubi caritas"
+  - "Regina caeli"
+  - "Victimae paschali laudes"
+  - "Adeste fideles"
+  - "Veni Creator Spiritus"
+  - "Tantum ergo"
+  - "Ave verum corpus"
+  - "Jubilate Deo"
+  - "Laudate Dominum"

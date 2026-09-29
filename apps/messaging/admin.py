@@ -8,16 +8,7 @@ from apps.messaging.models import (
     MessageBlock,
     MessageReaction,
     Notification,
-    PriestProfile,
 )
-
-
-@admin.register(PriestProfile)
-class PriestProfileAdmin(admin.ModelAdmin):
-    list_display = ["id", "user", "accepts_pastoral_chat", "cgu_accepted_at", "ordination_year"]
-    list_filter = ["accepts_pastoral_chat"]
-    search_fields = ["user__email", "user__first_name", "user__last_name"]
-    raw_id_fields = ["user"]
 
 
 @admin.register(Conversation)
@@ -30,14 +21,25 @@ class ConversationAdmin(admin.ModelAdmin):
 
 @admin.register(Message)
 class MessageAdmin(admin.ModelAdmin):
+    """Métadonnées seulement : aucun administrateur, Numerisen compris, ne lit le contenu (RG-09).
+
+    Le contenu est exclu du formulaire et jamais chargé ; les messages ne sont ni créés ni
+    modifiés depuis l'administration."""
+
     list_display = ["id", "conversation", "sender", "content_type", "read_at", "deleted_at", "created_at"]
     list_filter = ["content_type"]
     search_fields = ["sender__email"]
-    raw_id_fields = ["conversation", "sender", "reply_to"]
+    exclude = ["content"]
+    readonly_fields = ["conversation", "sender", "content_type", "reply_to", "read_at", "deleted_at"]
 
     def get_queryset(self, request):
-        # Defer encrypted content to avoid unnecessary decryption in list view
         return super().get_queryset(request).defer("content")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MessageBlock)
@@ -54,14 +56,32 @@ class MessageReactionAdmin(admin.ModelAdmin):
 
 @admin.register(ConversationExport)
 class ConversationExportAdmin(admin.ModelAdmin):
+    """Un export contient la conversation : aucun lien vers ses fichiers (RG-09)."""
+
     list_display = ["id", "conversation", "requested_by", "completed_at", "created_at"]
-    raw_id_fields = ["conversation", "requested_by"]
+    exclude = ["json_file", "pdf_file"]
+    readonly_fields = ["conversation", "requested_by", "completed_at"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MessageAttachment)
 class MessageAttachmentAdmin(admin.ModelAdmin):
-    list_display = ["id", "message", "file", "created_at"]
-    raw_id_fields = ["message", "file"]
+    """Pièces d'une conversation : aucun lien vers le fichier depuis l'administration (RG-09)."""
+
+    list_display = ["id", "message", "created_at"]
+    exclude = ["file"]
+    readonly_fields = ["message"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Notification)

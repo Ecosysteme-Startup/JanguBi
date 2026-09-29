@@ -1,56 +1,49 @@
-import logging
 from urllib.parse import parse_qs
 
 from channels.auth import AuthMiddlewareStack
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
-from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.tokens import UntypedToken
 
-logger = logging.getLogger(__name__)
+# Fermeture « non authentifié » (EF-AUTH-03) : le client rafraîchit son jeton et rouvre.
+WS_CLOSE_UNAUTHENTICATED = 4401
 
 
 @database_sync_to_async
-def _get_user_from_token(token: str):
-    from apps.users.models import BaseUser
+def _get_user_from_ticket(ticket: str):
+    from apps.authentication.ws_tickets import ws_ticket_consume
 
-    try:
-        validated = UntypedToken(token)  # type: ignore[arg-type]  # stub SimpleJWT trop strict : UntypedToken accepte une str brute à l'exécution (validates signature + expiry)
-        user_id = validated["user_id"]
-        user = BaseUser.objects.get(id=user_id, is_active=True)
-        # Même règle que JwtKeyEnforcingJWTAuthentication côté REST : un token émis
-        # avant rotate_jwt_key() (logout-all, changement de mot de passe) est rejeté.
-        token_jwt_key = validated.payload.get("jwt_key")
-        if token_jwt_key is None or str(token_jwt_key) != str(user.jwt_key):
-            return AnonymousUser()
-        return user
-    except (InvalidToken, TokenError, KeyError, BaseUser.DoesNotExist):
-        return AnonymousUser()
-    except Exception:
-        logger.exception("Unexpected error while authenticating WebSocket JWT")
-        return AnonymousUser()
+    return ws_ticket_consume(ticket=ticket)
 
 
 class JwtAuthMiddleware:
     """
-    Extracts JWT from ?token=<jwt> query param and populates scope["user"].
-    Browsers cannot set Authorization headers on WebSocket connections.
+    Authentifie la socket par ``?ticket=<ticket>`` : ticket à usage unique obtenu avec le
+    jeton Keycloak par ``POST /api/v1/me/ws-ticket/`` (le jeton lui-même ne passe jamais
+    dans l'URL, donc jamais dans les journaux). Sans ticket : utilisateur anonyme (le
+    consommateur décide). Ticket invalide ou expiré : fermeture avec le code 4401.
     """
 
     def __init__(self, inner):
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
-        query_string = scope.get("query_string", b"").decode()
-        params = parse_qs(query_string)
-        token = params.get("token", [None])[0]
-
-        if token:
-            scope["user"] = await _get_user_from_token(token)
-        else:
+        params = parse_qs(scope.get("query_string", b"").decode())
+        ticket = params.get("ticket", [None])[0]
+        if not ticket:
             scope["user"] = AnonymousUser()
-
+            return await self.inner(scope, receive, send)
+        user = await _get_user_from_ticket(ticket)
+        if user is None:
+            await _reject(receive, send)
+            return None
+        scope["user"] = user
         return await self.inner(scope, receive, send)
+
+
+async def _reject(receive, send) -> None:
+    message = await receive()
+    if message.get("type") == "websocket.connect":
+        await send({"type": "websocket.close", "code": WS_CLOSE_UNAUTHENTICATED})
 
 
 def JwtAuthMiddlewareStack(inner):

@@ -31,12 +31,18 @@ class DocumentRequest(BaseModel):
         OTHER = "other", _("Autre")
 
     class Status(models.TextChoices):
+        # Cycle V1 (SRS §8.1).
         SUBMITTED = "submitted", _("Soumise")
         UNDER_VERIFICATION = "under_verification", _("En vérification")
         INFO_REQUESTED = "info_requested", _("Complément demandé")
-        VALIDATED = "validated", _("Validée")
+        READY_FOR_PICKUP = "ready_for_pickup", _("Prête à retirer")
+        COLLECTED = "collected", _("Retirée")
         REJECTED = "rejected", _("Rejetée")
-        DOCUMENT_DEPOSITED = "document_deposited", _("Document déposé")
+        CANCELLED = "cancelled", _("Annulée")
+
+    class PickupMode(models.TextChoices):
+        SECRETARIAT = "secretariat", _("Au secrétariat de la paroisse du sacrement")
+        TRANSFER = "transfer_to_followed_parish", _("Transmis à ma paroisse")
 
     class AttachmentType(models.TextChoices):
         USER_SUPPORTING = "user_supporting", _("Justificatif fidèle")
@@ -54,9 +60,7 @@ class DocumentRequest(BaseModel):
     document_type_free = models.CharField(max_length=255, blank=True, default="")
     reason = models.CharField(max_length=30, choices=RequestReason.choices)
     reason_free = models.CharField(max_length=255, blank=True, default="")
-    status = models.CharField(
-        max_length=30, choices=Status.choices, default=Status.SUBMITTED, db_index=True
-    )
+    status = models.CharField(max_length=30, choices=Status.choices, default=Status.SUBMITTED, db_index=True)
     assigned_to = models.ForeignKey(
         BaseUser,
         null=True,
@@ -81,17 +85,33 @@ class DocumentRequest(BaseModel):
     registered_first_names = models.CharField(max_length=200, blank=True, default="")
     father_last_name = models.CharField(max_length=100)
     mother_last_name = models.CharField(max_length=100)
-    parish_name = models.CharField(max_length=200)
-    diocese = models.CharField(max_length=200)
-    # Rattachement territorial réel (routage + cloisonnement). Le texte ci-dessus
-    # reste en repli pour les saisies libres (stations rurales sans ligne Parish).
-    target_parish = models.ForeignKey(
-        "org.Parish",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+    # Paroisse du sacrement (RG-02) : nœud qui tient les registres.
+    target_node = models.ForeignKey(
+        "hierarchy.Node",
+        on_delete=models.PROTECT,
         related_name="document_requests",
+        verbose_name=_("paroisse du sacrement"),
     )
+    pickup_mode = models.CharField(
+        max_length=40,
+        choices=PickupMode.choices,
+        default=PickupMode.SECRETARIAT,
+        db_default=PickupMode.SECRETARIAT,
+    )
+    pickup_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    pickup_hours = models.CharField(max_length=255, blank=True, default="", db_default="")
+    pickup_message = models.TextField(blank=True, default="", db_default="")
+    # Références du registre (EF-ACT-05) — jamais renvoyées au fidèle.
+    register_volume = models.CharField(max_length=40, blank=True, default="", db_default="")
+    register_page = models.CharField(max_length=20, blank=True, default="", db_default="")
+    register_number = models.CharField(max_length=40, blank=True, default="", db_default="")
+    register_marginal_notes = models.TextField(blank=True, default="", db_default="")
+    closed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_reminded_at = models.DateTimeField(null=True, blank=True)
+    attachments_purged_at = models.DateTimeField(null=True, blank=True)
+
     sacrament_approximate_date = models.CharField(max_length=20)
     sacrament_location = models.CharField(max_length=200)
     additional_info = models.TextField(blank=True, default="")
@@ -108,6 +128,7 @@ class DocumentRequest(BaseModel):
             models.Index(fields=["requester", "-created_at"], name="docreq_requester_idx"),
             models.Index(fields=["status", "-created_at"], name="docreq_status_idx"),
             models.Index(fields=["document_type", "status"], name="docreq_type_status_idx"),
+            models.Index(fields=["target_node", "status", "-created_at"], name="docreq_node_status_idx"),
         ]
 
     def __str__(self) -> str:
@@ -194,3 +215,46 @@ class InternalNote(BaseModel):
 
     def __str__(self) -> str:
         return f"Note — {self.request.reference} par {self.author_id}"
+
+
+class DocumentSlaSetting(BaseModel):
+    """Seuils de relance d'un nœud (EF-ACT-08). Le plus proche ancêtre réglé s'applique."""
+
+    node = models.OneToOneField("hierarchy.Node", on_delete=models.CASCADE, related_name="document_sla")
+    escalate_days = models.PositiveSmallIntegerField(_("relance de la paroisse (jours)"), default=7)
+    requester_reminder_days = models.PositiveSmallIntegerField(_("relance du fidèle (jours)"), default=5)
+    pickup_reminder_days = models.PositiveSmallIntegerField(_("rappel de retrait (jours)"), default=3)
+    # Délai annoncé au fidèle (« mise à disposition estimée »). Vide : réglage hérité, sinon
+    # DOCUMENTS_DEFAULT_INDICATIVE_DAYS. Indicatif, jamais un engagement.
+    indicative_days = models.PositiveSmallIntegerField(
+        _("délai indicatif annoncé au fidèle (jours)"), null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = _("Délais de traitement")
+        verbose_name_plural = _("Délais de traitement")
+
+    def __str__(self) -> str:
+        return f"Délais — {self.node}"
+
+
+class DocumentTypeDelay(BaseModel):
+    """Délai indicatif d'un type d'acte, réglé par la paroisse (Paramètres, « Actes délivrés »).
+
+    Prioritaire sur le délai global de la paroisse (``Node.acts_delay_days``), lui-même
+    prioritaire sur le réglage SLA hérité, puis le défaut. Indicatif, jamais un engagement."""
+
+    node = models.ForeignKey("hierarchy.Node", on_delete=models.CASCADE, related_name="document_type_delays")
+    document_type = models.CharField(_("type d'acte"), max_length=30, choices=DocumentRequest.DocumentType.choices)
+    days = models.PositiveSmallIntegerField(_("délai indicatif (jours ouvrés)"))
+
+    class Meta:
+        verbose_name = _("Délai par type d'acte")
+        verbose_name_plural = _("Délais par type d'acte")
+        constraints = [
+            models.UniqueConstraint(fields=["node", "document_type"], name="documents_type_delay_node_type_uniq"),
+            models.CheckConstraint(condition=models.Q(days__gte=1), name="documents_type_delay_days_positive"),
+        ]
+
+    def __str__(self) -> str:
+        return f"Délai {self.document_type} — {self.node_id} : {self.days} j"

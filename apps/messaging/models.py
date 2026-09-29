@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 from django.db import models
@@ -9,23 +10,22 @@ from apps.messaging.fields import EncryptedTextField
 from apps.users.models import BaseUser
 
 
-class PriestProfile(BaseModel):
-    user = models.OneToOneField(
-        BaseUser,
-        on_delete=models.CASCADE,
-        related_name="priest_profile",
-    )
-    accepts_pastoral_chat = models.BooleanField(default=False, db_index=True)
-    cgu_accepted_at = models.DateTimeField(null=True, blank=True)
-    ordination_year = models.PositiveSmallIntegerField(null=True, blank=True)
-    bio = models.TextField(blank=True, default="")
+class MessagingAvailability(BaseModel):
+    """Disponibilité d'un prêtre joignable (EF-PRE-07). Absente = disponible, sans plage déclarée."""
+
+    user = models.OneToOneField(BaseUser, on_delete=models.CASCADE, related_name="messaging_availability")
+    accepts_new_conversations = models.BooleanField(_("accepte de nouveaux échanges"), default=True)
+    absent_until = models.DateField(_("absent jusqu'au"), null=True, blank=True)
+    # Plages indicatives de réponse : [{"weekday": 0-6, "start": "HH:MM", "end": "HH:MM"}]
+    reply_windows = models.JSONField(_("plages de réponse"), default=list, blank=True)
+    note = models.CharField(_("note"), max_length=200, blank=True, default="")
 
     class Meta:
-        verbose_name = _("Profil Prêtre")
-        verbose_name_plural = _("Profils Prêtres")
+        verbose_name = _("Disponibilité (messagerie)")
+        verbose_name_plural = _("Disponibilités (messagerie)")
 
     def __str__(self) -> str:
-        return f"PriestProfile({self.user_id})"
+        return f"Disponibilité({self.user_id})"
 
 
 class MessagingCguAcceptance(BaseModel):
@@ -174,6 +174,13 @@ class Message(BaseModel):
                 fields=["conversation", "-created_at"],
                 name="msg_conv_created_idx",
             ),
+            # Non lus d'une conversation (liste des conversations, marquage « lu ») : ne couvre
+            # que les messages en attente de lecture, donc reste petit (docs/SCALING.md).
+            models.Index(
+                fields=["conversation", "sender"],
+                condition=models.Q(read_at__isnull=True, deleted_at__isnull=True),
+                name="msg_conv_unread_idx",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -285,12 +292,33 @@ class Notification(BaseModel):
         return f"Notification({self.user_id}, {self.event_type})"
 
 
+class NotificationPreference(BaseModel):
+    """Préférences de notification d'une personne (EF-PAROI-08). Absente = valeurs par défaut."""
+
+    user = models.OneToOneField(BaseUser, on_delete=models.CASCADE, related_name="notification_preference")
+    in_app = models.BooleanField(_("dans l'application"), default=True)
+    email = models.BooleanField(_("par e-mail"), default=True)
+    push = models.BooleanField(_("sur le téléphone (push)"), default=True, db_default=True)
+    topic_annonces = models.BooleanField(_("annonces de ma paroisse"), default=True)
+    topic_evenements = models.BooleanField(_("rappels d'événements"), default=True)
+    quiet_start = models.TimeField(_("début du silence"), default=datetime.time(22, 0))
+    quiet_end = models.TimeField(_("fin du silence"), default=datetime.time(6, 0))
+
+    class Meta:
+        verbose_name = _("Préférences de notification")
+        verbose_name_plural = _("Préférences de notification")
+
+    def __str__(self) -> str:
+        return f"Préférences({self.user_id})"
+
+
 class PushDevice(BaseModel):
     """
     Token d'appareil pour les notifications push (app mobile React Native).
-    On enregistre les tokens dès maintenant ; l'envoi FCM/APNs viendra avec
-    l'app. Un token est unique et se réassigne au dernier utilisateur connecté
-    sur l'appareil.
+    Envoi par FCM HTTP v1 ou APNs (``apps.messaging.push``). Un token est unique et
+    se réassigne au dernier utilisateur connecté sur l'appareil. Un token refusé par
+    le fournisseur (appareil désinstallé, jeton expiré) est désactivé, pas supprimé :
+    un nouvel enregistrement le réactive.
     """
 
     class Platform(models.TextChoices):
@@ -305,6 +333,7 @@ class PushDevice(BaseModel):
     )
     platform = models.CharField(max_length=10, choices=Platform.choices)
     token = models.CharField(max_length=512, unique=True)
+    disabled_at = models.DateTimeField(_("désactivé le"), null=True, blank=True)
 
     class Meta:
         verbose_name = _("Appareil push")
@@ -312,54 +341,3 @@ class PushDevice(BaseModel):
 
     def __str__(self) -> str:
         return f"PushDevice({self.user_id}, {self.platform})"
-
-
-class ClergicalMessage(BaseModel):
-    """Encrypted message between clergy members (distinct from the pastoral Conversation model)."""
-
-    class RecipientScope(models.TextChoices):
-        INDIVIDUAL = "individual", _("Individuel")
-        PARISH_CLERGY = "parish_clergy", _("Clergé de la paroisse")
-        DIOCESE_CLERGY = "diocese_clergy", _("Clergé du diocèse")
-        PROVINCE_BISHOPS = "province_bishops", _("Évêques de la province")
-
-    sender = models.ForeignKey(
-        BaseUser,
-        on_delete=models.CASCADE,
-        related_name="sent_clerical_messages",
-    )
-    recipient_scope = models.CharField(
-        _("portée"),
-        max_length=20,
-        choices=RecipientScope.choices,
-        default=RecipientScope.INDIVIDUAL,
-        db_index=True,
-    )
-    scope_id = models.IntegerField(
-        _("ID de la portée"),
-        null=True,
-        blank=True,
-        help_text="ID de la paroisse, du diocèse ou de la province selon recipient_scope.",
-    )
-    individual_recipient = models.ForeignKey(
-        BaseUser,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="received_clerical_messages",
-    )
-    subject = models.CharField(_("sujet"), max_length=200)
-    body = EncryptedTextField(_("corps"))
-    read_at = models.DateTimeField(_("lu le"), null=True, blank=True)
-
-    class Meta:
-        verbose_name = _("Message inter-clergé")
-        verbose_name_plural = _("Messages inter-clergé")
-        ordering = ["-created_at"]
-        indexes = [
-            models.Index(fields=["individual_recipient", "-created_at"], name="clerical_msg_rcpt_idx"),
-            models.Index(fields=["sender", "-created_at"], name="clerical_msg_sender_idx"),
-        ]
-
-    def __str__(self) -> str:
-        return f"ClergicalMessage({self.sender_id} → {self.recipient_scope})"

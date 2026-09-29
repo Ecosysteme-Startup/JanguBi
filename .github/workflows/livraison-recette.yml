@@ -1,0 +1,215 @@
+# ==============================================================================
+# Livraison en recette — API Jàngu Bi (Django/DRF, ASGI). Contrat :
+# Ecosysteme-Startup/Infrastructure, docs/CONTRAT_IMPLEMENTATION.md §5–§6 et
+# docs/CHAINE_LIVRAISON.md. Modèle : eventsapi/.github/workflows/ci-cd.yml.
+#
+#   push stage     → qualité, image `sha-<commit court>` publiée, puis
+#                    `repository_dispatch` `livraison-staging` vers
+#                    l'Infrastructure avec l'EMPREINTE publiée (dépôt@sha256:…)
+#   tag v*         → qualité, image étiquetée par la version, sans livraison
+#   workflow_dispatch → qualité seule (sauf lancé sur stage : livraison)
+#   develop / main → rien ici (develop : django.yml ; main : la production se
+#                    promeut dans l'Infrastructure, jamais depuis ce dépôt)
+#
+# UNE seule image pour api, worker et beat (l'Infrastructure choisit
+# l'entrypoint : /app/docker/entrypoint.sh, celery_entrypoint.sh,
+# beats_entrypoint.sh). Le back-end n'a pas de NEXT_PUBLIC_* : la même
+# empreinte vaut pour la recette et la production (images.staging = images.prod).
+#
+# Secrets requis : DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, INFRA_DISPATCH_TOKEN
+# Variables      : INFRA_REPO (défaut Ecosysteme-Startup/Infrastructure),
+#                  IMAGE_REPO (défaut soszaboss/jangubi-backend)
+#
+# --- Runners : TOUT sur `ceac` -------------------------------------------------
+# Plan gratuit, facturation refusée : pas de runner hébergé par GitHub. Mêmes
+# précautions que l'agenda : `permissions: contents: read`, secrets passés
+# étape par étape, `persist-credentials: false`, aucun `pull_request`, bornes
+# mémoire/CPU sur chaque conteneur, `--oom-score-adj=800`, constructeur BuildKit
+# borné `ceac-ci`, pas de cache `type=gha`.
+# Budget : 1,5 Go (job) + 512 Mo (PostgreSQL) + 256 Mo (Redis).
+# ==============================================================================
+name: Livraison recette (API)
+
+on:
+  push:
+    branches: [stage]
+    tags: ["v*"]
+    paths-ignore: ["docs/**", "**/*.md", "graphify-out/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  INFRA_REPO: ${{ vars.INFRA_REPO || 'Ecosysteme-Startup/Infrastructure' }}
+  # Doit être le dépôt déclaré dans Infrastructure envs/*/versions.env
+  # (JANGUBI_API_IMAGE) : une autre valeur est refusée à la livraison.
+  IMAGE_REPO: ${{ vars.IMAGE_REPO || 'soszaboss/jangubi-backend' }}
+
+# Sur `stage`, une livraison en cours n'est jamais annulée.
+concurrency:
+  group: livraison-jangubi-api-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/stage' }}
+
+jobs:
+  qualite:
+    name: Qualité (lint, types, migrations, tests)
+    runs-on: [self-hosted, ceac]
+    timeout-minutes: 40
+    container:
+      image: python:3.12.4-slim-bookworm
+      options: --memory=1536m --memory-swap=1536m --cpus=1.5 --oom-score-adj=800
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: jangubi_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --memory=512m --memory-swap=512m --cpus=1 --oom-score-adj=800
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --memory=256m --memory-swap=256m --cpus=0.5 --oom-score-adj=800
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.django.test
+      SECRET_KEY: cle-de-test-uniquement
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/jangubi_test
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_TASK_ALWAYS_EAGER: "True"
+      CELERY_TASK_EAGER_PROPAGATES: "True"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # ffmpeg : encodage réel dans les tests de la sonothèque (apps/audio).
+      # libpq-dev + gcc : psycopg2 se compile (pas de wheel).
+      - name: Bibliothèques système
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends ffmpeg libpq-dev build-essential libgomp1
+
+      - name: Installer les dépendances
+        run: pip install -r requirements/local.txt
+
+      - name: Ruff — lint
+        run: ruff check apps/
+
+      - name: Mypy
+        run: mypy --config mypy.ini apps/
+
+      - name: Migrations manquantes ?
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Pytest
+        run: pytest apps/ --tb=short -q
+
+      - name: Rendre l espace de travail au runner
+        if: always()
+        run: chown -R "$(stat -c %u:%g "$GITHUB_WORKSPACE/..")" "$GITHUB_WORKSPACE" "$RUNNER_TEMP"
+
+  image:
+    name: Image DockerHub
+    needs: qualite
+    if: github.ref == 'refs/heads/stage' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: [self-hosted, ceac]
+    timeout-minutes: 40
+    outputs:
+      commit: ${{ steps.vars.outputs.commit }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Résoudre le commit court et l'étiquette
+        id: vars
+        env:
+          SHA: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          court="${SHA:0:7}"
+          echo "commit=${court}" >> "$GITHUB_OUTPUT"
+          if [ "$REF_TYPE" = "tag" ]; then
+            echo "etiquette=${REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "etiquette=sha-${court}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Constructeur borné ceac-ci
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: remote
+          endpoint: docker-container://buildx_buildkit_ceac-ci0
+
+      - name: Connexion à DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Construire et pousser
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/production.Dockerfile
+          target: production
+          push: true
+          # Une seule étiquette, immuable : ni branche, ni `latest`.
+          tags: ${{ env.IMAGE_REPO }}:${{ steps.vars.outputs.etiquette }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Vérifier l'empreinte publiée
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          case "$DIGEST" in
+            sha256:*) echo "Empreinte : $DIGEST" ;;
+            *) echo "::error::Empreinte absente ou invalide : '$DIGEST'"; exit 1 ;;
+          esac
+
+  livraison-staging:
+    name: Notifier l'infrastructure (livraison-staging)
+    needs: image
+    if: github.ref == 'refs/heads/stage'
+    runs-on: [self-hosted, ceac]
+    timeout-minutes: 10
+    steps:
+      - name: repository_dispatch → infrastructure
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
+          repository: ${{ env.INFRA_REPO }}
+          event-type: livraison-staging
+          # Back-end : même empreinte pour la recette et la production.
+          client-payload: |
+            {
+              "app": "jangubi",
+              "composant": "api",
+              "commit": "${{ needs.image.outputs.commit }}",
+              "images": {
+                "staging": "${{ env.IMAGE_REPO }}@${{ needs.image.outputs.digest }}",
+                "prod": "${{ env.IMAGE_REPO }}@${{ needs.image.outputs.digest }}"
+              }
+            }
+
+      - name: Résumé
+        env:
+          IMAGE: ${{ env.IMAGE_REPO }}@${{ needs.image.outputs.digest }}
+          COMMIT: ${{ needs.image.outputs.commit }}
+        run: |
+          {
+            echo "## Livraison en recette notifiée"
+            echo "- Image : \`${IMAGE}\`"
+            echo "- Commit : \`${COMMIT}\`"
+            echo "- Infrastructure : \`${INFRA_REPO}\` (livraison-staging)"
+          } >> "$GITHUB_STEP_SUMMARY"

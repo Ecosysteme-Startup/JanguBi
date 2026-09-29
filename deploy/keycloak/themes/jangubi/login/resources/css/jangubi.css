@@ -1,0 +1,60 @@
+/* Jàngu Bi — couleurs de l'application sur les pages de connexion Keycloak. */
+:root {
+  --jb-bleu: #0A6BA3;
+  --jb-bleu-fonce: #08547F;
+  --jb-encre: #0E1A2B;
+  --jb-gris: #586677;
+  --jb-bord: #DDE5EE;
+  --jb-fond: #F7FAFD;
+}
+
+.login-pf body {
+  background: var(--jb-fond) none;
+  color: var(--jb-encre);
+}
+
+#kc-header-wrapper {
+  color: var(--jb-encre);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 30px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.card-pf {
+  border: 1px solid var(--jb-bord);
+  border-top: 4px solid var(--jb-bleu);
+  border-radius: 16px;
+  box-shadow: none;
+}
+
+.btn-primary,
+.pf-c-button.pf-m-primary {
+  background-color: var(--jb-bleu);
+  border-color: var(--jb-bleu);
+  border-radius: 999px;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.pf-c-button.pf-m-primary:hover,
+.pf-c-button.pf-m-primary:focus {
+  background-color: var(--jb-bleu-fonce);
+  border-color: var(--jb-bleu-fonce);
+}
+
+a,
+.login-pf a {
+  color: var(--jb-bleu);
+}
+
+.pf-c-form-control:focus,
+.form-control:focus {
+  border-color: var(--jb-bleu);
+}
+
+#kc-info-wrapper,
+.kc-login-tooltip,
+.instruction {
+  color: var(--jb-gris);
+}

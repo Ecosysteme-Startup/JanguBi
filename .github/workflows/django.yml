@@ -2,18 +2,21 @@ name: CI JanguBi Backend
 
 on:
   push:
+    # `stage` et les tags `v*` : .github/workflows/livraison-recette.yml
+    # (runner ceac, contrat de l'Infrastructure Ecosysteme-Startup).
     branches:
       - main
       - develop
-      - stage
-    tags:
-      - 'v*'
+    # Les changements purement documentaires ne déclenchent ni CI ni déploiement.
+    paths-ignore: ['docs/**', '**/*.md', 'graphify-out/**']
 
   pull_request:
     branches:
       - main
       - develop
       - stage
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore: ['docs/**', '**/*.md', 'graphify-out/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,6 +25,8 @@ concurrency:
 jobs:
 
   build:
+    # Les PR en brouillon ne consomment pas de minutes GitHub Actions.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-24.04              
 
     services:
@@ -32,7 +37,9 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: jangubi_test
         ports:
-          - 5432:5432
+          # Port hôte surchargeable pour `make act` (un Postgres local occupe
+          # souvent 5432) ; sur GitHub, la variable n'existe pas → 5432.
+          - ${{ vars.CI_PG_HOST_PORT || '5432' }}:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -42,7 +49,7 @@ jobs:
       redis:
         image: redis:7-alpine         
         ports:
-          - 6379:6379
+          - ${{ vars.CI_REDIS_HOST_PORT || '6379' }}:6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -66,6 +73,10 @@ jobs:
           path: /opt/hostedtoolcache/Python/3.12.4/x64/
           key: python-${{ hashFiles('requirements/local.txt') }}-${{ hashFiles('requirements/base.txt') }}
 
+      - name: Install ffmpeg
+        # Encodage audio réel dans les tests de la sonothèque (apps/audio).
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Install dependencies
         run: pip install -r requirements/local.txt
 
@@ -79,8 +90,8 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: config.django.test
           SECRET_KEY: "ci-only-secret-key-not-for-production"
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/jangubi_test
-          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: postgres://postgres:postgres@localhost:${{ vars.CI_PG_HOST_PORT || '5432' }}/jangubi_test
+          REDIS_URL: redis://localhost:${{ vars.CI_REDIS_HOST_PORT || '6379' }}/0
           CELERY_TASK_ALWAYS_EAGER: "True"         
           CELERY_TASK_EAGER_PROPAGATES: "True"
         run: pytest apps/ -v --tb=short

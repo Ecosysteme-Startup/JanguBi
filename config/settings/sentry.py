@@ -74,6 +74,10 @@ if SENTRY_DSN:
         # If you wish to associate users to errors (assuming you are using
         # django.contrib.auth) you may enable sending PII data.
         send_default_pii=False,
+        # Données religieuses sensibles (loi 2008-12, ENF-03) : ni corps de requête (messages,
+        # demandes d'actes), ni variables locales dans les traces envoyées à Sentry.
+        max_request_body_size="never",
+        include_local_variables=False,
         profile_lifecycle="trace",
         profile_session_sample_rate=1.0,
 

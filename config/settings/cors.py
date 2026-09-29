@@ -16,9 +16,12 @@ CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
 BASE_BACKEND_URL = env.str("DJANGO_BASE_BACKEND_URL", default="http://localhost:8001")
 BASE_FRONTEND_URL = env.str("DJANGO_BASE_FRONTEND_URL", default="http://localhost:3000")
 
+# Le thème de connexion Keycloak lit le jour liturgique (lecture publique) pour son bandeau.
+KEYCLOAK_ORIGIN = env.str("KEYCLOAK_SERVER_URL", default="http://localhost:8180").rstrip("/")
+
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=[BASE_FRONTEND_URL, "http://127.0.0.1:3000"],
+    default=[BASE_FRONTEND_URL, "http://127.0.0.1:3000", KEYCLOAK_ORIGIN],
 )
 CORS_ORIGIN_WHITELIST = env.list("DJANGO_CORS_ORIGIN_WHITELIST", default=[BASE_FRONTEND_URL])
 
@@ -36,4 +39,6 @@ CORS_ALLOW_HEADERS = (
     "x-csrftoken",
     "x-requested-with",
     "x-auth-transport",
+    # Reprise des flux SSE (dons) avec @microsoft/fetch-event-source (docs/TEMPS-REEL.md §3.4).
+    "last-event-id",
 )

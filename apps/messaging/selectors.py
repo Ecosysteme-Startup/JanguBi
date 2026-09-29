@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID
 
 from django.db import models
@@ -14,7 +14,6 @@ from apps.messaging.models import (
     MessageBlock,
     MessagingCguAcceptance,
     Notification,
-    PriestProfile,
 )
 from apps.users.models import BaseUser
 
@@ -121,12 +120,68 @@ def unread_count(*, conversation: Conversation, user: BaseUser) -> int:
     )
 
 
-def priest_list_available() -> QuerySet[PriestProfile]:
-    return (
-        PriestProfile.objects.filter(accepts_pastoral_chat=True)
-        .select_related("user")
-        .order_by("user__email")
+def priests_reachable_for(*, user: BaseUser) -> list[dict]:
+    """EF-PRE-01 : prêtres joignables de la paroisse suivie (nomination sur ce nœud) et des
+    aumôneries du même diocèse, avec leur disponibilité. Sans paroisse suivie : liste vide."""
+    from apps.hierarchy.models import Node
+    from apps.hierarchy.selectors import node_ancestor_of_type
+    from apps.hierarchy.selectors_offices import capability_holders
+    from apps.messaging.models import MessagingAvailability
+
+    parish = getattr(user, "paroisse_suivie", None)
+    if parish is None:
+        return []
+    targets = [parish]
+    diocese = node_ancestor_of_type(node=parish, type_code="diocese")
+    if diocese is not None:
+        targets += list(Node.objects.filter(path__startswith=diocese.path, type__code="aumonerie", status="erige"))
+
+    rows: dict = {}
+    for node in targets:
+        for priest in capability_holders(node=node, capability="messagerie.recevoir_fideles", direct_only=True):
+            if priest.pk != user.pk:
+                rows.setdefault(priest.pk, {"user": priest, "nodes": []})["nodes"].append(node)
+    availabilities = {a.user_id: a for a in MessagingAvailability.objects.filter(user_id__in=list(rows))}
+    offices = _principal_offices(person_ids=list(rows), nodes=targets, parish=parish)
+    result = []
+    for row in rows.values():
+        availability = availabilities.get(row["user"].pk)
+        if availability is not None and not availability.accepts_new_conversations:
+            continue
+        result.append({**row, "availability": availability, "office": offices.get(row["user"].pk)})
+    return sorted(result, key=lambda r: r["user"].email)
+
+
+def _principal_offices(*, person_ids: list, nodes: list, parish: Any) -> dict:
+    """Office de la nomination active principale de chaque prêtre, parmi les nœuds où il est
+    joignable : d'abord la paroisse suivie, puis un office à titulaire unique (curé,
+    aumônier) avant un office partagé (vicaire), puis la nomination la plus ancienne."""
+    from django.utils import timezone
+
+    from apps.hierarchy.enums import AssignmentStatus, Cardinality
+    from apps.hierarchy.models import OfficeAssignment
+
+    if not person_ids:
+        return {}
+    today = timezone.localdate()
+    assignments = (
+        OfficeAssignment.objects.filter(
+            person_id__in=person_ids,
+            node__in=nodes,
+            status=AssignmentStatus.ACTIVE,
+            start_date__lte=today,
+            office_type__capabilities__code="messagerie.recevoir_fideles",
+        )
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
+        .select_related("office_type")
     )
+    offices: dict = {}
+    for a in sorted(
+        assignments,
+        key=lambda a: (a.node_id != parish.pk, a.office_type.cardinality != Cardinality.ONE, a.start_date),
+    ):
+        offices.setdefault(a.person_id, {"code": a.office_type.code, "label": a.title})
+    return offices
 
 
 def block_list(*, user: BaseUser) -> QuerySet[MessageBlock]:
@@ -146,96 +201,3 @@ def notification_list(
     if unread_only:
         qs = qs.filter(is_read=False)
     return qs
-
-
-# ---------------------------------------------------------------------------
-# ClergicalMessage selectors
-# ---------------------------------------------------------------------------
-
-def clerical_message_territory_ids(user: "BaseUser") -> dict[str, set[int]]:
-    """
-    Territoires auxquels `user` appartient, pour la résolution des diffusions.
-
-    Deux sources, réunies volontairement : les affectations de rôle
-    (`RoleAssignment`, via `apps.users.scoping`) et les appartenances
-    (`Membership`, via `get_scope_ids`). Un curé est rattaché par affectation,
-    un religieux ou un diacre peut ne l'être que par appartenance : n'interroger
-    qu'une seule des deux sources priverait silencieusement une partie du clergé
-    de ses messages.
-    """
-    from apps.users.scoping import (
-        accessible_diocese_ids,
-        accessible_parish_ids,
-        accessible_province_ids,
-    )
-
-    memberships = user.get_scope_ids()
-
-    def _merge(from_roles: set[int] | None, from_memberships: list[int]) -> set[int]:
-        # `None` signifie « aucune restriction » (super-admin) côté scoping ; ici
-        # on cherche une APPARTENANCE, pas un droit d'administration : un
-        # super-admin sans territoire ne reçoit pas les diffusions du clergé.
-        return (from_roles or set()) | set(from_memberships)
-
-    return {
-        "parish_ids": _merge(accessible_parish_ids(user), memberships["parish_ids"]),
-        "diocese_ids": _merge(accessible_diocese_ids(user), memberships["diocese_ids"]),
-        "province_ids": _merge(
-            accessible_province_ids(user),
-            [user.province_id] if user.province_id else [],
-        ),
-    }
-
-
-def clerical_message_inbox(*, user: "BaseUser") -> "QuerySet":
-    """
-    Messages inter-clergé destinés à `user`, diffusions COMPRISES.
-
-    Le filtre ne portait que sur `individual_recipient`. Or trois des quatre
-    portées (`parish_clergy`, `diocese_clergy`, `province_bishops`) laissent ce
-    champ vide par construction : ces messages étaient écrits en base et
-    n'apparaissaient dans AUCUNE boîte de réception. Un évêque diffusant une
-    consigne à son diocèse ne recevait aucune erreur, la voyait dans ses
-    « envoyés », et personne ne la lisait jamais.
-    """
-    from django.db.models import Q
-
-    from apps.messaging.models import ClergicalMessage
-    from apps.users.enums import CLERGY_PASTORAL_ROLES, PastoralRole
-
-    visible = Q(individual_recipient=user)
-
-    if user.pastoral_role in CLERGY_PASTORAL_ROLES:
-        territories = clerical_message_territory_ids(user)
-
-        if territories["parish_ids"]:
-            visible |= Q(
-                recipient_scope=ClergicalMessage.RecipientScope.PARISH_CLERGY,
-                scope_id__in=territories["parish_ids"],
-            )
-        if territories["diocese_ids"]:
-            visible |= Q(
-                recipient_scope=ClergicalMessage.RecipientScope.DIOCESE_CLERGY,
-                scope_id__in=territories["diocese_ids"],
-            )
-        # La diffusion aux évêques de province ne s'adresse qu'aux évêques :
-        # l'ouvrir à tout le clergé de la province exposerait des échanges
-        # d'épiscopat aux prêtres et aux diacres.
-        if user.pastoral_role in (PastoralRole.EVEQUE, PastoralRole.ARCHEVEQUE) and territories["province_ids"]:
-            visible |= Q(
-                recipient_scope=ClergicalMessage.RecipientScope.PROVINCE_BISHOPS,
-                scope_id__in=territories["province_ids"],
-            )
-
-    return (
-        ClergicalMessage.objects.filter(visible)
-        .exclude(sender=user)  # ses propres diffusions sont dans « envoyés »
-        .select_related("sender")
-        .order_by("-created_at")
-    )
-
-
-def clerical_message_sent(*, user: "BaseUser") -> "QuerySet":
-    from apps.messaging.models import ClergicalMessage
-
-    return ClergicalMessage.objects.filter(sender=user).select_related("individual_recipient").order_by("-created_at")

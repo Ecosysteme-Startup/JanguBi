@@ -1,15 +1,9 @@
 from django.urls import path
 
-from apps.agenda.apis import (
-    EventDetailApi,
-    EventListCreateApi,
-    EventRegisterApi,
-    EventRegistrationsApi,
-)
+from apps.agenda import apis
 
 urlpatterns = [
-    path("events/", EventListCreateApi.as_view(), name="event-list-create"),
-    path("events/<int:event_id>/", EventDetailApi.as_view(), name="event-detail"),
-    path("events/<int:event_id>/register/", EventRegisterApi.as_view(), name="event-register"),
-    path("events/<int:event_id>/registrations/", EventRegistrationsApi.as_view(), name="event-registrations"),
+    path("", apis.EventListApi.as_view(), name="list"),
+    path("<int:event_id>/", apis.EventDetailApi.as_view(), name="detail"),
+    path("<int:event_id>/register/", apis.EventRegisterApi.as_view(), name="register"),
 ]

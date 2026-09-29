@@ -33,9 +33,11 @@ ENV PYTHONUNBUFFERED=1 \
 # Librairies SYSTÈME nécessaires à l'EXÉCUTION (pas au build) :
 #   libpq5   → client PostgreSQL requis par psycopg2 au runtime
 #   libgomp1 → OpenMP requis par onnxruntime (moteur de fastembed) au runtime
+#   ffmpeg   → encodage et normalisation des pistes de la sonothèque (apps/audio)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
         libgomp1 \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 
@@ -79,11 +81,6 @@ RUN useradd --create-home --uid 1000 appuser
 # Cœur du multi-stage : on récupère le venv déjà construit, sans gcc ni headers.
 COPY --from=builder $VIRTUAL_ENV $VIRTUAL_ENV
 
-# Entrypoint copié HORS de /app (un bind-mount sur /app l'écraserait). On strip
-# les \r Windows et on le rend exécutable.
-COPY entrypoint.sh /docker-entrypoint.sh
-RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
-
 WORKDIR /app
 # Code applicatif (respecte .dockerignore : pas de .venv/.git/.env…).
 # --chown pose la propriété EN MÊME TEMPS que la copie → une seule couche.
@@ -111,7 +108,20 @@ RUN SECRET_KEY="collectstatic-build-only" \
 
 USER appuser
 
-# L'entrypoint applique les migrations puis exécute la commande. En prod on sert
-# l'app ASGI avec Daphne (WebSocket/Channels).
-ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+# Scripts de démarrage (dans /app/docker, exécutables dans Git) : une SEULE image
+# pour l'API, le worker et le beat — l'Infrastructure choisit l'entrypoint :
+#   api    → /app/docker/entrypoint.sh (migre si besoin) + CMD ci-dessous
+#   worker → /app/docker/celery_entrypoint.sh
+#   beat   → /app/docker/beats_entrypoint.sh
+# Migration explicite (make deployer, conteneur éphémère) :
+#   python manage.py migrate --noinput
+EXPOSE 8000
+
+# Sonde de l'API : port ouvert, en Python (pas de curl dans l'image slim). Le
+# worker et le beat doivent la SURCHARGER dans Compose (ils n'écoutent rien).
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD ["python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3).close()"]
+
+# En prod on sert l'app ASGI avec Daphne (WebSocket/Channels et flux SSE).
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "config.asgi:application"]

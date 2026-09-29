@@ -21,6 +21,10 @@ class Mystery(BaseModel):
     order = models.PositiveSmallIntegerField()  # 1 to 5
     title = models.CharField(max_length=255)
     meditation = models.TextField(null=True, blank=True, help_text="Scripture reading or meditation for the mystery")
+    # Provenance du texte de méditation (audit L7, ADR-008) : œuvre, auteur, licence.
+    meditation_source = models.CharField(max_length=255, blank=True, default="", db_default="")
+    # Grâce demandée en priant le mystère (« fruit du mystère »), formulation usuelle française.
+    fruit = models.CharField(max_length=255, blank=True, default="", db_default="")
     audio_file = models.FileField(storage=RosaryAudioStorage(), upload_to="", null=True, blank=True)
     audio_duration = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in seconds")
 
@@ -36,19 +40,21 @@ class Mystery(BaseModel):
 
 class Prayer(BaseModel):
     class Type(models.TextChoices):
-        SIGN_OF_CROSS = "SIGN_OF_CROSS", "Sign of Cross"
-        CREED = "CREED", "Apostles Creed"
-        OUR_FATHER = "OUR_FATHER", "Our Father"
-        HAIL_MARY = "HAIL_MARY", "Hail Mary"
-        GLORY_BE = "GLORY_BE", "Glory Be"
-        FATIMA = "FATIMA", "Fatima Prayer"
-        HOLY_QUEEN = "HOLY_QUEEN", "Hail Holy Queen"
-        FINAL_PRAYER = "FINAL_PRAYER", "Final Prayer"
-        OTHER = "OTHER", "Other"
+        SIGN_OF_CROSS = "SIGN_OF_CROSS", "Signe de la croix"
+        CREED = "CREED", "Je crois en Dieu"
+        OUR_FATHER = "OUR_FATHER", "Notre Père"
+        HAIL_MARY = "HAIL_MARY", "Je vous salue Marie"
+        GLORY_BE = "GLORY_BE", "Gloire au Père"
+        FATIMA = "FATIMA", "Prière de Fatima"
+        HOLY_QUEEN = "HOLY_QUEEN", "Salve Regina"
+        FINAL_PRAYER = "FINAL_PRAYER", "Prière finale"
+        OTHER = "OTHER", "Autre"
 
     type = models.CharField(max_length=50, choices=Type.choices)
     text = models.TextField()
     language = models.CharField(max_length=10, default="FR")
+    # Provenance (audit L7) : prières traditionnelles du domaine public, ou source et licence.
+    source = models.CharField(max_length=255, blank=True, default="", db_default="")
     
     # Text Search Field (populated via triggers/SQL)
     tsv = SearchVectorField(null=True, blank=True)
@@ -82,13 +88,13 @@ class MysteryPrayer(models.Model):
 
 class RosaryDay(BaseModel):
     class Weekday(models.IntegerChoices):
-        MONDAY = 0, "Monday"
-        TUESDAY = 1, "Tuesday"
-        WEDNESDAY = 2, "Wednesday"
-        THURSDAY = 3, "Thursday"
-        FRIDAY = 4, "Friday"
-        SATURDAY = 5, "Saturday"
-        SUNDAY = 6, "Sunday"
+        MONDAY = 0, "Lundi"
+        TUESDAY = 1, "Mardi"
+        WEDNESDAY = 2, "Mercredi"
+        THURSDAY = 3, "Jeudi"
+        FRIDAY = 4, "Vendredi"
+        SATURDAY = 5, "Samedi"
+        SUNDAY = 6, "Dimanche"
 
     weekday = models.IntegerField(choices=Weekday.choices, unique=True)
     group = models.ForeignKey(MysteryGroup, on_delete=models.CASCADE, related_name="days")

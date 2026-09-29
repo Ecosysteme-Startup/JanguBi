@@ -1,0 +1,633 @@
+"""Authentification Keycloak sans Keycloak : clé RSA et JWKS locaux (EF-AUTH-01 à -06)."""
+
+import base64
+import datetime
+import hashlib
+import json
+import time
+import uuid
+
+import jwt
+import pytest
+from channels.testing import WebsocketCommunicator
+from cryptography.hazmat.primitives.asymmetric import rsa
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
+from django.core.cache import cache
+from django.test import override_settings
+from rest_framework.test import APIClient
+
+from apps.authentication import keycloak
+from apps.authentication.keycloak_admin import django_hash_to_keycloak_credential
+from apps.authentication.services_keycloak import keycloak_staff_role_sync, users_to_keycloak_migrate
+from apps.hierarchy import authz
+from apps.hierarchy.tests.factories import Tree, nominate, person
+from apps.users.tests.factories import BaseUserFactory
+
+ISSUER = "https://auth.test/realms/jangubi"
+
+pytestmark = pytest.mark.django_db
+
+
+class Keys:
+    def __init__(self) -> None:
+        self.kid = "kid-1"
+        self.private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.published: list[dict] = [self.jwk(self.private, self.kid)]
+
+    @staticmethod
+    def jwk(private, kid: str) -> dict:
+        data = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key()))
+        return {**data, "kid": kid, "use": "sig", "alg": "RS256"}
+
+    def token(self, **overrides) -> str:
+        now = int(time.time())
+        claims = {
+            "iss": ISSUER,
+            "aud": ["jangubi-api", "account"],
+            "azp": "jangubi-web",
+            "typ": "Bearer",
+            "sub": overrides.pop("sub", str(uuid.uuid4())),
+            "iat": now,
+            "exp": now + 300,
+            "email": "fidele@test.sn",
+            "email_verified": True,
+            "given_name": "Awa",
+            "family_name": "Ndiaye",
+            "realm_access": {"roles": ["fidele"]},
+            **overrides,
+        }
+        claims = {k: v for k, v in claims.items() if v is not None}
+        kid = overrides.get("_kid", self.kid)
+        claims.pop("_kid", None)
+        return jwt.encode(claims, self.private, algorithm="RS256", headers={"kid": kid})
+
+
+@pytest.fixture
+def keys(monkeypatch):
+    cache.clear()
+    k = Keys()
+    monkeypatch.setattr(keycloak, "_jwks_fetch", lambda: {"keys": list(k.published)})
+    with override_settings(
+        KEYCLOAK_ENABLED=True,
+        KEYCLOAK_ISSUER=ISSUER,
+        KEYCLOAK_AUDIENCE="jangubi-api",
+        KEYCLOAK_ALLOWED_CLIENTS=["jangubi-web"],
+        KEYCLOAK_REQUIRE_MFA_FOR_STAFF=True,
+    ):
+        yield k
+    cache.clear()
+
+
+def api(token: str) -> APIClient:
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+    return client
+
+
+ME = "/api/v1/me/capacites/"
+
+
+# --- Validation (EF-AUTH-01) --------------------------------------------------------------
+
+
+def test_valid_token_authenticates_and_provisions_once(keys):
+    sub = str(uuid.uuid4())
+    token = keys.token(sub=sub, email="awa@test.sn")
+
+    assert api(token).get(ME).status_code == 200
+    assert api(token).get(ME).status_code == 200
+
+    user = get_user_model().objects.get(keycloak_sub=sub)
+    assert (user.email, user.is_active, user.is_verified, user.phone_number) == ("awa@test.sn", True, True, None)
+    assert user.profile.first_name == "Awa"
+    assert get_user_model().objects.filter(email="awa@test.sn").count() == 1
+
+
+def test_phone_from_registration_fills_the_new_profile(keys):
+    """Attribut Keycloak « phone » (claim phone_number) saisi à l'inscription → Profile.phone."""
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="tel@test.sn", phone_number="77 412 36 58")).get(ME).status_code == 200
+
+    profile = get_user_model().objects.get(keycloak_sub=sub).profile
+    assert str(profile.phone) == "+221774123658"
+
+
+@pytest.mark.parametrize("raw", ["12345", "", "   ", "pas un numéro"])
+def test_invalid_or_missing_phone_is_ignored(keys, raw):
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="sans-tel@test.sn", phone_number=raw)).get(ME).status_code == 200
+
+    assert get_user_model().objects.get(keycloak_sub=sub).profile.phone is None
+
+
+def test_phone_from_token_never_overwrites_a_saved_phone(keys):
+    from apps.users.models import Profile
+
+    existing = BaseUserFactory.create(email="migre-tel@test.sn")
+    Profile.objects.update_or_create(user=existing, defaults={"phone": "+221781112233"})
+    empty = BaseUserFactory.create(email="migre-vide@test.sn")
+    Profile.objects.update_or_create(user=empty, defaults={"phone": None})
+
+    api(keys.token(email="migre-tel@test.sn", phone_number="+221 77 412 36 58")).get(ME)
+    api(keys.token(email="migre-vide@test.sn", phone_number="+221 77 412 36 58")).get(ME)
+
+    assert str(Profile.objects.get(user=existing).phone) == "+221781112233"
+    assert str(Profile.objects.get(user=empty).phone) == "+221774123658"
+
+
+def test_birthdate_from_registration_fills_the_new_profile(keys):
+    """Attribut Keycloak « birthdate » (claim OIDC birthdate, AAAA-MM-JJ) saisi à l'inscription → Profile.date_of_birth."""
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="naissance@test.sn", birthdate="1992-03-12")).get(ME).status_code == 200
+
+    profile = get_user_model().objects.get(keycloak_sub=sub).profile
+    assert profile.date_of_birth == datetime.date(1992, 3, 12)
+
+
+@pytest.mark.parametrize("raw", ["", "12/03/1992", "1992-02-30", "1899-12-31", "2999-01-01", "pas une date"])
+def test_invalid_or_implausible_birthdate_is_ignored(keys, raw):
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="sans-date@test.sn", birthdate=raw)).get(ME).status_code == 200
+
+    assert get_user_model().objects.get(keycloak_sub=sub).profile.date_of_birth is None
+
+
+def test_birthdate_from_token_never_overwrites_a_saved_birthdate(keys):
+    from apps.users.models import Profile
+
+    existing = BaseUserFactory.create(email="migre-date@test.sn")
+    Profile.objects.update_or_create(user=existing, defaults={"date_of_birth": datetime.date(1980, 1, 1)})
+    empty = BaseUserFactory.create(email="migre-sans-date@test.sn")
+    Profile.objects.update_or_create(user=empty, defaults={"date_of_birth": None})
+
+    api(keys.token(email="migre-date@test.sn", birthdate="1992-03-12")).get(ME)
+    api(keys.token(email="migre-sans-date@test.sn", birthdate="1992-03-12")).get(ME)
+
+    assert Profile.objects.get(user=existing).date_of_birth == datetime.date(1980, 1, 1)
+    assert Profile.objects.get(user=empty).date_of_birth == datetime.date(1992, 3, 12)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"exp": int(time.time()) - 3600, "iat": int(time.time()) - 7200}, "expiré"),
+        ({"aud": ["autre-api"]}, "audience"),
+        ({"azp": "client-pirate"}, "client"),
+        ({"typ": "Refresh"}, "type"),
+        ({"azp": None}, "client absent"),
+    ],
+)
+def test_invalid_keycloak_tokens_are_401(keys, overrides, reason):
+    response = api(keys.token(**overrides)).get(ME)
+    assert response.status_code == 401, reason
+
+
+def test_foreign_issuer_is_not_trusted(keys):
+    """Autre émetteur : ce n'est pas un jeton Keycloak ; l'ancien JWT le refuse aussi."""
+    assert api(keys.token(iss="https://pirate.test/realms/jangubi")).get(ME).status_code == 401
+
+
+def test_forged_signature_is_401(keys):
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    forged = jwt.encode(
+        {"iss": ISSUER, "aud": "jangubi-api", "sub": "x", "iat": int(time.time()), "exp": int(time.time()) + 60},
+        other,
+        algorithm="RS256",
+        headers={"kid": keys.kid},
+    )
+    assert api(forged).get(ME).status_code == 401
+
+
+def test_hs256_token_claiming_our_issuer_is_refused(keys):
+    forged = jwt.encode(
+        {"iss": ISSUER, "aud": "jangubi-api", "sub": "x", "iat": int(time.time()), "exp": int(time.time()) + 60},
+        "secret-partage",
+        algorithm="HS256",
+        headers={"kid": keys.kid},
+    )
+    assert api(forged).get(ME).status_code == 401
+
+
+def test_key_rotation_refreshes_the_jwks_once(keys):
+    new_private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = jwt.encode(
+        {
+            "iss": ISSUER,
+            "aud": "jangubi-api",
+            "azp": "jangubi-web",
+            "sub": str(uuid.uuid4()),
+            "email": "rotation@test.sn",
+            "email_verified": True,
+            "iat": int(time.time()),
+            "exp": int(time.time()) + 60,
+        },
+        new_private,
+        algorithm="RS256",
+        headers={"kid": "kid-2"},
+    )
+    keycloak.jwks_get()  # JWKS en cache sans la nouvelle clé
+    keys.published.append(Keys.jwk(new_private, "kid-2"))
+
+    assert api(token).get(ME).status_code == 200
+
+
+def test_unknown_kid_is_401(keys):
+    assert api(keys.token(_kid="inconnu")).get(ME).status_code == 401
+
+
+# --- Provisioning (EF-AUTH-02) -------------------------------------------------------------
+
+
+def test_existing_account_is_linked_by_verified_email(keys):
+    existing = BaseUserFactory.create(email="migre@test.sn")
+    sub = str(uuid.uuid4())
+
+    assert api(keys.token(sub=sub, email="migre@test.sn")).get(ME).status_code == 200
+
+    existing.refresh_from_db()
+    assert existing.keycloak_sub == sub
+
+
+def test_unverified_email_never_takes_over_an_account(keys):
+    BaseUserFactory.create(email="cible@test.sn")
+    response = api(keys.token(email="cible@test.sn", email_verified=False)).get(ME)
+    assert response.status_code == 401
+    assert get_user_model().objects.get(email="cible@test.sn").keycloak_sub is None
+
+
+def _lost_race(monkeypatch, winner):
+    """Simule deux premières requêtes simultanées : la première lecture par ``sub`` ne voit
+    rien, puis la requête concurrente a créé le compte (``winner``) avant la nôtre."""
+    calls = {"n": 0}
+
+    def by_sub(_user_model, _sub):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else winner
+
+    monkeypatch.setattr(keycloak, "_person_by_sub", by_sub)
+
+
+def test_concurrent_first_requests_do_not_fail_on_email_check(keys, monkeypatch):
+    sub = str(uuid.uuid4())
+    winner = BaseUserFactory.create(email="course@test.sn", keycloak_sub=sub)
+    _lost_race(monkeypatch, winner)
+
+    identity = keycloak.KeycloakIdentity(
+        sub=sub,
+        email="course@test.sn",
+        email_verified=True,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(),
+        amr=frozenset(),
+        acr="",
+        claims={},
+    )
+
+    assert keycloak.person_from_identity(identity) == winner
+
+
+def test_concurrent_first_requests_do_not_fail_on_model_validation(keys, monkeypatch):
+    sub = str(uuid.uuid4())
+    # Le gagnant a déjà été créé ; l'e-mail du jeton est encore libre, donc la création est
+    # tentée et ``full_clean`` refuse le ``sub`` en double (ValidationError, pas IntegrityError).
+    winner = BaseUserFactory.create(email="autre@test.sn", keycloak_sub=sub)
+    _lost_race(monkeypatch, winner)
+
+    identity = keycloak.KeycloakIdentity(
+        sub=sub,
+        email="nouveau@test.sn",
+        email_verified=False,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(),
+        amr=frozenset(),
+        acr="",
+        claims={},
+    )
+
+    assert keycloak.person_from_identity(identity) == winner
+    assert not get_user_model().objects.filter(email="nouveau@test.sn").exists()
+
+
+def test_inactive_account_is_refused(keys):
+    sub = str(uuid.uuid4())
+    BaseUserFactory.create(email="off@test.sn", keycloak_sub=sub, is_active=False)
+    assert api(keys.token(sub=sub, email="off@test.sn")).get(ME).status_code == 401
+
+
+# --- Rôles et MFA (EF-AUTH-05) -----------------------------------------------------------
+
+
+def _staff(keys, **claims):
+    tree = Tree()
+    sub = str(uuid.uuid4())
+    secretary = person("secretaire@test.sn", keycloak_sub=sub)
+    nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    return tree, keys.token(sub=sub, email="secretaire@test.sn", **claims)
+
+
+def test_staff_endpoint_requires_mfa(keys):
+    tree, token = _staff(keys)
+    response = api(token).get("/api/v1/audit/")
+    assert response.status_code == 403
+    assert response.data["error"]["code"] == "mfa_required"
+
+
+def test_staff_endpoint_with_otp_passes(keys):
+    tree, token = _staff(keys, amr=["pwd", "otp"])
+    nominate(get_user_model().objects.get(email="secretaire@test.sn"), "cure", tree.sainte_therese)  # audit.voir
+    assert api(token).get("/api/v1/audit/").status_code == 200
+
+
+def test_fidele_without_mfa_uses_basic_endpoints(keys):
+    assert api(keys.token()).get(ME).status_code == 200
+
+
+def test_platform_admin_comes_from_the_realm_role(keys):
+    admin_token = keys.token(email="numerisen@test.sn", realm_access={"roles": ["platform_admin"]}, amr=["otp"])
+    assert api(admin_token).get("/api/v1/hierarchy/capability-overrides/").status_code == 200
+
+    BaseUserFactory.create(email="ancien@test.sn", keycloak_sub="sub-ancien", is_superuser=True, is_staff=True)
+    plain = keys.token(sub="sub-ancien", email="ancien@test.sn", amr=["otp"])
+    assert api(plain).get("/api/v1/hierarchy/capability-overrides/").status_code == 403  # is_superuser ne suffit pas
+
+
+def test_non_keycloak_bearer_token_is_refused(keys):
+    """Keycloak est la seule authentification : un ancien JWT (ou tout autre jeton) donne 401."""
+    forged = jwt.encode({"user_id": str(BaseUserFactory.create().pk)}, "une-autre-cle", algorithm="HS256")
+    assert api(forged).get(ME).status_code == 401
+
+
+# --- WebSocket (EF-AUTH-03) --------------------------------------------------------------
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_websocket_closes_4401_on_invalid_ticket(keys):
+    from config.asgi import application
+
+    communicator = WebsocketCommunicator(
+        application, "/ws/notifications/?ticket=pas-un-ticket", headers=[(b"origin", b"http://localhost:3000")]
+    )
+    connected, code = await communicator.connect()
+    assert not connected
+    assert code == 4401
+    await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_websocket_ignores_a_token_in_the_url(keys):
+    """Le jeton ne passe jamais dans l'URL (journaux) : seul le ticket authentifie la socket."""
+    from config.asgi import application
+
+    token = keys.token(email="ws@test.sn")
+    communicator = WebsocketCommunicator(
+        application, f"/ws/notifications/?token={token}", headers=[(b"origin", b"http://localhost:3000")]
+    )
+    connected, _ = await communicator.connect()
+    assert not connected
+    await communicator.disconnect()
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_websocket_single_use_ticket(keys):
+    from asgiref.sync import sync_to_async
+
+    from apps.authentication.ws_tickets import ws_ticket_issue
+    from config.asgi import application
+
+    user = await sync_to_async(BaseUserFactory.create)()
+    ticket = await sync_to_async(ws_ticket_issue)(user=user)
+    origin = [(b"origin", b"http://localhost:3000")]
+
+    first = WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}", headers=origin)
+    assert (await first.connect())[0]
+    await first.disconnect()
+
+    replay = WebsocketCommunicator(application, f"/ws/notifications/?ticket={ticket}", headers=origin)
+    connected, code = await replay.connect()
+    assert not connected and code == 4401
+
+
+def test_ws_ticket_api_requires_authentication_and_returns_a_ticket(keys):
+    assert APIClient().post("/api/v1/me/ws-ticket/").status_code in (401, 403)
+    response = api(keys.token(email="t@test.sn")).post("/api/v1/me/ws-ticket/")
+    assert response.status_code == 200 and response.data["expires_in"] == 60 and len(response.data["ticket"]) > 30
+
+
+# --- Synchronisation du rôle staff (EF-AUTH-04) -------------------------------------------
+
+
+class FakeAdmin:
+    def __init__(self) -> None:
+        self.roles: dict[str, set[str]] = {}
+        self.actions: dict[str, set[str]] = {}
+
+    def user_realm_roles(self, user_id):
+        return set(self.roles.get(user_id, set()))
+
+    def add_realm_role(self, user_id, name):
+        self.roles.setdefault(user_id, set()).add(name)
+
+    def remove_realm_role(self, user_id, name):
+        self.roles.get(user_id, set()).discard(name)
+
+    def user_has_otp(self, user_id):
+        return False
+
+    def add_required_action(self, user_id, action):
+        self.actions.setdefault(user_id, set()).add(action)
+
+
+def test_staff_role_follows_active_assignments(keys):
+    tree = Tree()
+    secretary = person(keycloak_sub="kc-sec")
+    admin = FakeAdmin()
+
+    assert keycloak_staff_role_sync(person=secretary, admin=admin) == "unchanged"
+    assignment = nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    assert keycloak_staff_role_sync(person=secretary, admin=admin) == "added"
+    assert admin.roles["kc-sec"] == {"staff"} and admin.actions["kc-sec"] == {"CONFIGURE_TOTP"}
+
+    assignment.status = "terminee"
+    assignment.save()
+    authz.invalidate_user(secretary.pk)
+    assert keycloak_staff_role_sync(person=secretary, admin=admin) == "removed"
+
+
+def test_staff_sync_skips_unlinked_people(keys):
+    assert keycloak_staff_role_sync(person=person(), admin=FakeAdmin()) == "skipped"
+
+
+# --- Migration des comptes (EF-AUTH-06) --------------------------------------------------
+
+
+def test_django_pbkdf2_hash_is_converted_for_keycloak():
+    encoded = PBKDF2PasswordHasher().encode("MotDePasse-2026!", "sel123", iterations=1000)
+    credential = django_hash_to_keycloak_credential(encoded)
+
+    data, secret = json.loads(credential["credentialData"]), json.loads(credential["secretData"])
+    assert data == {"hashIterations": 1000, "algorithm": "pbkdf2-sha256", "additionalParameters": {}}
+    assert base64.b64decode(secret["salt"]) == b"sel123"
+    expected = hashlib.pbkdf2_hmac("sha256", b"MotDePasse-2026!", b"sel123", 1000)
+    assert base64.b64decode(secret["value"]) == expected
+
+
+@pytest.mark.parametrize("encoded", ["md5$sel$abc", "!unusable", "", "argon2$argon2id$v=19$m=1,t=1,p=1$abc$def"])
+def test_other_hashes_require_a_reset(encoded):
+    assert django_hash_to_keycloak_credential(encoded) is None
+
+
+def test_account_migration_simulation_then_apply():
+    migrated = BaseUserFactory.create(email="a@test.sn")
+    BaseUserFactory.create(email="b@test.sn", keycloak_sub="deja")
+    BaseUserFactory.create(email="c@test.sn", is_active=False, is_verified=False)
+
+    simulated = {line.email: line.action for line in users_to_keycloak_migrate()}
+    assert simulated == {"a@test.sn": "creer", "b@test.sn": "deja_lie", "c@test.sn": "ignorer"}
+    assert get_user_model().objects.get(pk=migrated.pk).keycloak_sub is None
+
+    class Admin:
+        created: list = []
+
+        def user_create(self, rep):
+            self.created.append(rep)
+            return "kc-" + rep["email"], True
+
+    admin = Admin()
+    with override_settings(KEYCLOAK_ENABLED=True):
+        users_to_keycloak_migrate(apply=True, admin=admin)
+    assert get_user_model().objects.get(pk=migrated.pk).keycloak_sub == "kc-a@test.sn"
+    assert [r["email"] for r in admin.created] == ["a@test.sn"]
+    # MD5 en tests : le mot de passe ne peut pas être importé → réinitialisation exigée.
+    assert admin.created[0]["requiredActions"] == ["UPDATE_PASSWORD"]
+
+
+# --- Rattachement hors transaction (recette 26/09/2026, DEF-01) ---------------------------
+
+
+class StaffSyncAdmin:
+    calls: list[tuple[str, str]] = []
+
+    def __init__(self, *args, **kwargs) -> None:
+        pass
+
+    def user_realm_roles(self, sub):
+        return set()
+
+    def add_realm_role(self, sub, role):
+        StaffSyncAdmin.calls.append(("add_role", role))
+
+    def user_has_otp(self, sub):
+        return False
+
+    def add_required_action(self, sub, action):
+        StaffSyncAdmin.calls.append(("required_action", action))
+
+
+@pytest.fixture
+def fake_admin(monkeypatch, settings):
+    from apps.authentication import services_keycloak
+
+    settings.KEYCLOAK_ADMIN_BACKEND = "http"  # le client (simulé ci-dessous) de services_keycloak
+
+    StaffSyncAdmin.calls = []
+    monkeypatch.setattr(services_keycloak, "KeycloakAdmin", StaffSyncAdmin)
+    return StaffSyncAdmin
+
+
+def test_first_refused_request_keeps_the_account_link(keys, fake_admin):
+    # Arrange : un responsable (e-mail vérifié, nommé) jamais connecté, sans OTP.
+    tree = Tree()
+    secretary = person("secretaire@test.sn")
+    nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    sub = str(uuid.uuid4())
+    token = keys.token(sub=sub, email="secretaire@test.sn")
+
+    # Act : sa première requête est refusée (MFA requise).
+    response = api(token).get("/api/v1/audit/")
+
+    # Assert : le refus n'annule plus le rattachement, et le rôle staff est demandé à Keycloak.
+    assert response.status_code == 403
+    secretary.refresh_from_db()
+    assert secretary.keycloak_sub == sub
+    assert ("add_role", "staff") in fake_admin.calls
+    assert ("required_action", "CONFIGURE_TOTP") in fake_admin.calls
+
+
+def test_staff_sync_is_not_repeated_on_every_request(keys, fake_admin):
+    tree = Tree()
+    secretary = person("secretaire@test.sn")
+    nominate(secretary, "secretaire_paroissial", tree.saint_dominique)
+    token = keys.token(sub=str(uuid.uuid4()), email="secretaire@test.sn")
+
+    for _ in range(3):
+        api(token).get("/api/v1/audit/")
+
+    assert fake_admin.calls.count(("add_role", "staff")) == 1
+
+
+def test_fidele_needs_no_staff_sync(keys, fake_admin):
+    assert api(keys.token()).get(ME).status_code == 200
+    assert fake_admin.calls == []
+
+
+# --- Client mobile (lot A2, V2) -----------------------------------------------------------
+
+
+def test_mobile_client_is_an_allowed_token_issuer_by_default():
+    from config.settings.keycloak import KEYCLOAK_ALLOWED_CLIENTS
+
+    assert set(KEYCLOAK_ALLOWED_CLIENTS) >= {"jangubi-web", "jangubi-mobile"}
+
+
+def test_token_from_the_mobile_client_is_accepted(keys):
+    with override_settings(KEYCLOAK_ALLOWED_CLIENTS=["jangubi-web", "jangubi-mobile"]):
+        assert api(keys.token(sub=str(uuid.uuid4()), azp="jangubi-mobile")).get(ME).status_code == 200
+
+
+def test_realm_declares_the_mobile_client_as_public_pkce_with_an_exact_redirect():
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    client = next(c for c in realm["clients"] if c["clientId"] == "jangubi-mobile")
+    assert client["publicClient"] and client["standardFlowEnabled"]
+    assert not client["implicitFlowEnabled"] and not client["directAccessGrantsEnabled"]
+    assert client["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert client["redirectUris"] == ["${KC_MOBILE_REDIRECT_URI:sn.numerisen.jangubi://oauth}"]
+    assert all("*" not in uri for uri in client["redirectUris"])
+    audience = [m for m in client["protocolMappers"] if m["protocolMapper"] == "oidc-audience-mapper"]
+    assert audience[0]["config"]["included.client.audience"] == "jangubi-api"
+    assert any(m["protocolMapper"] == "oidc-amr-mapper" for m in client["protocolMappers"])
+
+
+def test_realm_declares_the_web_client_with_exact_redirects_and_logout():
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    client = next(c for c in realm["clients"] if c["clientId"] == "jangubi-web")
+    assert client["publicClient"] and client["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert client["redirectUris"] == [
+        "${KC_WEB_REDIRECT_URI:http://localhost:3000/auth/callback}",
+        "${KC_WEB_LEGACY_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}",
+    ]
+    assert all("*" not in uri for uri in client["redirectUris"])
+    assert client["attributes"]["post.logout.redirect.uris"] == "${KC_WEB_POST_LOGOUT_URI:http://localhost:3000/}"
+    assert client["webOrigins"] == ["${KC_WEB_ORIGIN:http://localhost:3000}"]
+
+
+def test_cors_allows_the_last_event_id_header():
+    from django.conf import settings
+
+    assert "last-event-id" in settings.CORS_ALLOW_HEADERS

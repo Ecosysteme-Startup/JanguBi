@@ -1,0 +1,7 @@
+Bonjour,
+
+Rappel : vous êtes inscrit(e) à « {{ title }} », {{ start_at|date:"l j F à H\hi" }}{% if location %}, {{ location }}{% endif %}.
+
+Détails : {{ frontend_url }}/agenda/{{ event_id }}
+
+Vos préférences de notification : {{ frontend_url }}/profil/notifications

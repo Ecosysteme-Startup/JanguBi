@@ -22,7 +22,6 @@ from apps.messaging.models import (
     MessageBlock,
     MessageReaction,
     Notification,
-    PriestProfile,
 )
 from apps.messaging.services import (
     block_user,
@@ -40,12 +39,9 @@ from apps.messaging.services import (
     message_unreact,
     notification_mark_read,
     notification_send,
-    priest_profile_accept_cgu,
-    priest_profile_create,
-    priest_profile_update,
     unblock_user,
 )
-from apps.users.tests.factories import BaseUserFactory, SuperAdminFactory
+from apps.users.tests.factories import BaseUserFactory
 
 from .factories import (
     ConversationFactory,
@@ -53,7 +49,7 @@ from .factories import (
     MessageFactory,
     MessageReactionFactory,
     NotificationFactory,
-    PriestProfileFactory,
+    reachable_priest,
 )
 
 # ---------------------------------------------------------------------------
@@ -67,103 +63,16 @@ _CACHE = "apps.messaging.services.cache"
 
 
 # ---------------------------------------------------------------------------
-# PriestProfile services
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_priest_profile_create_success():
-    # Arrange
-    user = BaseUserFactory()
-    admin = SuperAdminFactory()
-
-    # Act
-    profile = priest_profile_create(user=user, accepted_by=admin)
-
-    # Assert
-    assert profile.id is not None
-    assert profile.user == user
-    assert PriestProfile.objects.filter(user=user).exists()
-
-
-@pytest.mark.django_db
-def test_priest_profile_create_raises_when_profile_already_exists():
-    # Arrange
-    existing = PriestProfileFactory()
-    admin = SuperAdminFactory()
-
-    # Act & Assert
-    with pytest.raises(ApplicationError, match="déjà un profil"):
-        priest_profile_create(user=existing.user, accepted_by=admin)
-
-
-@pytest.mark.django_db
-def test_priest_profile_accept_cgu_success():
-    # Arrange
-    profile = PriestProfileFactory(cgu_accepted_at=None)
-
-    # Act
-    updated = priest_profile_accept_cgu(priest_profile=profile)
-
-    # Assert
-    assert updated.cgu_accepted_at is not None
-    profile.refresh_from_db()
-    assert profile.cgu_accepted_at is not None
-
-
-@pytest.mark.django_db
-def test_priest_profile_accept_cgu_raises_when_already_accepted():
-    # Arrange
-    profile = PriestProfileFactory(cgu_accepted_at=timezone.now())
-
-    # Act & Assert
-    with pytest.raises(ApplicationError, match="CGU"):
-        priest_profile_accept_cgu(priest_profile=profile)
-
-
-@pytest.mark.django_db
-def test_priest_profile_update_all_fields():
-    # Arrange
-    profile = PriestProfileFactory(accepts_pastoral_chat=False, bio="", ordination_year=2000)
-
-    # Act
-    updated = priest_profile_update(
-        priest_profile=profile,
-        accepts_pastoral_chat=True,
-        bio="Updated bio",
-        ordination_year=1999,
-    )
-
-    # Assert
-    assert updated.accepts_pastoral_chat is True
-    assert updated.bio == "Updated bio"
-    assert updated.ordination_year == 1999
-
-
-@pytest.mark.django_db
-def test_priest_profile_update_partial_leaves_other_fields_unchanged():
-    # Arrange
-    profile = PriestProfileFactory(accepts_pastoral_chat=False, bio="Original")
-
-    # Act — only bio updated
-    updated = priest_profile_update(priest_profile=profile, bio="New bio")
-
-    # Assert
-    assert updated.bio == "New bio"
-    assert updated.accepts_pastoral_chat is False
-
-
-# ---------------------------------------------------------------------------
 # Conversation services
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 def test_conversation_get_or_create_creates_new():
-    # Arrange — le destinataire doit être un prêtre éligible (PriestProfile acceptant).
+    # Arrange — le destinataire doit être un prêtre éligible (capacité messagerie.recevoir_fideles, disponibilité ouverte).
     fidele = BaseUserFactory()
     priest = BaseUserFactory()
-    PriestProfileFactory(user=priest, accepts_pastoral_chat=True)
+    reachable_priest(priest)
 
     # Act
     conversation, created = conversation_get_or_create(fidele=fidele, priest=priest)
@@ -182,7 +91,7 @@ def test_conversation_get_or_create_returns_existing():
     existing = ConversationFactory()
     a = existing.participant_a
     b = existing.participant_b
-    PriestProfileFactory(user=b, accepts_pastoral_chat=True)
+    reachable_priest(b)
 
     # Act
     conversation, created = conversation_get_or_create(fidele=a, priest=b)
@@ -194,23 +103,26 @@ def test_conversation_get_or_create_returns_existing():
 
 @pytest.mark.django_db
 def test_conversation_get_or_create_rejected_for_non_clergy_recipient():
-    # Un fidèle ne peut pas ouvrir une conversation avec un autre fidèle (pas de
-    # PriestProfile) — garde pastorale (permissions-matrix.md §Messagerie).
+    # Un fidèle ne peut pas ouvrir une conversation avec un autre fidèle : seul un
+    # titulaire de messagerie.recevoir_fideles est joignable (EF-PRE-01).
     fidele = BaseUserFactory()
-    other = BaseUserFactory()  # aucun PriestProfile
+    other = BaseUserFactory()  # aucune nomination
 
-    with pytest.raises(ApplicationError, match="prêtre disponible"):
+    with pytest.raises(ApplicationError, match="pas joignable"):
         conversation_get_or_create(fidele=fidele, priest=other)
 
 
 @pytest.mark.django_db
 def test_conversation_get_or_create_rejected_when_priest_not_accepting():
-    # Un prêtre dont le profil n'accepte PAS le chat pastoral n'est pas joignable.
+    # Un prêtre joignable qui ne prend pas de nouveaux échanges (EF-PRE-07).
+    from apps.messaging.models import MessagingAvailability
+
     fidele = BaseUserFactory()
     priest = BaseUserFactory()
-    PriestProfileFactory(user=priest, accepts_pastoral_chat=False)
+    reachable_priest(priest, accepts=False)
+    assert not MessagingAvailability.objects.get(user=priest).accepts_new_conversations
 
-    with pytest.raises(ApplicationError, match="prêtre disponible"):
+    with pytest.raises(ApplicationError, match="nouveaux échanges"):
         conversation_get_or_create(fidele=fidele, priest=priest)
 
 

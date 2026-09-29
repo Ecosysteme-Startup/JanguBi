@@ -1,82 +1,92 @@
-from django.db.models import BooleanField, Count, Exists, OuterRef, QuerySet, Value
+import datetime
+from typing import Any
+
+from django.db.models import Count, Exists, OuterRef, Q, QuerySet, Subquery, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from apps.agenda.models import Event, EventRegistration
+from apps.core.exceptions import NotFoundError
+from apps.hierarchy import authz
+from apps.hierarchy.models import Node
 
-def _annotate_registration_count(qs: QuerySet) -> QuerySet:
-    """Annote le nombre d'inscrits en UNE seule requête agrégée.
-
-    Sans cette annotation, le serializer appelait ``obj.registrations.count()``
-    pour CHAQUE événement : un N+1 sur un feed paginé (une page de 20 événements
-    = 20 COUNT supplémentaires). ``distinct=True`` immunise le compte contre une
-    éventuelle multiplication de lignes si un filtre venait à joindre une autre
-    relation multivaluée.
-    """
-    return qs.annotate(registration_count=Count("registrations", distinct=True))
+_RELATED = ("scope_node", "scope_place", "organizer", "organizer__profile")
 
 
-def _annotate_is_registered(qs: QuerySet, user) -> QuerySet:
-    """Annote chaque événement avec `is_registered` pour l'utilisateur donné.
-
-    Évite le N+1 (un seul EXISTS corrélé). Si l'utilisateur est anonyme/absent,
-    annote False pour que le serializer dispose toujours du champ.
-    """
-    from apps.agenda.models import EventRegistration
-
-    if user is not None and getattr(user, "is_authenticated", False):
-        return qs.annotate(
-            is_registered=Exists(
-                EventRegistration.objects.filter(event=OuterRef("pk"), user=user)
-            )
+def _annotate(qs: QuerySet[Event], *, viewer: Any = None) -> QuerySet[Event]:
+    qs = qs.annotate(
+        registrations_count=Count("registrations", distinct=True),
+        seats_taken=Coalesce(Sum("registrations__seats"), 0),
+    )
+    if viewer is not None and getattr(viewer, "is_authenticated", False):
+        mine = EventRegistration.objects.filter(event=OuterRef("pk"), user=viewer)
+        qs = qs.annotate(
+            is_registered=Exists(mine),
+            my_seats=Subquery(mine.values("seats")[:1]),
+            my_note=Subquery(mine.values("note")[:1]),
         )
-    return qs.annotate(is_registered=Value(False, output_field=BooleanField()))
+    return qs
 
 
-def event_list(*, scope_type: str | None = None, event_type: str | None = None, upcoming_only: bool = True) -> QuerySet:
-    from apps.agenda.models import Event
-
-    # Les événements annulés sortent des feeds (les inscrits ont été prévenus par
-    # email) ; ils restent lisibles en détail pour ne pas casser un lien profond.
-    qs = Event.objects.select_related("organizer").filter(cancelled_at__isnull=True)
-    if upcoming_only:
-        qs = qs.filter(start_at__gte=timezone.now())
-    if scope_type:
-        qs = qs.filter(scope_type=scope_type)
+def event_list_public(
+    *,
+    node: Node | None = None,
+    date_from: datetime.datetime | None = None,
+    date_to: datetime.datetime | None = None,
+    event_type: str | None = None,
+    viewer: Any = None,
+) -> QuerySet[Event]:
+    """Événements à venir, non annulés ; ``node`` = ce nœud et son sous-arbre."""
+    qs = Event.objects.filter(cancelled_at__isnull=True, end_at__gte=date_from or timezone.now()).select_related(*_RELATED)
+    if node is not None:
+        qs = qs.filter(scope_node__path__startswith=node.path)
+    if date_to is not None:
+        qs = qs.filter(start_at__lte=date_to)
     if event_type:
         qs = qs.filter(event_type=event_type)
-    return _annotate_registration_count(qs).order_by("start_at")
+    return _annotate(qs, viewer=viewer).order_by("start_at")
 
 
-def event_list_for_user(*, user, event_type: str | None = None, upcoming_only: bool = True) -> QuerySet:
-    """Feed agenda scopé aux appartenances de l'utilisateur (Chantier 3b) :
-    global ∪ église ∪ paroisse ∪ diocèse, via le helper générique du 3a."""
-    from apps.agenda.models import Event
-    from apps.users.scoping import get_scoped_queryset
-
-    qs = Event.objects.select_related("organizer").filter(cancelled_at__isnull=True)
-    if upcoming_only:
-        qs = qs.filter(start_at__gte=timezone.now())
-    if event_type:
-        qs = qs.filter(event_type=event_type)
-    qs = get_scoped_queryset(qs, user)
-    qs = _annotate_is_registered(qs, user)
-    qs = _annotate_registration_count(qs)
-    return qs.order_by("start_at")
-
-
-def event_get(*, event_id: int, user=None):
-    from apps.agenda.models import Event
-    from apps.core.exceptions import ApplicationError
-
-    qs = Event.objects.prefetch_related("registrations__user").select_related("organizer")
-    qs = _annotate_is_registered(qs, user)
-    qs = _annotate_registration_count(qs)
+def event_get_public(*, event_id: int, viewer: Any = None) -> Event:
     try:
-        return qs.get(pk=event_id)
-    except Event.DoesNotExist:
-        raise ApplicationError("Événement introuvable.")
+        return _annotate(Event.objects.select_related(*_RELATED), viewer=viewer).get(pk=event_id)
+    except Event.DoesNotExist as exc:
+        raise NotFoundError("Événement introuvable.", {"event_id": event_id}) from exc
 
 
-def event_registrations_list(*, event_id: int) -> QuerySet:
-    from apps.agenda.models import EventRegistration
+def event_list_for_staff(*, user: Any, filters: dict[str, Any] | None = None) -> QuerySet[Event]:
+    filters = filters or {}
+    scope = Q(scope_node__in=authz.noeuds_autorises(user, "evenements.gerer"))
+    if authz.peut(user, "plateforme.admin", None):
+        scope |= Q(scope_node__isnull=True)
+    qs = Event.objects.filter(scope).select_related(*_RELATED)
+    if node_id := filters.get("node"):
+        node = Node.objects.filter(pk=node_id).first()
+        if node is None:
+            raise NotFoundError("Nœud introuvable.", {"node_id": str(node_id)})
+        qs = qs.filter(scope_node__path__startswith=node.path)
+    date_from, date_to = filters.get("from"), filters.get("to")
+    if date_from is not None:
+        # Une période explicite remplace le filtre « à venir » : on peut consulter le passé.
+        qs = qs.filter(end_at__gte=_day_start(date_from))
+    elif not filters.get("include_past"):
+        qs = qs.filter(end_at__gte=timezone.now())
+    if date_to is not None:
+        qs = qs.filter(start_at__lt=_day_start(date_to + datetime.timedelta(days=1)))
+    return _annotate(qs, viewer=user).order_by("start_at", "pk")
 
-    return EventRegistration.objects.filter(event_id=event_id).select_related("user").order_by("registered_at")
+
+def _day_start(day: datetime.date) -> datetime.datetime:
+    """Minuit (heure locale) du jour donné : les bornes de période sont des jours civils."""
+    return timezone.make_aware(datetime.datetime.combine(day, datetime.time.min))
+
+
+def event_get_for_staff(*, user: Any, event_id: int) -> Event:
+    try:
+        return event_list_for_staff(user=user, filters={"include_past": True}).get(pk=event_id)
+    except Event.DoesNotExist as exc:
+        raise NotFoundError("Événement introuvable.", {"event_id": event_id}) from exc
+
+
+def event_registrations(*, event: Event) -> QuerySet[EventRegistration]:
+    return EventRegistration.objects.filter(event=event).select_related("user", "user__profile").order_by("registered_at")

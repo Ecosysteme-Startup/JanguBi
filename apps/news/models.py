@@ -28,26 +28,18 @@ class ArticleCategory(models.Model):
 
 
 class Article(BaseModel):
-    """
-    Article éditorial publié à un niveau de portée (global, diocèse, paroisse).
-
-    scope_parish_id et scope_diocese_id sont des IntegerField placeholder
-    en attendant que le module Organisation (Parish, Diocese) soit implémenté (V2).
-    """
+    """Article publié sur un nœud de l'arbre (et visible sur son sous-arbre), ou global
+    (``scope_node`` vide, réservé à la plateforme)."""
 
     class ContentType(models.TextChoices):
         ANNOUNCEMENT = "announcement", _("Annonce")
         ARTICLE = "article", _("Article")
         PASTORAL_LETTER = "pastoral_letter", _("Lettre Pastorale")
-
-    class ScopeType(models.TextChoices):
-        GLOBAL = "global", _("Global (toute l'Église du Sénégal)")
-        DIOCESE = "diocese", _("Diocèse")
-        PARISH = "parish", _("Paroisse")
-        CHURCH = "church", _("Église")
+        MEDITATION = "meditation", _("Méditation du jour")
 
     class Status(models.TextChoices):
         DRAFT = "draft", _("Brouillon")
+        SCHEDULED = "scheduled", _("Programmé")
         PUBLISHED = "published", _("Publié")
         UNPUBLISHED = "unpublished", _("Dépublié")
 
@@ -97,6 +89,12 @@ class Article(BaseModel):
         related_name="article_covers",
         verbose_name=_("Image de couverture"),
     )
+    # Texte alternatif de la bannière (RGAA / WCAG 1.1.1) : requis quand une bannière est
+    # présente, sauf si elle est déclarée décorative (alt vide).
+    cover_image_alt = models.CharField(
+        _("texte alternatif de la bannière"), max_length=250, blank=True, default="", db_default=""
+    )
+    cover_image_decorative = models.BooleanField(_("bannière décorative"), default=False, db_default=False)
 
     category = models.ForeignKey(
         ArticleCategory,
@@ -112,42 +110,31 @@ class Article(BaseModel):
         verbose_name=_("Auteur"),
     )
 
-    # --- Portée ---
-    scope_type = models.CharField(
-        max_length=20,
-        choices=ScopeType.choices,
-        default=ScopeType.GLOBAL,
-        db_index=True,
-        verbose_name=_("Portée"),
-    )
-    # FK territoriales réelles (Chantier 3a — ex-placeholders IntegerField).
-    scope_diocese = models.ForeignKey(
-        "org.Diocese",
+    # --- Portée : un nœud de l'arbre, ou rien (global Numerisen) ---
+    scope_node = models.ForeignKey(
+        "hierarchy.Node",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Diocèse de portée"),
+        on_delete=models.PROTECT,
+        related_name="articles",
+        verbose_name=_("Nœud de portée"),
     )
-    scope_parish = models.ForeignKey(
-        "org.Parish",
+    scope_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Paroisse de portée"),
+        on_delete=models.PROTECT,
+        related_name="articles",
+        verbose_name=_("Lieu de culte"),
     )
-    scope_church = models.ForeignKey(
-        "org.Church",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_articles",
-        db_index=True,
-        verbose_name=_("Église de portée"),
+    is_sunday_notice = models.BooleanField(
+        _("annonce du dimanche"), default=False, db_default=False
     )
+    sunday_date = models.DateField(_("dimanche concerné"), null=True, blank=True)
+    publish_at = models.DateTimeField(_("publication programmée"), null=True, blank=True)
+    # Option « notifier les fidèles » : lue au moment de la publication (immédiate ou
+    # programmée). Les préférences de chacun (sujet, canaux, plage de silence) s'appliquent.
+    notify_followers = models.BooleanField(_("notifier les fidèles"), default=True, db_default=True)
 
     # --- Statut & workflow ---
     status = models.CharField(
@@ -173,37 +160,33 @@ class Article(BaseModel):
 
     views_count = models.PositiveIntegerField(default=0, verbose_name=_("Nombre de vues"))
 
+    # Épinglage en tête des listes publiques jusqu'à une date de fin (lot V1-routes, G06).
+    pinned_until = models.DateTimeField(_("épinglé jusqu'au"), null=True, blank=True)
+    pinned_at = models.DateTimeField(_("épinglé le"), null=True, blank=True)
+
     class Meta:
         verbose_name = _("Article")
         verbose_name_plural = _("Articles")
         ordering = ["-published_at", "-created_at"]
-        constraints = [
-            # Slug unique par portée paroisse
-            models.UniqueConstraint(
-                fields=["slug", "scope_type", "scope_parish"],
-                name="unique_article_slug_parish",
-            ),
-        ]
+        constraints = [models.UniqueConstraint(fields=["slug"], name="unique_article_slug")]
         indexes = [
             models.Index(fields=["status", "-published_at"], name="article_status_pub_idx"),
-            models.Index(
-                fields=["scope_type", "scope_parish", "status"],
-                name="article_parish_idx",
-            ),
-            models.Index(
-                fields=["scope_type", "scope_diocese", "status"],
-                name="article_diocese_idx",
-            ),
-            models.Index(
-                fields=["scope_type", "scope_church", "status"],
-                name="article_church_idx",
-            ),
             models.Index(fields=["category", "status"], name="article_category_idx"),
+            models.Index(fields=["scope_node", "status", "-published_at"], name="article_node_pub_idx"),
+            models.Index(
+                fields=["sunday_date"], condition=models.Q(is_sunday_notice=True), name="article_sunday_idx"
+            ),
+            models.Index(
+                fields=["publish_at"], condition=models.Q(status="scheduled"), name="article_scheduled_idx"
+            ),
             models.Index(fields=["author", "-created_at"], name="article_author_idx"),
+            models.Index(
+                fields=["pinned_until"], condition=models.Q(pinned_until__isnull=False), name="article_pinned_idx"
+            ),
         ]
 
     def __str__(self) -> str:
-        return f"[{self.get_scope_type_display()}] {self.title} ({self.get_status_display()})"
+        return f"{self.title} ({self.get_status_display()})"
 
 
 class ArticleReaction(BaseModel):
@@ -273,3 +256,20 @@ class ArticleReaction(BaseModel):
 
     def __str__(self) -> str:
         return f"{self.user_id} → {self.get_reaction_type_display()} sur {self.article_id}"
+
+
+class ArticleRead(models.Model):
+    """Lecture d'un article par une personne — une seule par personne (EF-PAROI-05)."""
+
+    article = models.ForeignKey(Article, on_delete=models.CASCADE, related_name="reads")
+    user = models.ForeignKey(BaseUser, on_delete=models.CASCADE, related_name="article_reads")
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = _("Lecture d'un article")
+        verbose_name_plural = _("Lectures d'articles")
+        constraints = [models.UniqueConstraint(fields=["article", "user"], name="unique_article_read_per_user")]
+        indexes = [models.Index(fields=["user", "-read_at"], name="article_read_user_idx")]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} a lu {self.article_id}"

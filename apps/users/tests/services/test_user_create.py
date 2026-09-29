@@ -1,88 +1,29 @@
-"""
-Tests de base sur le modèle BaseUser et le manager.
-"""
+"""Manager du modèle BaseUser."""
 
-import uuid
+import pytest
 
-from django.test import TestCase
-
-from apps.users.enums import UserRole
 from apps.users.models import BaseUser
-from apps.users.tests.factories import AdminUserFactory, BaseUserFactory
+
+pytestmark = pytest.mark.django_db
 
 
-class BaseUserManagerTests(TestCase):
-
-    def test_user_with_no_password_is_unusable(self):
-        # Arrange / Act
-        user = BaseUser.objects.create_user(
-            email="nopassword@example.com",
-            phone_number="+221771000001",
-            role=UserRole.FIDELE,
-        )
-        # Assert
-        self.assertFalse(user.has_usable_password())
-
-    def test_email_normalized_to_lowercase(self):
-        user = BaseUser.objects.create_user(
-            email="TEST@EXAMPLE.COM",
-            phone_number="+221771000002",
-            role=UserRole.FIDELE,
-            password="StrongPassw0rd!",
-        )
-        self.assertEqual(user.email, "test@example.com")
-
-    def test_duplicate_email_raises(self):
-        BaseUser.objects.create_user(
-            email="dup@example.com",
-            phone_number="+221771000003",
-            role=UserRole.FIDELE,
-        )
-        with self.assertRaises(Exception):
-            BaseUser.objects.create_user(
-                email="DUP@example.com",
-                phone_number="+221771000004",
-                role=UserRole.FIDELE,
-            )
-
-    def test_superuser_has_correct_flags(self):
-        user = BaseUser.objects.create_superuser(
-            email="super@example.com",
-            password="SuperPassw0rd!",
-        )
-        self.assertTrue(user.is_active)
-        self.assertTrue(user.is_staff)
-        self.assertTrue(user.is_admin)
-        self.assertTrue(user.is_superuser)
-        self.assertTrue(user.is_verified)
-        self.assertEqual(user.role, UserRole.SUPER_ADMIN)
+def test_user_without_password_is_unusable():
+    assert not BaseUser.objects.create_user(email="nopassword@example.com").has_usable_password()
 
 
-class BaseUserFactoryTests(TestCase):
+def test_email_normalized_to_lowercase():
+    assert BaseUser.objects.create_user(email="TEST@EXAMPLE.COM").email == "test@example.com"
 
-    def test_factory_creates_active_verified_fidele(self):
-        user = BaseUserFactory()
-        self.assertTrue(user.is_active)
-        self.assertTrue(user.is_verified)
-        self.assertEqual(user.role, UserRole.FIDELE)
 
-    def test_admin_factory_has_correct_flags(self):
-        admin = AdminUserFactory()
-        self.assertTrue(admin.is_admin)
-        self.assertTrue(admin.is_staff)
-        self.assertEqual(admin.role, UserRole.SUPER_ADMIN)
+def test_duplicate_email_raises():
+    BaseUser.objects.create_user(email="dup@example.com")
+    with pytest.raises(Exception):
+        BaseUser.objects.create_user(email="DUP@example.com")
 
-    def test_emails_are_unique_per_factory_call(self):
-        u1 = BaseUserFactory()
-        u2 = BaseUserFactory()
-        self.assertNotEqual(u1.email, u2.email)
 
-    def test_jwt_key_is_uuid(self):
-        user = BaseUserFactory()
-        self.assertIsInstance(user.jwt_key, uuid.UUID)
+def test_superuser_is_only_a_django_admin_account():
+    from apps.hierarchy.authz import is_platform_admin
 
-    def test_rotate_jwt_key_changes_value(self):
-        user = BaseUserFactory()
-        old_key = user.jwt_key
-        user.rotate_jwt_key()
-        self.assertNotEqual(user.jwt_key, old_key)
+    user = BaseUser.objects.create_superuser(email="super@example.com", password="SuperPassw0rd!")
+    assert user.is_active and user.is_staff and user.is_superuser
+    assert not is_platform_admin(user)  # ADR-015 : seul le rôle Keycloak platform_admin compte

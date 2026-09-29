@@ -1,344 +1,231 @@
+"""Demandes d'actes de la V1 (SRS §3.6, §8.1 ; ADR-009).
+
+L'application suit la démarche jusqu'au retrait de l'original, signé et scellé : elle ne
+délivre jamais l'acte (RG-03). La demande va à la paroisse du sacrement (RG-02) ; la file
+appartient au nœud (RG-04) et se traite sous ``actes.traiter``.
+"""
+
+import datetime
 import logging
-from datetime import date
+import re
+import secrets
+from functools import partial
+from html import unescape
+from typing import Any
 
+from django.conf import settings
+from django.core import signing
 from django.db import transaction
+from django.db.models import Q
+from django.utils import timezone
+from django.utils.html import strip_tags
 
-from apps.core.exceptions import ApplicationError
+from apps.core.exceptions import ApplicationError, PermissionDeniedError
 from apps.documents.constants import allowed_reasons_for, is_reason_allowed
 from apps.documents.models import (
     DocumentRequest,
     DocumentRequestAttachment,
     DocumentRequestStatusLog,
+    DocumentSlaSetting,
+    DocumentTypeDelay,
     InternalNote,
 )
-from apps.users.enums import PastoralRole
-from apps.users.models import BaseUser
+from apps.hierarchy import authz
+from apps.hierarchy.audit import audit_log
+from apps.hierarchy.enums import NodeStatus
+from apps.hierarchy.models import Node, PlaceOfWorship
 
 logger = logging.getLogger(__name__)
+S = DocumentRequest.Status
 
-# Hiérarchie pastorale de signature (permissions-matrix.md — §Documents).
-# La validation (Niv.2) ET le dépôt du document final sont des actes de SIGNATURE
-# réservés au clergé prêtre et au-dessus. Un diacre ou un administrateur digital
-# non-clergé (pastoral_role absent, ex. un parish_admin laïc) NE PEUT PAS signer,
-# même s'il franchit le gate view-level IsAnyAdmin et l'autorité territoriale.
-_SIGNATORY_ROLES = {
-    PastoralRole.PRETRE,
-    PastoralRole.EVEQUE,
-    PastoralRole.ARCHEVEQUE,
+# Transitions du cycle (SRS §8.1) : (statut de départ, action) → (statut d'arrivée, acteur).
+TRANSITIONS: dict[str, tuple[set[str], str, str]] = {
+    "start_verification": ({S.SUBMITTED}, S.UNDER_VERIFICATION, "paroisse"),
+    "request_info": ({S.UNDER_VERIFICATION}, S.INFO_REQUESTED, "paroisse"),
+    "mark_ready": ({S.UNDER_VERIFICATION}, S.READY_FOR_PICKUP, "paroisse"),
+    "mark_collected": ({S.READY_FOR_PICKUP}, S.COLLECTED, "paroisse"),
+    "reject": ({S.UNDER_VERIFICATION}, S.REJECTED, "paroisse"),
+    "supplement": ({S.INFO_REQUESTED}, S.UNDER_VERIFICATION, "fidele"),
+    "cancel": ({S.SUBMITTED, S.INFO_REQUESTED}, S.CANCELLED, "fidele"),
 }
-
-# Niv.3 — autorité épiscopale. Documents diocésains réservés à l'évêque et au-dessus.
-_BISHOP_ROLES = {
-    PastoralRole.EVEQUE,
-    PastoralRole.ARCHEVEQUE,
-}
-
-# Types de documents diocésains / épiscopaux (Niv.3 — SRS « ordinations_cert »).
-# La confirmation est le sacrement conféré par l'évêque : son attestation relève de
-# l'autorité épiscopale. Les certificats d'ordination rejoindront ce set dès que le
-# type de document existera dans le modèle.
-_DIOCESAN_DOCUMENT_TYPES = {
-    DocumentRequest.DocumentType.CONFIRMATION,
-}
-
-_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    DocumentRequest.Status.SUBMITTED: {DocumentRequest.Status.UNDER_VERIFICATION},
-    DocumentRequest.Status.UNDER_VERIFICATION: {
-        DocumentRequest.Status.INFO_REQUESTED,
-        DocumentRequest.Status.VALIDATED,
-        DocumentRequest.Status.REJECTED,
-    },
-    DocumentRequest.Status.INFO_REQUESTED: {DocumentRequest.Status.UNDER_VERIFICATION},
-    DocumentRequest.Status.VALIDATED: {DocumentRequest.Status.DOCUMENT_DEPOSITED},
-}
+CLOSING_STATUSES = frozenset({S.COLLECTED, S.REJECTED, S.CANCELLED})
+DEFAULT_SLA = {"escalate_days": 7, "requester_reminder_days": 5, "pickup_reminder_days": 3}
 
 _REQUIRED_DETAILS: dict[str, list[str]] = {
-    DocumentRequest.DocumentType.RELIGIOUS_MARRIAGE: [
-        "spouse_full_name_groom",
-        "spouse_full_name_bride",
-    ],
+    DocumentRequest.DocumentType.RELIGIOUS_MARRIAGE: ["spouse_full_name_groom", "spouse_full_name_bride"],
     DocumentRequest.DocumentType.GODPARENT: ["celebration_type"],
 }
 
-
-# ---------------------------------------------------------------------------
-# Helpers internes
-# ---------------------------------------------------------------------------
-
-
-def _generate_reference() -> str:
-    import secrets
-
-    date_str = date.today().strftime("%Y%m%d")
-    suffix = secrets.token_hex(3).upper()
-    return f"DOC-{date_str}-{suffix}"
+ORIGINAL_NOTICE = (
+    "L'acte vous sera remis en original, signé par le curé (ou la personne qu'il mandate) et revêtu du "
+    "sceau de la paroisse. Aucun acte n'est délivré par voie numérique."
+)
 
 
-def _validate_free_text_precisions(
-    *, document_type: str, document_type_free: str, reason: str, reason_free: str
-) -> None:
-    """« Autre » n'est un choix valide qu'accompagné de sa précision libre.
+# --- Contrôles -------------------------------------------------------------------------
 
-    Sans cette garde, une demande « Autre document / Autre motif » arriverait à la
-    paroisse sans dire de quoi il s'agit — donc impossible à traiter.
-    """
+
+def _reference() -> str:
+    return f"DOC-{datetime.date.today():%Y%m%d}-{secrets.token_hex(3).upper()}"
+
+
+def _form_check(*, document_type: str, document_type_free: str, reason: str, reason_free: str, details: dict) -> None:
     if document_type == DocumentRequest.DocumentType.OTHER and not document_type_free.strip():
-        raise ApplicationError(
-            "Veuillez préciser le document demandé lorsque vous choisissez « Autre document »."
-        )
+        raise ApplicationError("Précisez le document demandé (« Autre document »).", code="document_type_free_required")
     if reason == DocumentRequest.RequestReason.OTHER and not reason_free.strip():
+        raise ApplicationError("Précisez le motif de la demande (« Autre »).", code="reason_free_required")
+    if not is_reason_allowed(document_type=document_type, reason=reason):
+        labels = dict(DocumentRequest.RequestReason.choices)
+        permitted = ", ".join(str(labels[v]) for v in allowed_reasons_for(document_type) if v in labels)
         raise ApplicationError(
-            "Veuillez préciser le motif de votre demande lorsque vous choisissez « Autre »."
+            f"Le motif « {labels.get(reason, reason)} » ne correspond pas au document demandé. Motifs possibles : {permitted}.",
+            code="reason_not_allowed",
         )
-
-
-def _validate_reason_matches_document_type(*, document_type: str, reason: str) -> None:
-    """Cohérence pastorale type ↔ motif (apps.documents.constants).
-
-    Contrôle SERVEUR : le filtrage du formulaire n'est qu'un confort d'usage et
-    reste contournable (appel direct à l'API).
-    """
-    if is_reason_allowed(document_type=document_type, reason=reason):
-        return
-
-    labels = dict(DocumentRequest.RequestReason.choices)
-    permitted = ", ".join(
-        str(labels[value]) for value in allowed_reasons_for(document_type) if value in labels
-    )
-    raise ApplicationError(
-        f"Le motif « {labels.get(reason, reason)} » ne correspond pas au document demandé. "
-        f"Motifs possibles : {permitted}."
-    )
-
-
-def _validate_document_details(document_type: str, details: dict) -> None:
-    required = _REQUIRED_DETAILS.get(document_type, [])
-    missing = [f for f in required if not details.get(f)]
+    missing = [f for f in _REQUIRED_DETAILS.get(document_type, []) if not details.get(f)]
     if missing:
         raise ApplicationError(
-            f"Champs obligatoires manquants pour {document_type} : {', '.join(missing)}"
+            "Informations manquantes pour ce document.", {"missing": missing}, code="details_missing"
         )
 
 
-def _check_status_transition(current: str, target: str) -> None:
-    allowed = _ALLOWED_TRANSITIONS.get(current, set())
-    if target not in allowed:
+def _parish_check(node: Node) -> None:
+    """RG-02 : la demande va à la paroisse du sacrement, un nœud qui tient les registres."""
+    if not node.type.holds_registers:
+        raise ApplicationError("Choisissez la paroisse où le sacrement a été célébré.", code="not_a_parish")
+    if node.status == NodeStatus.SUPPRIME:
+        raise ApplicationError("Cette paroisse n'existe plus.", code="parish_deleted")
+
+
+def processor_check(*, user: Any, request_obj: DocumentRequest) -> None:
+    if not authz.peut(user, "actes.traiter", request_obj.target_node):
+        raise PermissionDeniedError("Cette demande n'est pas dans votre file.", code="not_in_queue")
+
+
+def _transition(*, request_obj: DocumentRequest, action: str, actor: Any, comment: str = "") -> str:
+    sources, target, _who = TRANSITIONS[action]
+    if request_obj.status not in sources:
         raise ApplicationError(
-            f"Transition invalide : {current} → {target}. "
-            f"Transitions autorisées : {', '.join(allowed) or 'aucune'}"
+            f"Action « {action} » impossible au statut « {request_obj.get_status_display()} ».",
+            {"status": request_obj.status, "action": action},
+            code="invalid_transition",
         )
+    previous = request_obj.status
+    request_obj.status = target
+    if target in CLOSING_STATUSES:
+        request_obj.closed_at = timezone.now()
+    DocumentRequestStatusLog.objects.create(
+        request=request_obj, from_status=previous, to_status=target, changed_by=actor, comment=comment
+    )
+    audit_log(
+        actor=actor,
+        action=f"acte.{action}",
+        target=request_obj,
+        node=request_obj.target_node,
+        metadata={"from": previous, "to": target},
+    )
+    return previous
 
 
-def _check_signing_authority(*, agent: BaseUser, document_type: str) -> None:
-    """Garde pastorale des actes de signature (validate / deposit).
-
-    La signature d'une demande est un acte pastoral réservé au clergé : prêtre et
-    au-dessus pour les documents courants, évêque et au-dessus pour les documents
-    diocésains. Lève ``ApplicationError`` (→ HTTP 400) pour tout autre acteur, y
-    compris un diacre, un administrateur digital non-clergé ou un super-admin
-    (``pastoral_role`` absent).
-    """
-    role = getattr(agent, "pastoral_role", None)
-    if document_type in _DIOCESAN_DOCUMENT_TYPES:
-        if role not in _BISHOP_ROLES:
-            raise ApplicationError(
-                "Acte réservé à l'autorité épiscopale : ce document diocésain ne peut "
-                "être signé que par un évêque ou un archevêque."
-            )
-        return
-    if role not in _SIGNATORY_ROLES:
-        raise ApplicationError(
-            "Acte de signature réservé au clergé : seul un prêtre (ou un rang "
-            "supérieur) peut valider et déposer une demande de document."
-        )
+# --- Notifications bilatérales (EF-ACT-04) ------------------------------------------------
 
 
-def _log_status_change(
-    *,
-    request_obj: DocumentRequest,
-    from_status: str,
-    to_status: str,
-    changed_by: BaseUser | None,
-    comment: str = "",
-) -> DocumentRequestStatusLog:
-    return DocumentRequestStatusLog.objects.create(
-        request=request_obj,
-        from_status=from_status,
-        to_status=to_status,
-        changed_by=changed_by,
-        comment=comment,
+_REQUESTER_MESSAGES: dict[str, str] = {
+    S.SUBMITTED: "Votre demande {ref} a bien été transmise à {parish}.",
+    S.UNDER_VERIFICATION: "La paroisse {parish} examine votre demande {ref}.",
+    S.INFO_REQUESTED: "La paroisse {parish} a besoin d'un complément pour votre demande {ref}.",
+    S.READY_FOR_PICKUP: "Votre acte ({ref}) est prêt à retirer à {parish}.",
+    S.COLLECTED: "Votre demande {ref} est close : l'acte a été retiré.",
+    S.REJECTED: "Votre demande {ref} n'a pas pu aboutir.",
+    S.CANCELLED: "Votre demande {ref} est annulée.",
+}
+
+
+def _notify_requester(request_obj: DocumentRequest, extra: str = "", *, status: str | None = None) -> None:
+    """``status`` est figé au moment de la transition : la notification part après commit,
+    quand l'objet a pu avancer encore (plusieurs transitions dans une même transaction)."""
+    from apps.messaging.services import notification_send
+
+    status = status or request_obj.status
+    parish = request_obj.target_node.name
+    message = _REQUESTER_MESSAGES[status].format(ref=request_obj.reference, parish=parish)
+    notification_send(
+        user=request_obj.requester,
+        event_type="documents.status",
+        payload={"request_id": str(request_obj.pk), "reference": request_obj.reference, "status": status},
+    )
+    body = f"<p>Bonjour {request_obj.requester_first_names},</p><p>{message}</p>"
+    if extra:
+        body += f"<p>{extra}</p>"
+    if status == S.READY_FOR_PICKUP:
+        body += f"<p>{ORIGINAL_NOTICE}</p>"
+    # Vers l'adresse du COMPTE (vérifiée), jamais vers contact_email saisi librement :
+    # sinon n'importe qui ferait écrire à un tiers au sujet d'une démarche religieuse.
+    _email(to=request_obj.requester.email, subject=f"[Jàngu Bi] {message}", html=body)
+
+
+def _notify_parish(request_obj: DocumentRequest, event: str) -> None:
+    """L'équipe de la paroisse (titulaires d'actes.traiter sur le nœud même), en in-app."""
+    from apps.hierarchy.selectors_offices import capability_holders
+    from apps.messaging.services_notifications import people_notify
+
+    holders = capability_holders(node=request_obj.target_node, capability="actes.traiter", direct_only=True)
+    people_notify(
+        user_ids=list(holders.values_list("pk", flat=True)),
+        topic="annonces",
+        event_type=f"documents.{event}",
+        payload={"request_id": str(request_obj.pk), "reference": request_obj.reference},
     )
 
 
-def _send_email(*, to: str, subject: str, body_html: str) -> None:
+def html_to_text(html: str) -> str:
+    """Version texte d'un e-mail : paragraphes et sauts de ligne conservés, balises retirées
+    (la partie texte affichait le HTML brut : ``<p>Bonjour…</p>``)."""
+    text = re.sub(r"(?i)<br\s*/?>", "\n", html)
+    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
+    text = unescape(strip_tags(text))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _email(*, to: str, subject: str, html: str) -> None:
     from apps.emails.models import Email
     from apps.emails.tasks import email_send as email_send_task
 
-    email = Email.objects.create(
-        to=to,
-        subject=subject,
-        html=body_html,
-        plain_text=body_html,
-        status=Email.Status.SENDING,
-    )
-    transaction.on_commit(lambda: email_send_task.delay(email.id))
-
-
-def _notify_requester(*, request_obj: DocumentRequest, event: str, extra: str = "") -> None:
-    subjects = {
-        "submitted": f"[Jàngu Bi] Demande reçue — {request_obj.reference}",
-        "info_requested": f"[Jàngu Bi] Complément requis — {request_obj.reference}",
-        "validated": f"[Jàngu Bi] Demande validée — {request_obj.reference}",
-        "rejected": f"[Jàngu Bi] Demande rejetée — {request_obj.reference}",
-        "document_deposited": f"[Jàngu Bi] Document disponible — {request_obj.reference}",
-    }
-    bodies = {
-        "submitted": (
-            f"<p>Bonjour {request_obj.requester_first_names},</p>"
-            f"<p>Votre demande de <strong>{request_obj.get_document_type_display()}</strong> "
-            f"a été reçue avec la référence <strong>{request_obj.reference}</strong>.</p>"
-            f"<p>La paroisse vous contactera pour la suite.</p>"
-        ),
-        "info_requested": (
-            f"<p>Bonjour {request_obj.requester_first_names},</p>"
-            f"<p>La paroisse a besoin d'informations complémentaires pour votre demande "
-            f"<strong>{request_obj.reference}</strong>.</p><p>{extra}</p>"
-        ),
-        "validated": (
-            f"<p>Bonjour {request_obj.requester_first_names},</p>"
-            f"<p>Votre demande <strong>{request_obj.reference}</strong> a été validée. "
-            f"Le document est en cours de préparation.</p>"
-        ),
-        "rejected": (
-            f"<p>Bonjour {request_obj.requester_first_names},</p>"
-            f"<p>Votre demande <strong>{request_obj.reference}</strong> a été rejetée.</p>"
-            f"<p>Motif : {extra}</p>"
-        ),
-        "document_deposited": (
-            f"<p>Bonjour {request_obj.requester_first_names},</p>"
-            f"<p>Votre document pour la demande <strong>{request_obj.reference}</strong> "
-            f"est disponible dans votre espace personnel.</p>"
-        ),
-    }
-    _send_email(to=request_obj.contact_email, subject=subjects[event], body_html=bodies[event])
-
-
-def _notify_agents(*, request_obj: DocumentRequest, event: str) -> None:
-    subjects = {
-        "submitted": f"[Jàngu Bi] Nouvelle demande — {request_obj.reference}",
-        "supplement_received": f"[Jàngu Bi] Complément reçu — {request_obj.reference}",
-        "document_deposited": f"[Jàngu Bi] Dépôt confirmé — {request_obj.reference}",
-    }
-    bodies = {
-        "submitted": (
-            f"<p>Nouvelle demande de <strong>{request_obj.get_document_type_display()}</strong>.</p>"
-            f"<p>Référence : <strong>{request_obj.reference}</strong><br>"
-            f"Demandeur : {request_obj.requester_last_name} {request_obj.requester_first_names}<br>"
-            f"Paroisse : {request_obj.parish_name}</p>"
-        ),
-        "supplement_received": (
-            f"<p>Le demandeur a fourni un complément d'informations pour la demande "
-            f"<strong>{request_obj.reference}</strong>.</p>"
-        ),
-        "document_deposited": (
-            f"<p>Le document pour la demande <strong>{request_obj.reference}</strong> "
-            f"a été déposé avec succès.</p>"
-        ),
-    }
-    if event not in subjects:
+    if not to:
         return
-    from apps.documents.selectors import document_request_agent_recipients
-
-    for agent in document_request_agent_recipients(request_obj=request_obj):
-        _send_email(to=agent.email, subject=subjects[event], body_html=bodies[event])
-
-
-def _attach_file(
-    *,
-    request_obj: DocumentRequest,
-    file_id: int,
-    uploaded_by: BaseUser | None,
-    attachment_type: str,
-    label: str = "",
-) -> DocumentRequestAttachment:
-    from apps.files.models import File
-
-    try:
-        file_obj = File.objects.get(pk=file_id)
-    except File.DoesNotExist:
-        raise ApplicationError(f"Fichier {file_id} introuvable.")
-    if not file_obj.is_valid:
-        raise ApplicationError("Le fichier n'a pas encore été finalisé (upload incomplet).")
-
-    return DocumentRequestAttachment.objects.create(
-        request=request_obj,
-        file=file_obj,
-        uploaded_by=uploaded_by,
-        attachment_type=attachment_type,
-        label=label,
+    email = Email.objects.create(
+        to=to, subject=subject[:255], html=html, plain_text=html_to_text(html), status=Email.Status.SENDING
     )
+    transaction.on_commit(partial(email_send_task.delay, email.id))
 
 
-# ---------------------------------------------------------------------------
-# Services publics
-# ---------------------------------------------------------------------------
+# --- Fidèle -------------------------------------------------------------------------------
 
 
 @transaction.atomic
-def document_request_create(*, requester: BaseUser, data: dict) -> DocumentRequest:
+def document_request_create(*, requester: Any, target_node: Node, data: dict[str, Any]) -> DocumentRequest:
+    _parish_check(target_node)
     document_type = data["document_type"]
-    document_type_free = data.get("document_type_free", "") or ""
     reason = data["reason"]
-    reason_free = data.get("reason_free", "") or ""
-    document_details = data.get("document_details", {})
-
-    _validate_free_text_precisions(
+    type_free = (data.get("document_type_free") or "").strip()
+    reason_free = (data.get("reason_free") or "").strip()
+    details = data.get("document_details") or {}
+    _form_check(
         document_type=document_type,
-        document_type_free=document_type_free,
+        document_type_free=type_free,
         reason=reason,
         reason_free=reason_free,
+        details=details,
     )
-    _validate_reason_matches_document_type(document_type=document_type, reason=reason)
-    _validate_document_details(document_type, document_details)
-
-    attachment_file_id = data.get("attachment_file_id")
-
-    # Rattachement territorial. La paroisse du REGISTRE peut être N'IMPORTE QUELLE
-    # paroisse active (Chantier 4) : un fidèle demande un document À une paroisse sans
-    # y être membre ni admin → AUCUN contrôle d'autorité côté demandeur.
-    # B5c — parish_id est REQUIS (le front l'émet via le picker). A5 préservé : parish_id
-    # absent ou invalide → erreur (jamais de repli silencieux ni de demande orpheline).
-    parish_id = data.get("parish_id")
-    if not parish_id:
-        raise ApplicationError("La paroisse du registre est requise (parish_id).")
-
-    from apps.org.models import Parish
-
-    target_parish = Parish.objects.filter(id=parish_id).select_related("diocese").first()
-    if target_parish is None:
-        raise ApplicationError("Paroisse cible introuvable.")
-
-    # Nom de paroisse + diocèse DÉRIVÉS du FK (plus de texte libre en entrée). Les
-    # anciennes demandes orphelines (FK NULL) conservent leur parish_name/diocese stockés.
-    parish_name_value = target_parish.name
-    diocese_value = target_parish.diocese.name
+    if not data.get("consent_given"):
+        raise ApplicationError("Le consentement est nécessaire pour transmettre la demande.", code="consent_required")
 
     request_obj = DocumentRequest.objects.create(
-        reference=_generate_reference(),
+        reference=_reference(),
         requester=requester,
         document_type=document_type,
-        # Les précisions ne sont conservées que si « Autre » est bien le choix
-        # retenu : un texte laissé par un aller-retour du formulaire ne doit pas
-        # se retrouver stocké à côté d'un type/motif normalisé qui le contredit.
-        document_type_free=(
-            document_type_free.strip()
-            if document_type == DocumentRequest.DocumentType.OTHER
-            else ""
-        ),
+        document_type_free=type_free if document_type == DocumentRequest.DocumentType.OTHER else "",
         reason=reason,
-        reason_free=(
-            reason_free.strip() if reason == DocumentRequest.RequestReason.OTHER else ""
-        ),
+        reason_free=reason_free if reason == DocumentRequest.RequestReason.OTHER else "",
         requester_last_name=data["requester_last_name"],
         requester_first_names=data["requester_first_names"],
         date_of_birth=data["date_of_birth"],
@@ -349,333 +236,491 @@ def document_request_create(*, requester: BaseUser, data: dict) -> DocumentReque
         registered_first_names=data.get("registered_first_names", ""),
         father_last_name=data["father_last_name"],
         mother_last_name=data["mother_last_name"],
-        parish_name=parish_name_value,
-        diocese=diocese_value,
-        target_parish=target_parish,
+        target_node=target_node,
         sacrament_approximate_date=data["sacrament_approximate_date"],
         sacrament_location=data["sacrament_location"],
         additional_info=data.get("additional_info", ""),
-        document_details=document_details,
-        consent_given=data["consent_given"],
-        status=DocumentRequest.Status.SUBMITTED,
+        document_details=details,
+        consent_given=True,
+        pickup_mode=data.get("pickup_mode") or DocumentRequest.PickupMode.SECRETARIAT,
+        status=S.SUBMITTED,
     )
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status="",
-        to_status=DocumentRequest.Status.SUBMITTED,
-        changed_by=requester,
+    DocumentRequestStatusLog.objects.create(
+        request=request_obj, from_status="", to_status=S.SUBMITTED, changed_by=requester
     )
-
-    if attachment_file_id:
-        _attach_file(
-            request_obj=request_obj,
-            file_id=attachment_file_id,
-            uploaded_by=requester,
-            attachment_type=DocumentRequest.AttachmentType.USER_SUPPORTING,
-        )
-
-    transaction.on_commit(lambda: _notify_requester(request_obj=request_obj, event="submitted"))
-    transaction.on_commit(lambda: _notify_agents(request_obj=request_obj, event="submitted"))
-
+    audit_log(actor=requester, action="acte.depot", target=request_obj, node=target_node)
+    if file_id := data.get("attachment_file_id"):
+        _attach(request_obj=request_obj, file_id=file_id, uploaded_by=requester)
+    transaction.on_commit(partial(_notify_requester, request_obj, status=S.SUBMITTED))
+    transaction.on_commit(partial(_notify_parish, request_obj, "submitted"))
     return request_obj
+
+
+def _attach(*, request_obj: DocumentRequest, file_id: int, uploaded_by: Any) -> DocumentRequestAttachment:
+    from apps.files.models import File
+
+    file_obj = File.objects.filter(pk=file_id).first()
+    if file_obj is None:
+        raise ApplicationError("Fichier introuvable.", {"file_id": file_id}, code="file_not_found")
+    if file_obj.uploaded_by_id is None or file_obj.uploaded_by_id != uploaded_by.pk:
+        raise PermissionDeniedError("Ce fichier ne vous appartient pas.", code="file_forbidden")
+    if not file_obj.is_valid:
+        raise ApplicationError("Le fichier n'a pas fini d'être envoyé.", code="file_incomplete")
+    return DocumentRequestAttachment.objects.create(
+        request=request_obj,
+        file=file_obj,
+        uploaded_by=uploaded_by,
+        attachment_type=DocumentRequest.AttachmentType.USER_SUPPORTING,
+    )
+
+
+def _lock(request_obj: DocumentRequest) -> DocumentRequest:
+    """Relit la demande sous verrou : deux transitions concurrentes ne s'appliquent pas
+    toutes les deux à partir du même statut."""
+    return (
+        DocumentRequest.objects.select_for_update(of=("self",))
+        .select_related("target_node", "target_node__type", "requester")
+        .get(pk=request_obj.pk)
+    )
+
+
+def _requester_check(*, request_obj: DocumentRequest, user: Any) -> None:
+    if request_obj.requester_id != user.pk:
+        raise PermissionDeniedError("Ce n'est pas votre demande.", code="not_owner")
 
 
 @transaction.atomic
 def document_request_submit_supplement(
-    *, request_obj: DocumentRequest, requester: BaseUser, data: dict
-) -> DocumentRequest:
-    if request_obj.requester_id != requester.id:
-        raise ApplicationError("Vous ne pouvez modifier que vos propres demandes.")
-    _check_status_transition(request_obj.status, DocumentRequest.Status.UNDER_VERIFICATION)
-
-    if additional_info := data.get("additional_info"):
-        request_obj.additional_info = additional_info
-    if document_details := data.get("document_details"):
-        request_obj.document_details = {**request_obj.document_details, **document_details}
-
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.UNDER_VERIFICATION
-    request_obj.save(update_fields=["status", "additional_info", "document_details", "updated_at"])
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.UNDER_VERIFICATION,
-        changed_by=requester,
-        comment="Complément fourni par le demandeur.",
-    )
-
-    transaction.on_commit(
-        lambda: _notify_agents(request_obj=request_obj, event="supplement_received")
-    )
-    return request_obj
-
-
-@transaction.atomic
-def document_request_start_verification(
-    *, request_obj: DocumentRequest, agent: BaseUser
-) -> DocumentRequest:
-    _check_status_transition(request_obj.status, DocumentRequest.Status.UNDER_VERIFICATION)
-
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.UNDER_VERIFICATION
-    request_obj.assigned_to = agent
-    request_obj.save(update_fields=["status", "assigned_to", "updated_at"])
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.UNDER_VERIFICATION,
-        changed_by=agent,
-    )
-    return request_obj
-
-
-@transaction.atomic
-def document_request_request_info(
-    *, request_obj: DocumentRequest, agent: BaseUser, comment: str
-) -> DocumentRequest:
-    _check_status_transition(request_obj.status, DocumentRequest.Status.INFO_REQUESTED)
-
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.INFO_REQUESTED
-    request_obj.save(update_fields=["status", "updated_at"])
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.INFO_REQUESTED,
-        changed_by=agent,
-        comment=comment,
-    )
-
-    transaction.on_commit(
-        lambda: _notify_requester(request_obj=request_obj, event="info_requested", extra=comment)
-    )
-    return request_obj
-
-
-@transaction.atomic
-def document_request_validate(
-    *, request_obj: DocumentRequest, agent: BaseUser
-) -> DocumentRequest:
-    _check_signing_authority(agent=agent, document_type=request_obj.document_type)
-    _check_status_transition(request_obj.status, DocumentRequest.Status.VALIDATED)
-
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.VALIDATED
-    request_obj.save(update_fields=["status", "updated_at"])
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.VALIDATED,
-        changed_by=agent,
-    )
-
-    transaction.on_commit(lambda: _notify_requester(request_obj=request_obj, event="validated"))
-    return request_obj
-
-
-@transaction.atomic
-def document_request_reject(
-    *, request_obj: DocumentRequest, agent: BaseUser, reason: str
-) -> DocumentRequest:
-    if not reason.strip():
-        raise ApplicationError("Le motif de rejet est obligatoire.")
-    _check_status_transition(request_obj.status, DocumentRequest.Status.REJECTED)
-
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.REJECTED
-    request_obj.rejection_reason = reason
-    request_obj.save(update_fields=["status", "rejection_reason", "updated_at"])
-
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.REJECTED,
-        changed_by=agent,
-        comment=reason,
-    )
-
-    transaction.on_commit(
-        lambda: _notify_requester(request_obj=request_obj, event="rejected", extra=reason)
-    )
-    return request_obj
-
-
-@transaction.atomic
-def document_request_deposit_document(
     *,
     request_obj: DocumentRequest,
-    agent: BaseUser,
-    file_id: int,
-    label: str = "Document officiel",
+    requester: Any,
+    additional_info: str = "",
+    document_details: dict | None = None,
+    attachment_file_id: int | None = None,
 ) -> DocumentRequest:
-    _check_signing_authority(agent=agent, document_type=request_obj.document_type)
-    _check_status_transition(request_obj.status, DocumentRequest.Status.DOCUMENT_DEPOSITED)
-
-    _attach_file(
-        request_obj=request_obj,
-        file_id=file_id,
-        uploaded_by=agent,
-        attachment_type=DocumentRequest.AttachmentType.PARISH_FINAL,
-        label=label,
+    _requester_check(request_obj=request_obj, user=requester)
+    request_obj = _lock(request_obj)
+    document_details = {k: v for k, v in (document_details or {}).items() if str(v).strip()}
+    if not (additional_info.strip() or document_details or attachment_file_id):
+        raise ApplicationError("Le complément est vide.", code="empty_supplement")
+    _transition(
+        request_obj=request_obj, action="supplement", actor=requester, comment="Complément fourni par le demandeur."
     )
+    if additional_info.strip():
+        stamp = timezone.localtime().strftime("%d/%m/%Y %H:%M")
+        request_obj.additional_info = (
+            f"{request_obj.additional_info}\n\n[Complément du {stamp}]\n{additional_info}".strip()
+        )
+    if document_details:
+        request_obj.document_details = {**request_obj.document_details, **document_details}
+    request_obj.save()
+    if attachment_file_id:
+        _attach(request_obj=request_obj, file_id=attachment_file_id, uploaded_by=requester)
+    transaction.on_commit(partial(_notify_parish, request_obj, "supplement"))
+    return request_obj
 
-    prev_status = request_obj.status
-    request_obj.status = DocumentRequest.Status.DOCUMENT_DEPOSITED
-    request_obj.save(update_fields=["status", "updated_at"])
 
-    _log_status_change(
-        request_obj=request_obj,
-        from_status=prev_status,
-        to_status=DocumentRequest.Status.DOCUMENT_DEPOSITED,
-        changed_by=agent,
-    )
+@transaction.atomic
+def document_request_cancel(*, request_obj: DocumentRequest, requester: Any) -> DocumentRequest:
+    """EF-ACT-07 : annulation par le fidèle tant que la demande est soumise ou en complément."""
+    _requester_check(request_obj=request_obj, user=requester)
+    request_obj = _lock(request_obj)
+    _transition(request_obj=request_obj, action="cancel", actor=requester)
+    request_obj.save(update_fields=["status", "closed_at", "updated_at"])
+    transaction.on_commit(partial(_notify_parish, request_obj, "cancelled"))
+    return request_obj
 
+
+# --- Paroisse ------------------------------------------------------------------------------
+
+
+@transaction.atomic
+def document_request_process(
+    *,
+    request_obj: DocumentRequest,
+    actor: Any,
+    action: str,
+    message: str = "",
+    pickup_place: PlaceOfWorship | None = None,
+    pickup_hours: str = "",
+) -> DocumentRequest:
+    """Transitions de la paroisse : start_verification, request_info, mark_ready, mark_collected, reject."""
+    if action not in TRANSITIONS or TRANSITIONS[action][2] != "paroisse":
+        raise ApplicationError("Action inconnue.", {"action": action}, code="unknown_action")
+    processor_check(user=actor, request_obj=request_obj)
+    request_obj = _lock(request_obj)
+    if action == "reject" and not message.strip():
+        raise ApplicationError("Le motif du rejet est obligatoire.", code="reason_required")
+    if action == "request_info" and not message.strip():
+        raise ApplicationError("Précisez le complément attendu.", code="message_required")
+    if action == "mark_ready":
+        if pickup_place is not None and pickup_place.node_id != request_obj.target_node_id:
+            raise ApplicationError("Le lieu de retrait doit être un lieu de la paroisse.", code="place_not_in_node")
+        request_obj.pickup_place = pickup_place
+        request_obj.pickup_hours = pickup_hours
+        request_obj.pickup_message = message
+    if action == "reject":
+        request_obj.rejection_reason = message
+    if action in {"start_verification", "request_info", "mark_ready"} and request_obj.assigned_to_id is None:
+        request_obj.assigned_to = actor
+    _transition(request_obj=request_obj, action=action, actor=actor, comment=message)
+    request_obj.last_reminded_at = None
+    request_obj.save()
     transaction.on_commit(
-        lambda: _notify_requester(request_obj=request_obj, event="document_deposited")
-    )
-    transaction.on_commit(
-        lambda: _notify_agents(request_obj=request_obj, event="document_deposited")
+        partial(_notify_requester, request_obj, message if action != "mark_ready" else "", status=request_obj.status)
     )
     return request_obj
 
 
 @transaction.atomic
-def document_request_add_internal_note(
-    *, request_obj: DocumentRequest, author: BaseUser, content: str
-) -> InternalNote:
-    return InternalNote.objects.create(
-        request=request_obj,
-        author=author,
-        content=content,
+def document_request_register_ref_set(
+    *, request_obj: DocumentRequest, actor: Any, data: dict[str, str]
+) -> DocumentRequest:
+    """EF-ACT-05 : références du registre, visibles de la paroisse seulement."""
+    processor_check(user=actor, request_obj=request_obj)
+    fields = ["register_volume", "register_page", "register_number", "register_marginal_notes"]
+    for field in fields:
+        if field in data:
+            setattr(request_obj, field, data[field])
+    # Sans updated_at : une saisie de registre n'est pas une étape de la démarche et ne doit
+    # pas repousser les relances (updated_at sert de référence aux délais).
+    request_obj.save(update_fields=fields)
+    audit_log(actor=actor, action="acte.registre", target=request_obj, node=request_obj.target_node)
+    return request_obj
+
+
+@transaction.atomic
+def document_request_add_internal_note(*, request_obj: DocumentRequest, author: Any, content: str) -> InternalNote:
+    processor_check(user=author, request_obj=request_obj)
+    if not content.strip():
+        raise ApplicationError("La note est vide.", code="empty_note")
+    return InternalNote.objects.create(request=request_obj, author=author, content=content)
+
+
+def _is_processor_of(*, user: Any, node: Node) -> bool:
+    """Titulaire (actif) d'``actes.traiter`` sur ``node``, héritage compris."""
+    from apps.hierarchy.selectors_offices import capability_holders
+
+    return (
+        bool(getattr(user, "is_active", False))
+        and capability_holders(node=node, capability="actes.traiter").filter(pk=user.pk).exists()
     )
 
 
-def _run_escalation_step(*, step: str, requests_qs, notify) -> None:
-    """Exécute une étape de relance, **chaque demande dans sa propre transaction**.
+@transaction.atomic
+def document_request_assign(*, request_obj: DocumentRequest, actor: Any, assignee: Any | None) -> DocumentRequest:
+    """Confie la demande à une personne de l'équipe (ou la remet « à assigner », ``assignee=None``).
 
-    Isolation volontaire : une seule `@transaction.atomic` enveloppant tout le run
-    annulerait les `Email` déjà créés par les étapes précédentes dès qu'une seule
-    demande échoue — le run n'enverrait alors AUCUNE relance. Ici, un échec isolé
-    est journalisé et le reste du run continue.
-    """
-    for req in requests_qs:
+    L'assigné doit lui-même traiter les actes de la paroisse du sacrement. L'assignation n'est pas
+    une étape de la démarche : elle ne touche ni au statut ni aux délais (``updated_at``)."""
+    processor_check(user=actor, request_obj=request_obj)
+    request_obj = _lock(request_obj)
+    if request_obj.status in CLOSING_STATUSES:
+        raise ApplicationError("Cette demande est close.", code="request_closed")
+    if assignee is not None and not _is_processor_of(user=assignee, node=request_obj.target_node):
+        raise ApplicationError(
+            "Cette personne ne traite pas les demandes d'actes de cette paroisse.", code="assignee_not_processor"
+        )
+    previous = request_obj.assigned_to_id
+    request_obj.assigned_to = assignee
+    request_obj.save(update_fields=["assigned_to"])
+    audit_log(
+        actor=actor,
+        action="acte.assignation",
+        target=request_obj,
+        node=request_obj.target_node,
+        metadata={
+            "from": str(previous) if previous else None,
+            "to": str(assignee.pk) if assignee is not None else None,
+        },
+    )
+    if assignee is not None and assignee.pk != actor.pk:
+        transaction.on_commit(partial(_notify_assignee, request_obj, assignee.pk))
+    return request_obj
+
+
+def _notify_assignee(request_obj: DocumentRequest, assignee_id: Any) -> None:
+    from apps.messaging.services_notifications import people_notify
+
+    people_notify(
+        user_ids=[assignee_id],
+        topic="annonces",
+        event_type="documents.assigned",
+        payload={"request_id": str(request_obj.pk), "reference": request_obj.reference},
+    )
+
+
+# --- Consultation des pièces du fidèle -----------------------------------------------------
+
+_ATTACHMENT_SALT = "documents.attachment.v1"
+
+
+def attachment_access_sign(*, attachment: DocumentRequestAttachment, user: Any) -> str:
+    """Jeton de consultation : signé pour UNE personne et UNE pièce, valable
+    ``DOCUMENTS_ATTACHMENT_URL_TTL`` secondes (vérifié à l'ouverture)."""
+    return signing.dumps({"a": str(attachment.pk), "u": str(user.pk)}, salt=_ATTACHMENT_SALT, compress=True)
+
+
+@transaction.atomic
+def document_attachment_open(*, request_id: Any, attachment_id: Any, token: str) -> DocumentRequestAttachment:
+    """Ouvre une pièce jointe à partir d'un jeton de consultation.
+
+    Le jeton ne suffit pas : la personne qu'il désigne doit TOUJOURS traiter les actes de la
+    paroisse du sacrement au moment de l'ouverture (une nomination levée entre-temps coupe
+    l'accès). Chaque consultation est journalisée, sans le contenu."""
+    from apps.users.models import BaseUser
+
+    forbidden = PermissionDeniedError("Lien de consultation invalide ou expiré.", code="attachment_link_invalid")
+    try:
+        payload = signing.loads(token, salt=_ATTACHMENT_SALT, max_age=settings.DOCUMENTS_ATTACHMENT_URL_TTL)
+    except signing.BadSignature as exc:  # SignatureExpired en hérite
+        raise forbidden from exc
+    if payload.get("a") != str(attachment_id):
+        raise forbidden
+    attachment = (
+        DocumentRequestAttachment.objects.select_related("file", "request", "request__target_node")
+        .filter(pk=attachment_id, request_id=request_id)
+        .first()
+    )
+    user = BaseUser.objects.filter(pk=payload.get("u")).first()
+    if attachment is None or user is None:
+        raise forbidden
+    if not _is_processor_of(user=user, node=attachment.request.target_node):
+        raise forbidden
+    audit_log(
+        actor=user,
+        action="acte.piece_consultee",
+        target=attachment.request,
+        node=attachment.request.target_node,
+        metadata={"piece": str(attachment.pk)},
+    )
+    return attachment
+
+
+# --- SLA, relances, purge (EF-ACT-08, -09) -------------------------------------------------
+
+
+class SlaResolver:
+    """Délais applicables à un nœud : réglage du plus proche ancêtre (ou du nœud), sinon défaut.
+
+    Charge tous les réglages une fois (ils sont peu nombreux) et résout en mémoire par préfixe
+    de chemin : pas de requête par demande dans une file ou un tableau de bord."""
+
+    def __init__(self) -> None:
+        rows = list(
+            DocumentSlaSetting.objects.select_related("node").only(
+                "node__path", "escalate_days", "requester_reminder_days", "pickup_reminder_days", "indicative_days"
+            )
+        )
+        # Délai annoncé au fidèle : celui que la paroisse règle elle-même (Paramètres,
+        # Node.acts_delay_days) l'emporte, au même nœud, sur le réglage SLA hérité.
+        indicative = {s.node.path: s.indicative_days for s in rows if s.indicative_days}
+        for path, days in Node.objects.filter(acts_delay_days__isnull=False).values_list("path", "acts_delay_days"):
+            if days:
+                indicative[path] = days
+        self._indicative = sorted(indicative.items(), key=lambda item: len(item[0]), reverse=True)
+        # Délai par type d'acte, réglé par la paroisse elle-même : prioritaire au nœud exact.
+        self._by_type: dict[tuple[str, str], int] = {
+            (path, document_type): days
+            for path, document_type, days in DocumentTypeDelay.objects.values_list(
+                "node__path", "document_type", "days"
+            )
+        }
+        self._by_path = sorted(
+            (
+                (
+                    s.node.path,
+                    {
+                        "escalate_days": s.escalate_days,
+                        "requester_reminder_days": s.requester_reminder_days,
+                        "pickup_reminder_days": s.pickup_reminder_days,
+                    },
+                )
+                for s in rows
+            ),
+            key=lambda item: len(item[0]),
+            reverse=True,
+        )
+
+    def for_path(self, path: str | None) -> dict[str, int]:
+        if path:
+            for prefix, values in self._by_path:
+                if path.startswith(prefix):
+                    return dict(values)
+        return dict(DEFAULT_SLA)
+
+    def indicative_days_for(self, path: str | None, document_type: str | None) -> int:
+        """Délai annoncé au fidèle pour une demande : délai du type d'acte réglé par la
+        paroisse, sinon délai global de la paroisse, sinon réglage SLA hérité, sinon le défaut."""
+        if path and document_type:
+            days = self._by_type.get((path, document_type))
+            if days:
+                return int(days)
+        return self.indicative_days_for_path(path)
+
+    def indicative_days_for_path(self, path: str | None) -> int:
+        """Délai global : réglage renseigné le plus proche (paroisse, puis SLA hérité), sinon le défaut."""
+        if path:
+            for prefix, days in self._indicative:
+                if path.startswith(prefix):
+                    return int(days)
+        return int(settings.DOCUMENTS_DEFAULT_INDICATIVE_DAYS)
+
+
+# Types d'actes dont la paroisse règle le délai (« Autre » garde le délai global).
+TYPE_DELAY_DOCUMENT_TYPES: tuple[str, ...] = tuple(
+    t for t in DocumentRequest.DocumentType.values if t != DocumentRequest.DocumentType.OTHER
+)
+TYPE_DELAY_MAX_DAYS = 90
+TYPE_DELAY_CAPABILITIES = ("horaires.gerer", "structure.gerer")
+
+
+def type_delays_check(*, user: Any, node: Node) -> None:
+    """Mêmes capacités que les autres paramètres du secrétariat (``nodes/{id}/settings/``)."""
+    if not any(authz.peut(user, capability, node) for capability in TYPE_DELAY_CAPABILITIES):
+        raise PermissionDeniedError("Vous ne pouvez pas régler les délais de ce nœud.", code="type_delays_forbidden")
+
+
+@transaction.atomic
+def document_type_delays_set(*, node: Node, delays: dict[str, int | None], actor: Any) -> dict[str, int]:
+    """Règle les délais par type d'acte d'un nœud. ``None`` retire le délai du type (retour au
+    délai global). Les types absents sont laissés tels quels. L'audit ne garde que les types."""
+    type_delays_check(user=actor, node=node)
+    unknown = set(delays) - set(TYPE_DELAY_DOCUMENT_TYPES)
+    if unknown:
+        raise ApplicationError(
+            "Type d'acte inconnu.", {"document_types": sorted(unknown)}, code="document_type_invalid"
+        )
+    for document_type, days in delays.items():
+        if days is not None and not 1 <= days <= TYPE_DELAY_MAX_DAYS:
+            raise ApplicationError(
+                f"Le délai doit être compris entre 1 et {TYPE_DELAY_MAX_DAYS} jours.",
+                {"document_type": document_type},
+                code="type_delay_out_of_range",
+            )
+    current = dict(DocumentTypeDelay.objects.filter(node=node).values_list("document_type", "days"))
+    changed = sorted(t for t, days in delays.items() if current.get(t) != days)
+    for document_type in changed:
+        days = delays[document_type]
+        if days is None:
+            DocumentTypeDelay.objects.filter(node=node, document_type=document_type).delete()
+        else:
+            DocumentTypeDelay.objects.update_or_create(node=node, document_type=document_type, defaults={"days": days})
+    if changed:
+        audit_log(
+            actor=actor, action="actes.delais_par_type", target=node, node=node, metadata={"document_types": changed}
+        )
+    return dict(DocumentTypeDelay.objects.filter(node=node).values_list("document_type", "days"))
+
+
+def sla_for_node(node: Node | None) -> dict[str, int]:
+    return SlaResolver().for_path(node.path if node is not None else None)
+
+
+SLA_KEY_BY_STATUS: dict[str, str] = {
+    S.SUBMITTED: "escalate_days",
+    S.UNDER_VERIFICATION: "escalate_days",
+    S.INFO_REQUESTED: "requester_reminder_days",
+    S.READY_FOR_PICKUP: "pickup_reminder_days",
+}
+
+
+def document_requests_remind(*, now: datetime.datetime | None = None) -> int:
+    """Relance quotidienne : la paroisse (soumise / en vérification), le fidèle (complément,
+    retrait). Au plus une relance par seuil écoulé (``last_reminded_at``)."""
+    now = now or timezone.now()
+    resolver = SlaResolver()
+    count = 0
+    open_requests = DocumentRequest.objects.filter(status__in=SLA_KEY_BY_STATUS).select_related(
+        "target_node", "requester"
+    )
+    for request_obj in open_requests.iterator():
+        days = resolver.for_path(request_obj.target_node.path if request_obj.target_node else None)[
+            SLA_KEY_BY_STATUS[request_obj.status]
+        ]
+        threshold = now - datetime.timedelta(days=days)
+        if request_obj.updated_at > threshold:
+            continue
         try:
             with transaction.atomic():
-                notify(req)
-        except Exception:  # noqa: BLE001 — un échec isolé ne doit pas casser le run
-            logger.exception(
-                "Escalade documents : échec de l'étape %s pour la demande %s", step, req.reference
-            )
+                # Réservation atomique : deux passages concurrents n'envoient pas deux relances.
+                claimed = (
+                    DocumentRequest.objects.filter(pk=request_obj.pk, status=request_obj.status)
+                    .filter(Q(last_reminded_at__isnull=True) | Q(last_reminded_at__lte=threshold))
+                    .update(last_reminded_at=now)
+                )
+                if not claimed:
+                    continue
+                if request_obj.status in (S.SUBMITTED, S.UNDER_VERIFICATION):
+                    _notify_parish(request_obj, "overdue")
+                else:
+                    _notify_requester(
+                        request_obj,
+                        "Rappel : votre demande attend une action de votre part.",
+                        status=request_obj.status,
+                    )
+            count += 1
+        except Exception:  # noqa: BLE001 — journalisé, repris au passage suivant
+            logger.exception("documents.remind_failed", extra={"request_id": str(request_obj.pk)})
+    return count
 
 
-def document_request_run_escalation(
-    *,
-    escalate_days: int,
-    deposit_reminder_days: int,
-    requester_reminder_days: int,
-) -> None:
-    """Send reminder emails for stale document requests. Called from the Celery Beat task.
-
-    Pas de `@transaction.atomic` global ici : voir `_run_escalation_step`.
-    """
-    from datetime import timedelta
-
-    from django.utils import timezone
-
-    from apps.documents.selectors import document_request_agent_recipients
-
-    now = timezone.now()
-
-    def _notify_stale_submitted(req: DocumentRequest) -> None:
-        _send_email(
-            to=req.contact_email,
-            subject=f"[Jàngu Bi] Votre demande {req.reference} est en attente",
-            body_html=(
-                f"<p>Bonjour {req.requester_first_names},</p>"
-                f"<p>Votre demande <strong>{req.reference}</strong> est en attente de traitement "
-                f"depuis plus de {escalate_days} jours.</p>"
-            ),
+@transaction.atomic
+def document_attachments_purge(*, now: datetime.datetime | None = None, retention_days: int = 90) -> int:
+    """RG-12 : pièces justificatives supprimées 90 jours après la clôture ; journalisé."""
+    now = now or timezone.now()
+    due = DocumentRequest.objects.select_for_update(skip_locked=True).filter(
+        closed_at__lte=now - datetime.timedelta(days=retention_days), attachments_purged_at__isnull=True
+    )
+    purged = 0
+    for request_obj in due:
+        attachments = list(request_obj.attachments.select_related("file"))
+        files = [a.file for a in attachments]
+        DocumentRequestAttachment.objects.filter(pk__in=[a.pk for a in attachments]).delete()
+        for file_obj in files:
+            if not DocumentRequestAttachment.objects.filter(file=file_obj).exists():
+                file_obj.delete()
+        request_obj.attachments_purged_at = now
+        request_obj.save(update_fields=["attachments_purged_at"])
+        audit_log(
+            actor=None,
+            action="acte.purge_pieces",
+            target=request_obj,
+            node=request_obj.target_node,
+            metadata={"pieces": len(attachments)},
         )
-        for agent in document_request_agent_recipients(request_obj=req):
-            _send_email(
-                to=agent.email,
-                subject=f"[Jàngu Bi] Demande en attente — {req.reference}",
-                body_html=(
-                    f"<p>La demande <strong>{req.reference}</strong> est soumise depuis plus de "
-                    f"{escalate_days} jours sans prise en charge.</p>"
-                ),
-            )
+        purged += 1
+    return purged
 
-    def _notify_stale_verification(req: DocumentRequest) -> None:
-        for agent in document_request_agent_recipients(request_obj=req):
-            _send_email(
-                to=agent.email,
-                subject=f"[Jàngu Bi] Vérification en attente — {req.reference}",
-                body_html=(
-                    f"<p>La demande <strong>{req.reference}</strong> est en vérification depuis "
-                    f"plus de {escalate_days} jours.</p>"
-                ),
-            )
 
-    def _notify_deposit_pending(req: DocumentRequest) -> None:
-        for agent in document_request_agent_recipients(request_obj=req):
-            _send_email(
-                to=agent.email,
-                subject=f"[Jàngu Bi] Rappel dépôt — {req.reference}",
-                body_html=(
-                    f"<p>La demande <strong>{req.reference}</strong> est validée depuis plus de "
-                    f"{deposit_reminder_days} jours. Merci de déposer le document final.</p>"
-                ),
-            )
+# --- Conversation avec le demandeur (lot V1-routes, G03) -----------------------------------
 
-    def _notify_supplement_pending(req: DocumentRequest) -> None:
-        _send_email(
-            to=req.contact_email,
-            subject=f"[Jàngu Bi] Rappel complément — {req.reference}",
-            body_html=(
-                f"<p>Bonjour {req.requester_first_names},</p>"
-                f"<p>Nous attendons toujours votre complément pour la demande "
-                f"<strong>{req.reference}</strong>. Merci de répondre dans les meilleurs délais.</p>"
-            ),
+
+@transaction.atomic
+def request_conversation_open(*, request: DocumentRequest, actor: Any) -> tuple[Any, bool]:
+    """« Écrire à … » depuis une demande : ouvre (ou retrouve) la conversation entre le prêtre qui
+    traite la demande et le demandeur. Réservé à qui peut traiter la demande ET est joignable par
+    les fidèles sur la paroisse du sacrement (la messagerie relie un fidèle et un prêtre, RG-09).
+    Aucune donnée de la demande n'est copiée dans la conversation ; l'ouverture est journalisée."""
+    from apps.messaging.services import conversation_open_by_priest
+
+    node = request.target_node
+    if not authz.peut(actor, "actes.traiter", node):
+        raise PermissionDeniedError("Vous ne traitez pas cette demande.", code="documents_forbidden")
+    if not authz.peut(actor, "messagerie.recevoir_fideles", node):
+        raise PermissionDeniedError(
+            "La messagerie relie un fidèle et un prêtre de la paroisse. Contactez le demandeur par téléphone "
+            "ou par e-mail.",
+            code="messaging_not_allowed",
         )
-
-    _run_escalation_step(
-        step="submitted",
-        requests_qs=DocumentRequest.objects.filter(
-            status=DocumentRequest.Status.SUBMITTED,
-            updated_at__lt=now - timedelta(days=escalate_days),
-        ).select_related("assigned_to", "requester"),
-        notify=_notify_stale_submitted,
+    if request.requester_id is None or not request.requester.is_active:
+        raise ApplicationError("Le demandeur n'a plus de compte actif.", code="requester_inactive")
+    conversation, created = conversation_open_by_priest(priest=actor, fidele=request.requester)
+    audit_log(
+        actor=actor,
+        action="actes.conversation_demandeur",
+        target=request,
+        node=node,
+        metadata={"conversation_id": str(conversation.pk), "created": created},
     )
-
-    _run_escalation_step(
-        step="under_verification",
-        requests_qs=DocumentRequest.objects.filter(
-            status=DocumentRequest.Status.UNDER_VERIFICATION,
-            updated_at__lt=now - timedelta(days=escalate_days),
-        ).select_related("assigned_to"),
-        notify=_notify_stale_verification,
-    )
-
-    _run_escalation_step(
-        step="deposit_reminder",
-        requests_qs=DocumentRequest.objects.filter(
-            status=DocumentRequest.Status.VALIDATED,
-            updated_at__lt=now - timedelta(days=deposit_reminder_days),
-        ).select_related("assigned_to"),
-        notify=_notify_deposit_pending,
-    )
-
-    _run_escalation_step(
-        step="requester_reminder",
-        requests_qs=DocumentRequest.objects.filter(
-            status=DocumentRequest.Status.INFO_REQUESTED,
-            updated_at__lt=now - timedelta(days=requester_reminder_days),
-        ).select_related("requester"),
-        notify=_notify_supplement_pending,
-    )
+    return conversation, created

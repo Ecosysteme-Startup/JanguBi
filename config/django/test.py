@@ -12,6 +12,12 @@ from .base import *  # noqa
 # Based on https://www.hacksoft.io/blog/optimize-django-build-to-run-faster-on-github-actions
 
 DEBUG = False
+
+# La suite de tests exerce TOUS les modules, y compris gelés (ADR-006 : le code
+# gelé reste maintenu). Le gel lui-même est testé dans apps/core/tests/test_modules.py.
+from apps.core.modules import FREEZABLE_MODULES  # noqa: E402
+
+JANGUBI_MODULES = list(FREEZABLE_MODULES)
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 CELERY_BROKER_BACKEND = "memory"
@@ -47,8 +53,18 @@ REST_FRAMEWORK = {
         "user": None,
         "rag": None,
         "login": None,
+        "register": None,
     },
 }
+
+# Formulaire de contact : quota coupé (réactivé par override_settings dans ses tests).
+CONTACT_THROTTLE_RATE = None
+DONATIONS_CHECKOUT_THROTTLE_RATE = None
+AUDIO_EVENTS_THROTTLE_RATE_ANON = None
+AUDIO_EVENTS_THROTTLE_RATE_USER = None
+AUDIO_DOWNLOAD_THROTTLE_RATE = None
+AUDIO_DOWNLOAD_VERIFY_THROTTLE_RATE = None
+DONATIONS_PROVIDER = "fake"
 
 # Mot de passe plus rapide à hasher en test
 PASSWORD_HASHERS = [
@@ -58,3 +74,22 @@ PASSWORD_HASHERS = [
 
 # Email → en mémoire, pas de vrai serveur
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# Fichiers : toujours un stockage disque temporaire, quel que soit le `.env` de la machine
+# (un `.env` local en `FILE_UPLOAD_STORAGE=s3` faisait joindre MinIO pendant les tests).
+import tempfile  # noqa: E402
+
+from apps.files.enums import FileUploadStorage  # noqa: E402
+
+FILE_UPLOAD_STORAGE = FileUploadStorage.LOCAL
+MEDIA_ROOT = tempfile.mkdtemp(prefix="jangubi-test-media-")
+MEDIA_URL = "/media/"
+STORAGES = {
+    **STORAGES,  # noqa: F405
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+}
+
+# Administration Keycloak : faux client en mémoire (jamais de Keycloak réel en CI).
+KEYCLOAK_ADMIN_BACKEND = "fake"
+KEYCLOAK_WEBHOOK_SECRET = "secret-webhook-de-test"
+KEYCLOAK_WEBHOOK_ENABLED = True

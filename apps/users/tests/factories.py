@@ -1,13 +1,10 @@
-"""
-Factories factory_boy pour les tests users.
-Alignées sur apps/users/enums.py (UserRole, Title) et models.py réels.
-"""
+"""Factories factory_boy pour les tests users."""
 
 import factory
 from factory.django import DjangoModelFactory
 
-from apps.users.enums import RoleScope, Title, UserRole
-from apps.users.models import BaseUser, Profile, RoleAssignment
+from apps.users.enums import Title
+from apps.users.models import BaseUser, Profile
 
 
 class BaseUserFactory(DjangoModelFactory):
@@ -19,11 +16,9 @@ class BaseUserFactory(DjangoModelFactory):
 
     email = factory.Sequence(lambda n: f"user{n}@example.com")
     phone_number = factory.Sequence(lambda n: f"+2217700{n:05d}")
-    role = UserRole.FIDELE
     is_active = True
     is_verified = True
     is_staff = False
-    is_admin = False
 
     @classmethod
     def _create(cls, model_class, *args, **kwargs):
@@ -33,24 +28,35 @@ class BaseUserFactory(DjangoModelFactory):
         return user
 
 
-class SuperAdminFactory(BaseUserFactory):
-    """Crée un compte super_admin (accès total)."""
+def platform_identity(user, *, roles=("fidele", "platform_admin")):
+    """Identité Keycloak de test : seul le rôle de realm ``platform_admin`` fait l'administrateur
+    plateforme (ADR-004). Portée par l'instance, comme le fait l'authentification réelle."""
+    from apps.authentication.keycloak import KeycloakIdentity
 
-    role = UserRole.SUPER_ADMIN
-    is_staff = True
-    is_admin = True
+    user.keycloak_identity = KeycloakIdentity(
+        sub=f"kc-{user.pk}",
+        email=user.email,
+        email_verified=True,
+        given_name="",
+        family_name="",
+        realm_roles=frozenset(roles),
+        amr=frozenset({"pwd", "otp"}),
+        acr="1",
+        claims={},
+    )
+    return user
+
+
+class SuperAdminFactory(BaseUserFactory):
+    """Administrateur plateforme : compte avec le rôle de realm Keycloak ``platform_admin``."""
+
+    @factory.post_generation
+    def keycloak_platform_admin(obj, create, extracted, **kwargs):  # noqa: N805
+        platform_identity(obj)
 
 
 # Alias large utilisé dans tous les tests existants
 AdminUserFactory = SuperAdminFactory
-
-
-class StaffUserFactory(BaseUserFactory):
-    """Crée un compte admin paroisse (is_staff=True, is_admin=True)."""
-
-    role = UserRole.PARISH_ADMIN
-    is_staff = True
-    is_admin = True
 
 
 class InactiveUserFactory(BaseUserFactory):
@@ -70,16 +76,3 @@ class ProfileFactory(DjangoModelFactory):
     first_name = factory.Sequence(lambda n: f"Prénom{n}")
     last_name = factory.Sequence(lambda n: f"Nom{n}")
     title = Title.MR
-
-
-class RoleAssignmentFactory(DjangoModelFactory):
-    """Affectation de rôle scopée — par défaut admin de paroisse."""
-
-    class Meta:
-        model = RoleAssignment
-
-    user = factory.SubFactory(BaseUserFactory)
-    role = UserRole.PARISH_ADMIN
-    scope = RoleScope.PARISH
-    is_active = True
-    is_principal = False

@@ -1,0 +1,14 @@
+{% autoescape off %}Nouvelle demande de présentation reçue par le formulaire « Pour les paroisses ».
+
+Nom : {{ request.full_name }}
+Fonction : {{ request.get_fonction_display }}
+Paroisse : {{ request.paroisse }}
+Diocèse : {% if request.diocese_node %}{{ request.diocese_node.name }}{% else %}Non précisé{% endif %}
+Téléphone : {{ request.telephone }}
+E-mail : {{ request.email }}
+Curé informé : {{ request.cure_informe|yesno:"Oui,Non" }}
+{% if request.message %}
+Message :
+{{ request.message }}
+{% endif %}
+Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}.{% endautoescape %}

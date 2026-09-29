@@ -3,12 +3,13 @@
 export
 
 .PHONY: up down restart build logs shell dbshell makemigrations migrate check test \
-       init-data create-admin init-all createsuperuser import-aelf clear-cache \
+       init-data init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
-       seed seed-senegal seed-demo seed-reset \
-	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf init-tv-categories \
-	ci-list ci act ci-docker ci-docker-act \
+       seed seed-hierarchy seed-demo seed-reset \
+       seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
+	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
+	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
 
 # ==============================================================================
@@ -92,9 +93,6 @@ flush-redis:
 flush-db:
 	docker compose exec django python manage.py flush --no-input
 
-init-tv-categories:
-	docker compose exec django python manage.py init_tv_categories
-
 # ==============================================================================
 # BIBLE & RAG UTILS
 # ==============================================================================
@@ -158,8 +156,8 @@ init-data:
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source bible_fr
 	@echo "3. Execution du script conditionnel pgvector..."
 	docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < init/postgresql/pgvector_conditional.sql
-	@echo "4. Creation et configuration du bucket MinIO..."
-	docker compose exec minio sh -c "mc alias set local $(AWS_S3_ENDPOINT_URL) $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD) && mc mb local/rosary-audio || true && mc anonymous set public local/rosary-audio"
+	@echo "4. Creation des buckets MinIO (audio du Rosaire public, fichiers prives)..."
+	docker compose exec minio sh -c "mc alias set local $(AWS_S3_ENDPOINT_URL) $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD) && mc mb local/rosary-audio || true && mc anonymous set public local/rosary-audio && mc mb --ignore-existing local/$(AWS_STORAGE_BUCKET_NAME)"
 	@echo "5. Importation des donnees du Rosaire..."
 	docker compose exec django python manage.py seed_rosary
 	@echo "6. Importation de la liturgie du jour (AELF)..."
@@ -168,15 +166,11 @@ init-data:
 	@echo "   Importation et Indexation terminees !"
 	@echo "==========================================================="
 
-create-admin:
-	@echo "==========================================================="
-	@echo "   Creation du Super Administrateur"
-	@echo "==========================================================="
-	docker compose exec django python manage.py init_admin
-
 # ── Seed (structure territoriale + donnees de demo) ──────────────────────────
-seed-senegal:
-	docker compose exec django python manage.py seed_senegal
+# Référentiel V1 (apps/hierarchy) : types, province, 7 diocèses, doyennés de Dakar,
+# paroisse pilote et ses horaires. Idempotent.
+seed-hierarchy:
+	docker compose exec django python manage.py seed_hierarchy_profile senegal
 
 seed-demo:
 	docker compose exec django python manage.py seed_demo
@@ -184,14 +178,60 @@ seed-demo:
 seed-reset:
 	docker compose exec django python manage.py seed_demo --reset
 
-# Une seule commande : seed_senegal (prerequis) PUIS seed_demo. Idempotent.
-seed: seed-senegal seed-demo
+# Référentiel puis démonstration (paroisse pilote). Idempotent.
+seed: seed-hierarchy seed-demo
 	@echo "==========================================================="
-	@echo "   Seed termine (seed_senegal + seed_demo) — multi-appartenance"
+	@echo "   Seed termine (référentiel + démonstration sur la paroisse pilote)"
 	@echo "==========================================================="
 
-init-all: init-data
+# ==============================================================================
+# DONNÉES DE TEST RÉALISTES (docs/DONNEES-DE-TEST.md) — jamais en production
+# ==============================================================================
+# Options supplémentaires : make seed-realiste SEED_ARGS="--graine 7 --medias-dossier /chemin/album --bible-json …"
+SEED_ARGS ?=
 
+# Local : échelle petite, médias légers, vérification des invariants (< 1 min).
+seed-realiste:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier $(SEED_ARGS)
+
+seed-realiste-reset:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --reset $(SEED_ARGS)
+
+# Tests de charge : échelle grande (COPY en masse), sans fichiers audio.
+seed-charge:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier $(SEED_ARGS)
+
+fetch-seed-assets:
+	docker compose exec django python manage.py fetch_seed_assets
+
+# Recette : sur le serveur, par le dépôt Infrastructure — make seed-realiste APP=jangubi ENV=staging
+# (voir docs/RECETTE.md).
+
+# Le référentiel (types, province, diocèses, doyennés, paroisse pilote) fait partie de
+# l'initialisation : sans lui, personne ne peut choisir sa paroisse. Idempotent.
+init-all: init-data seed-hierarchy
+
+
+# ==============================================================================
+# KEYCLOAK (ADR-004) — realm versionné dans infra/keycloak/realm-jangubi.json
+# ==============================================================================
+# Démarre Keycloak (http://localhost:8180, admin/admin en local) et importe le realm.
+kc-up:
+	@grep -Eq '^KEYCLOAK_ADMIN_CLIENT_SECRET=.{16,}' .env || { echo "✗ KEYCLOAK_ADMIN_CLIENT_SECRET absent ou trop court dans .env (openssl rand -hex 32)."; exit 1; }
+	docker compose --profile keycloak up -d keycloak
+
+kc-down:
+	docker compose --profile keycloak stop keycloak keycloak-db
+
+# Exporte le realm courant (après un réglage fait dans la console) pour le versionner.
+# Relire le diff : l'export contient des secrets de clients à remplacer par ${...}.
+kc-export:
+	docker compose --profile keycloak exec keycloak /opt/keycloak/bin/kc.sh export --realm jangubi --file /tmp/realm-jangubi.json --users skip
+	docker compose --profile keycloak cp keycloak:/tmp/realm-jangubi.json infra/keycloak/realm-jangubi.export.json
+
+# Test d'intégration contre le Keycloak local (hors CI).
+kc-test:
+	docker compose exec -e KEYCLOAK_E2E_URL=http://keycloak:8080 django pytest -m keycloak apps/authentication -q
 
 # ==============================================================================
 # CI LOCALE (act) — reproduit .github/workflows/django.yml en local
@@ -209,6 +249,11 @@ ci:
 
 # Alias pratique.
 act: ci
+
+# Installe le hook pre-push (make act avant tout push vers develop/stage/main).
+hooks:
+	git config core.hooksPath scripts/git-hooks
+	@echo "Hook pre-push installé (scripts/git-hooks/pre-push)."
 
 # Valide EN LOCAL le build de l'image de production (ce que construit le job
 # build-docker). NE POUSSE PAS — pour débugger le Dockerfile avant un tag/push.

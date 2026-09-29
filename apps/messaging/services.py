@@ -1,6 +1,5 @@
 from datetime import date, timedelta
 from typing import TYPE_CHECKING, Optional
-from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -17,14 +16,14 @@ from apps.messaging.models import (
     Message,
     MessageBlock,
     MessageReaction,
+    MessagingAvailability,
     MessagingCguAcceptance,
     Notification,
-    PriestProfile,
 )
 from apps.users.models import BaseUser
 
 if TYPE_CHECKING:  # annotations seules ; l'import runtime reste local (anti-circulaire)
-    from apps.messaging.models import ClergicalMessage, PushDevice
+    from apps.messaging.models import PushDevice
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -96,71 +95,108 @@ def _fanout_notification(user: BaseUser, event_type: str, payload: dict) -> None
 
 
 # ---------------------------------------------------------------------------
-# PriestProfile
-# ---------------------------------------------------------------------------
-
-
-@transaction.atomic
-def priest_profile_create(*, user: BaseUser, accepted_by: BaseUser) -> PriestProfile:
-    if hasattr(user, "priest_profile"):
-        raise ApplicationError("Cet utilisateur a déjà un profil prêtre.")
-    profile = PriestProfile.objects.create(user=user)
-    return profile
-
-
-@transaction.atomic
-def priest_profile_accept_cgu(*, priest_profile: PriestProfile) -> PriestProfile:
-    if priest_profile.cgu_accepted_at is not None:
-        raise ApplicationError("CGU déjà acceptées.")
-    priest_profile.cgu_accepted_at = timezone.now()
-    priest_profile.save(update_fields=["cgu_accepted_at", "updated_at"])
-    return priest_profile
-
-
-@transaction.atomic
-def priest_profile_update(
-    *,
-    priest_profile: PriestProfile,
-    accepts_pastoral_chat: Optional[bool] = None,
-    ordination_year: Optional[int] = None,
-    bio: Optional[str] = None,
-) -> PriestProfile:
-    if accepts_pastoral_chat is not None:
-        priest_profile.accepts_pastoral_chat = accepts_pastoral_chat
-    if ordination_year is not None:
-        priest_profile.ordination_year = ordination_year
-    if bio is not None:
-        priest_profile.bio = bio
-    priest_profile.save(
-        update_fields=["accepts_pastoral_chat", "ordination_year", "bio", "updated_at"]
-    )
-    return priest_profile
-
-
-# ---------------------------------------------------------------------------
 # Conversation
 # ---------------------------------------------------------------------------
+
+
+CONFESSION_NOTICE = (
+    "La confession ne peut pas se faire par message. Pour recevoir le sacrement de réconciliation, "
+    "prenez rendez-vous avec un prêtre : la confession se vit en présence du prêtre."
+)
+ADULT_AGE = 18
+MINOR_MESSAGE = (
+    "La messagerie avec un prêtre est réservée aux personnes majeures. Si tu as moins de 18 ans, "
+    "parle à un prêtre de ta paroisse avec tes parents ou ton catéchiste, ou prends rendez-vous à l'accueil."
+)
+
+
+def age_on(*, birth: date, on: date) -> int:
+    return on.year - birth.year - ((on.month, on.day) < (birth.month, birth.day))
+
+
+def adult_check(*, user: BaseUser) -> None:
+    """RG-13 : messagerie réservée aux majeurs en V1 (date de naissance du profil obligatoire)."""
+    from apps.core.exceptions import PermissionDeniedError
+
+    birth = getattr(getattr(user, "profile", None), "date_of_birth", None)
+    if birth is None:
+        raise PermissionDeniedError(
+            "Renseignez votre date de naissance dans votre profil pour écrire à un prêtre.", code="birth_date_required"
+        )
+    if age_on(birth=birth, on=timezone.localdate()) < ADULT_AGE:
+        raise PermissionDeniedError(MINOR_MESSAGE, code="minor")
+
+
+def reachable_check(*, priest: BaseUser) -> None:
+    """EF-PRE-01 : seul un titulaire de ``messagerie.recevoir_fideles`` qui accepte de nouveaux
+    échanges peut être contacté (plus de contact d'un utilisateur quelconque par UUID)."""
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(priest, "messagerie.recevoir_fideles"):
+        raise ApplicationError("Ce prêtre n'est pas joignable par la messagerie.", code="not_reachable")
+    availability = MessagingAvailability.objects.filter(user=priest).first()
+    if availability is not None and not availability.accepts_new_conversations:
+        raise ApplicationError("Ce prêtre ne prend pas de nouveaux échanges pour le moment.", code="not_accepting")
 
 
 @transaction.atomic
 def conversation_get_or_create(
     *, fidele: BaseUser, priest: BaseUser
 ) -> tuple[Conversation, bool]:
-    # Garde pastorale : une conversation 1-à-1 ne peut être ouverte qu'avec un membre
-    # du clergé ÉLIGIBLE — un prêtre disposant d'un PriestProfile qui accepte
-    # l'accompagnement pastoral (accepts_pastoral_chat). Bloque les échanges
-    # fidèle↔fidèle et le contact d'un utilisateur non pastoral par UUID.
-    if not PriestProfile.objects.filter(user=priest, accepts_pastoral_chat=True).exists():
-        raise ApplicationError(
-            "Vous ne pouvez démarrer une conversation qu'avec un prêtre disponible "
-            "pour l'accompagnement pastoral."
-        )
+    existing = Conversation.objects.filter(
+        participant_a=min(fidele, priest, key=lambda u: str(u.id)),
+        participant_b=max(fidele, priest, key=lambda u: str(u.id)),
+    ).first()
+    if existing is not None:
+        return existing, False
+    if fidele.pk == priest.pk:
+        raise ApplicationError("Conversation impossible avec soi-même.", code="self_conversation")
+    reachable_check(priest=priest)
+    adult_check(user=fidele)
+    _check_not_blocked(fidele, priest)
     participant_a, participant_b = _normalize_participants(fidele, priest)
     conversation, created = Conversation.objects.get_or_create(
         participant_a=participant_a,
         participant_b=participant_b,
     )
     return conversation, created
+
+
+@transaction.atomic
+def conversation_open_by_priest(*, priest: BaseUser, fidele: BaseUser) -> tuple[Conversation, bool]:
+    """Le prêtre (titulaire de ``messagerie.recevoir_fideles``) écrit le premier à un fidèle,
+    par exemple depuis une demande d'acte (lot V1-routes, G03). Sa propre disponibilité ne
+    l'empêche pas d'écrire ; le fidèle doit être majeur (RG-13) et aucun blocage ne doit exister."""
+    from apps.hierarchy import authz
+
+    if fidele.pk == priest.pk:
+        raise ApplicationError("Conversation impossible avec soi-même.", code="self_conversation")
+    if not authz.a_la_capacite(priest, "messagerie.recevoir_fideles"):
+        raise ApplicationError("Vous n'êtes pas joignable par la messagerie.", code="not_reachable")
+    participant_a, participant_b = _normalize_participants(fidele, priest)
+    existing = Conversation.objects.filter(participant_a=participant_a, participant_b=participant_b).first()
+    if existing is not None:
+        return existing, False
+    adult_check(user=fidele)
+    _check_not_blocked(priest, fidele)
+    return Conversation.objects.get_or_create(participant_a=participant_a, participant_b=participant_b)
+
+
+@transaction.atomic
+def availability_update(*, user: BaseUser, data: dict) -> MessagingAvailability:
+    """EF-PRE-07 : disponibilités d'un prêtre joignable."""
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(user, "messagerie.recevoir_fideles"):
+        from apps.core.exceptions import PermissionDeniedError
+
+        raise PermissionDeniedError("Réservé aux prêtres joignables.", code="not_reachable")
+    availability, _ = MessagingAvailability.objects.select_for_update().get_or_create(user=user)
+    fields = [f for f in ("accepts_new_conversations", "absent_until", "reply_windows", "note") if f in data]
+    for field in fields:
+        setattr(availability, field, data[field])
+    availability.save(update_fields=[*fields, "updated_at"])
+    return availability
 
 
 @transaction.atomic
@@ -234,6 +270,11 @@ def message_send(
     _check_not_blocked(sender, receiver)
     _check_cgu(conversation, sender)
     _check_rate_limit(sender, conversation)
+    # RG-13 : le côté fidèle doit être majeur, y compris dans une conversation ouverte avant la V1.
+    from apps.hierarchy import authz
+
+    if not authz.a_la_capacite(sender, "messagerie.recevoir_fideles"):
+        adult_check(user=sender)
 
     if client_message_id:
         existing = Message.objects.filter(client_message_id=client_message_id).first()
@@ -405,6 +446,8 @@ def conversation_export_request(
 def notification_send(
     *, user: BaseUser, event_type: str, payload: dict
 ) -> Notification:
+    from apps.messaging.services_push import push_for_notification
+
     notification = Notification.objects.create(
         user=user,
         event_type=event_type,
@@ -412,6 +455,10 @@ def notification_send(
     )
 
     transaction.on_commit(lambda: _fanout_notification(user, event_type, payload))
+    # Push hors de l'app (préférence « push » et plage de silence respectées).
+    push_for_notification(
+        user_id=user.pk, event_type=event_type, payload=payload, notification_id=notification.pk
+    )
 
     return notification
 
@@ -436,10 +483,11 @@ def push_device_register(*, user: BaseUser, platform: str, token: str) -> "PushD
         token=token,
         defaults={"user": user, "platform": platform},
     )
-    if not created and (device.user_id != user.id or device.platform != platform):
+    if not created and (device.user_id != user.id or device.platform != platform or device.disabled_at):
         device.user = user
         device.platform = platform
-        device.save(update_fields=["user", "platform", "updated_at"])
+        device.disabled_at = None  # un jeton ré-enregistré par l'app est de nouveau valable
+        device.save(update_fields=["user", "platform", "disabled_at", "updated_at"])
     return device
 
 
@@ -558,84 +606,3 @@ def _generate_export_pdf(data: dict) -> bytes:
     c.save()
     buffer.seek(0)
     return buffer.read()
-
-
-# ---------------------------------------------------------------------------
-# ClergicalMessage services
-# ---------------------------------------------------------------------------
-
-@transaction.atomic
-def clerical_message_send(
-    *,
-    sender: "BaseUser",
-    subject: str,
-    body: str,
-    recipient_scope: str,
-    scope_id: int | None = None,
-    individual_recipient_id: str | UUID | None = None,  # PK BaseUser = UUID (pas int)
-) -> "ClergicalMessage":
-    from apps.core.exceptions import ApplicationError
-    from apps.messaging.models import ClergicalMessage
-    from apps.messaging.selectors import clerical_message_territory_ids
-    from apps.users.enums import CLERGY_PASTORAL_ROLES, PastoralRole
-
-    if sender.pastoral_role not in CLERGY_PASTORAL_ROLES:
-        raise ApplicationError("Seul le clergé peut envoyer des messages inter-clergé.")
-
-    if recipient_scope == ClergicalMessage.RecipientScope.PROVINCE_BISHOPS:
-        if sender.pastoral_role not in (PastoralRole.EVEQUE, PastoralRole.ARCHEVEQUE):
-            raise ApplicationError("Seuls les évêques et archevêques peuvent diffuser aux évêques de province.")
-
-    # Cloisonnement territorial des diffusions.
-    #
-    # Seul le RÔLE était vérifié, jamais le territoire visé : `scope_id` venait
-    # du client sans contrôle. Un curé pouvait donc diffuser au clergé de
-    # n'importe quel diocèse en changeant un identifiant — il suffisait de
-    # l'incrémenter. On exige désormais que la portée demandée fasse partie des
-    # territoires auxquels l'expéditeur appartient réellement.
-    # Clés en `str` : `recipient_scope` arrive de la couche HTTP sous forme de
-    # chaîne (valeur du TextChoices), pas d'instance d'énumération.
-    _BROADCAST_TERRITORY_KEY: dict[str, tuple[str, str]] = {
-        ClergicalMessage.RecipientScope.PARISH_CLERGY.value: ("parish_ids", "cette paroisse"),
-        ClergicalMessage.RecipientScope.DIOCESE_CLERGY.value: ("diocese_ids", "ce diocèse"),
-        ClergicalMessage.RecipientScope.PROVINCE_BISHOPS.value: ("province_ids", "cette province"),
-    }
-
-    if recipient_scope in _BROADCAST_TERRITORY_KEY:
-        territory_key, label = _BROADCAST_TERRITORY_KEY[recipient_scope]
-
-        if scope_id is None:
-            raise ApplicationError("Une diffusion doit préciser le territoire visé.")
-
-        if scope_id not in clerical_message_territory_ids(sender)[territory_key]:
-            raise ApplicationError(f"Vous ne pouvez pas diffuser à {label}.")
-
-    elif recipient_scope == ClergicalMessage.RecipientScope.INDIVIDUAL and individual_recipient_id is None:
-        # Sans destinataire ni portée, le message n'atteindrait personne et
-        # partirait pourtant en 201 — exactement le mode d'échec silencieux que
-        # cette correction élimine.
-        raise ApplicationError("Un message individuel doit préciser son destinataire.")
-
-    msg = ClergicalMessage.objects.create(
-        sender=sender,
-        subject=subject,
-        body=body,
-        recipient_scope=recipient_scope,
-        scope_id=scope_id,
-        individual_recipient_id=individual_recipient_id,
-    )
-    return msg
-
-
-@transaction.atomic
-def clerical_message_mark_read(*, message: "ClergicalMessage", reader: "BaseUser") -> "ClergicalMessage":
-    from django.utils import timezone
-
-    if message.individual_recipient != reader:
-        from apps.core.exceptions import ApplicationError
-        raise ApplicationError("Vous ne pouvez marquer que vos propres messages comme lus.")
-
-    if not message.read_at:
-        message.read_at = timezone.now()
-        message.save(update_fields=["read_at", "updated_at"])
-    return message

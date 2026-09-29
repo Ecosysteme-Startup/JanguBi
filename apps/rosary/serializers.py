@@ -8,7 +8,7 @@ class PrayerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Prayer
-        fields = ("id", "type", "type_display", "language", "text")
+        fields = ("id", "type", "type_display", "language", "text", "source")
 
 
 class SearchPrayerSerializer(PrayerSerializer):
@@ -33,7 +33,7 @@ class MysterySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Mystery
-        fields = ("id", "order", "title", "meditation", "audio_file", "audio_duration", "prayers")
+        fields = ("id", "order", "title", "meditation", "meditation_source", "fruit", "audio_file", "audio_duration", "prayers")
 
     def get_prayers(self, obj):
         # Conditionally include prayers only if prefetch_prayers was used or flag requested

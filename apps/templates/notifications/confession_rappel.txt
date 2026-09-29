@@ -1,0 +1,7 @@
+Bonjour,
+
+Nous vous rappelons votre rendez-vous du {{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}, {{ place }}.
+
+En cas d'empêchement, pensez à l'annuler dans l'application au plus tard une heure avant.
+
+Jàngu Bi

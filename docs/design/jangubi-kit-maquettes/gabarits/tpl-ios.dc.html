@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Gabarit iOS</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FFFFFF;color:#0E1A2B;font-family:'Libre Franklin',sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+a{color:#0A6BA3;text-decoration:none}
+button,input,select,textarea{font-family:inherit}
+:focus-visible{outline:2px solid #0A6BA3;outline-offset:2px}
+.jb-press:active{opacity:.72}
+.jb-row:active{background:#EDF3F9}
+</style>
+</helmet>
+<!-- RACINE : 390 x 844 (ajuster height et $preview pour un écran qui défile) -->
+<div style="width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; position: relative; background: #FFFFFF; color: #0E1A2B; font-family: 'Libre Franklin', sans-serif; font-size: 16px; line-height: 24px;">
+
+  <!-- ============ BARRE DE STATUT iOS 54px (ne pas modifier, sauf couleur du texte sur fond b600 : color #FEFEFE) ============ -->
+  <div aria-hidden="true" style="height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 44px; box-sizing: border-box; font-family: -apple-system, 'Libre Franklin', sans-serif; font-size: 17px; font-weight: 600; color: #0E1A2B;">
+    <span style="font-variant-numeric: tabular-nums; letter-spacing: -0.01em;">9:41</span>
+    <span style="display: flex; align-items: center; gap: 6px;">
+      <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"></rect><rect x="5" y="5.5" width="3" height="6.5" rx="1"></rect><rect x="10" y="3" width="3" height="9" rx="1"></rect><rect x="15" y="0" width="3" height="12" rx="1"></rect></svg>
+      <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 2.4c2.3 0 4.4.9 6 2.4l1.1-1.2A10.2 10.2 0 0 0 8 .8 10.2 10.2 0 0 0 .9 3.6L2 4.8a8.6 8.6 0 0 1 6-2.4zm0 3.3c1.4 0 2.6.5 3.6 1.4l1.1-1.2A6.9 6.9 0 0 0 8 4.1c-1.8 0-3.5.7-4.7 1.8l1.1 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.3c-.6 0-1.2.2-1.6.6L8 11.2l1.6-1.6c-.4-.4-1-.6-1.6-.6z"></path></svg>
+      <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.8" stroke="currentColor" opacity="0.4"></rect><rect x="2" y="2" width="20" height="9" rx="2.5" fill="currentColor"></rect><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" fill="currentColor" opacity="0.45"></path></svg>
+    </span>
+  </div>
+
+  <!-- ============ EN-TÊTE A : ÉCRAN RACINE D'ONGLET (grand titre) ============ -->
+  <!-- Rangée d'actions 44px à droite, puis grand titre Source Serif 34/40 -->
+  <div style="height: 44px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 0 8px;">
+    <a href="APP-B03-Recherche.dc.html" class="jb-press" aria-label="Rechercher" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: #0E1A2B;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+    </a>
+    <a href="APP-B02-Notifications.dc.html" class="jb-press" aria-label="Notifications, 3 non lues" style="position: relative; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; color: #0E1A2B;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+      <span style="position: absolute; top: 9px; right: 10px; width: 9px; height: 9px; border-radius: 50%; background: #0A6BA3; border: 2px solid #FFFFFF;"></span>
+    </a>
+    <a href="APP-F01-Profil.dc.html" class="jb-press" aria-label="Mon profil" style="width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center;">
+      <span style="width: 32px; height: 32px; border-radius: 50%; background: #D9EBF7; color: #06466C; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;">MD</span>
+    </a>
+  </div>
+  <h1 style="margin: 0; padding: 2px 20px 12px; font-family: 'Source Serif 4', Georgia, serif; font-size: 34px; line-height: 40px; font-weight: 600; letter-spacing: -0.01em;">Titre</h1>
+
+  <!-- ============ EN-TÊTE B : SOUS-ÉCRAN (barre de navigation 44px, titre centré 17/600) ============
+  <div style="height: 44px; display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px; align-items: center; padding: 0 8px; border-bottom: 1px solid #DDE5EE;">
+    <a href="PARENT.dc.html" class="jb-press" style="display: inline-flex; align-items: center; gap: 2px; height: 44px; color: #0A6BA3; font-size: 17px;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>Retour
+    </a>
+    <span style="text-align: center; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Titre</span>
+    <span style="text-align: right; padding-right: 8px;"><a href="#" style="font-size: 17px; color: #0A6BA3;">Action</a></span>
+  </div>
+  (Le libellé de retour = titre de l'écran parent, court : « Demandes », « Paroisse ».)
+  -->
+
+  <!-- ============ CONTENU : padding 0 20px 108px (cf. tab bar) ============ -->
+  <main style="padding: 0 20px 108px;">
+    <!-- CONTENU ICI -->
+  </main>
+
+  <!-- ============ TAB BAR iOS 84px (50 + 34 zone sûre) — déplacer l'état actif ============
+       Actif : color #0A6BA3, icône avec fill="#D9EBF7", libellé 600, aria-current="page".
+       Inactif : color #586677, fill="none". Écrans sans tab bar (sous-écrans empilés) : supprimer ce bloc, garder l'indicateur d'accueil. -->
+  <nav aria-label="Navigation principale" style="position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: #FFFFFF; border-top: 1px solid #DDE5EE; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: 0 6px 34px; box-sizing: border-box;">
+    <a href="APP-B01-Accueil.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #0A6BA3; font-size: 11px; line-height: 13px; font-weight: 600;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="#D9EBF7" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" fill="#FFFFFF"></path></svg>Accueil
+    </a>
+    <a href="APP-B04-Parole.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #586677; font-size: 11px; line-height: 13px; font-weight: 500;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14"></path><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"></path></svg>Parole
+    </a>
+    <a href="APP-C01-Paroisse.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #586677; font-size: 11px; line-height: 13px; font-weight: 500;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 9h4"></path><path d="M12 7v5"></path><path d="M14 22v-4a2 2 0 0 0-4 0v4"></path><path d="M18 22V5.618a1 1 0 0 0-.553-.894l-4.553-2.277a2 2 0 0 0-1.788 0L6.553 4.724A1 1 0 0 0 6 5.618V22"></path><path d="m18 7 3.447 1.724a1 1 0 0 1 .553.894V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-10.382a1 1 0 0 1 .553-.894L6 7"></path></svg>Paroisse
+    </a>
+    <a href="APP-D01-Demandes.dc.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #586677; font-size: 11px; line-height: 13px; font-weight: 500;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M16 13H8"></path><path d="M16 17H8"></path><path d="M10 9H8"></path></svg>Demandes
+    </a>
+    <a href="APP-E01-Pretre.dc.html" style="position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #586677; font-size: 11px; line-height: 13px; font-weight: 500;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"></path></svg>Prêtre
+      <span style="position: absolute; top: 3px; left: 50%; margin-left: 6px; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #0A6BA3; color: #FFFFFF; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; border: 2px solid #FFFFFF;">1</span>
+    </a>
+  </nav>
+
+  <!-- ============ INDICATEUR D'ACCUEIL (toujours, par-dessus tout) ============ -->
+  <div aria-hidden="true" style="position: absolute; left: 50%; bottom: 8px; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #0E1A2B;"></div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
+<!--
+==================== BIBLIOTHÈQUE DE COMPOSANTS (copier-coller, ne pas inclure ce commentaire) ====================
+
+BOUTON PRIMAIRE (pleine largeur)
+<a href="CIBLE.dc.html" class="jb-press" style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 52px; border-radius: 14px; background: #0A6BA3; color: #FFFFFF; font-size: 16px; font-weight: 600;">Libellé</a>
+  (en <button> : <button type="button" style="... border: 0; width: 100%; cursor: pointer;">)
+BOUTON SECONDAIRE : background #EDF3F9; color #0E1A2B
+BOUTON OUTLINE : background #FFFFFF; border: 1px solid #DDE5EE; color #0E1A2B
+BOUTON GHOST : background transparent; color #0A6BA3
+BOUTON DESTRUCTIF : background #FBE8E5; color #A12A22 (ou texte seul #A12A22 dans une liste)
+BOUTON DÉSACTIVÉ : background #EDF3F9; color #8391A4
+BOUTON PETIT : height 40px; border-radius 12px; font-size 15px; padding 0 16px
+BARRE D'ACTION COLLANTE (sous-écrans sans tab bar) :
+<div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 20px 42px; background: #FFFFFF; border-top: 1px solid #DDE5EE;"> [bouton primaire] </div>
+
+CHAMP
+<div style="display: flex; flex-direction: column; gap: 6px;">
+  <label for="f-nom" style="font-size: 14px; line-height: 20px; font-weight: 500; color: #0E1A2B;">Nom <span style="color: #A12A22;">*</span></label>
+  <input id="f-nom" type="text" value="Diouf" style="height: 52px; box-sizing: border-box; padding: 0 14px; border-radius: 12px; border: 1px solid #8391A4; background: #F7FAFD; color: #0E1A2B; font-size: 16px;">
+  <span style="font-size: 13px; line-height: 18px; color: #586677;">Aide éventuelle</span>
+</div>
+  FOCUS : border: 2px solid #0A6BA3; background #FFFFFF; padding 0 13px
+  ERREUR : border: 2px solid #A12A22 ; message : <span style="display: flex; gap: 6px; align-items: center; font-size: 13px; color: #A12A22;">[circle-alert 16] Message</span>
+  VALIDE : icône check 20 #1F6B5C à droite dans le champ (conteneur relatif)
+SELECT : même champ, valeur + chevron-down 20 #586677 à droite (rendu en <a> ou <button> qui ouvre une bottom sheet)
+
+CHECKBOX (cochée) : <span style="width: 22px; height: 22px; border-radius: 6px; background: #0A6BA3; display: inline-flex; align-items: center; justify-content: center; color: #FFFFFF;">[check 16 stroke 2.5]</span>
+CHECKBOX (vide) : width/height 22, border-radius 6, border: 1.5px solid #8391A4, background #FFFFFF
+RADIO : 22 cercle, bordure 1.5 #8391A4 ; sélectionné : bordure 7px solid #0A6BA3 sur fond #FFFFFF
+SWITCH ON : <span role="switch" aria-checked="true" style="position: relative; display: inline-block; width: 51px; height: 31px; border-radius: 16px; background: #0A6BA3;"><span style="position: absolute; top: 2px; right: 2px; width: 27px; height: 27px; border-radius: 50%; background: #FEFEFE; box-shadow: 0 2px 4px rgba(14,26,43,0.18);"></span></span>
+SWITCH OFF : background #DDE5EE ; pouce à left: 2px
+
+SEGMENTED CONTROL
+<div role="tablist" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; border-radius: 12px; background: #EDF3F9;">
+  <a href="#" role="tab" aria-selected="true" style="height: 34px; display: flex; align-items: center; justify-content: center; border-radius: 9px; background: #FFFFFF; box-shadow: 0 1px 2px rgba(14,26,43,0.06); color: #0E1A2B; font-size: 14px; font-weight: 600;">Lectures</a>
+  <a href="#" role="tab" aria-selected="false" style="height: 34px; display: flex; align-items: center; justify-content: center; color: #3A4859; font-size: 14px; font-weight: 500;">Psaume</a>
+  ...
+</div>
+
+PILULES DE FILTRE (défilement horizontal, déborder à droite = normal)
+<div style="display: flex; gap: 8px; overflow: hidden; margin: 0 -20px; padding: 0 20px;">
+  <a href="#" style="flex: none; height: 36px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: #0E1A2B; color: #FFFFFF; font-size: 14px; font-weight: 600;">Toutes <span style="font-variant-numeric: tabular-nums; opacity: .8;">12</span></a>
+  <a href="#" style="flex: none; height: 36px; padding: 0 14px; display: inline-flex; align-items: center; border-radius: 999px; background: #FFFFFF; border: 1px solid #DDE5EE; color: #0E1A2B; font-size: 14px; font-weight: 500;">Liturgie</a>
+</div>
+
+BADGE DE STATUT (point + libellé)
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; background: #EEF6FC; color: #06466C; font-size: 12px; font-weight: 600;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #0A6BA3;"></span>En vérification</span>
+  Soumise : bg #EDF3F9, texte #3A4859, point #586677
+  En vérification : bg #EEF6FC, texte #06466C, point #0A6BA3
+  Complément demandé : bg #FBF1DF, texte #8A5A0B, point #B7801F
+  Prête à retirer : bg #E4F2EE, texte #1F6B5C, point #1F6B5C
+  Retirée : bg #EDF3F9, texte #586677 (sans point, icône check)
+  Rejetée : bg #FBE8E5, texte #A12A22, point #A12A22
+
+AVATAR : 40 cercle, background #D9EBF7, color #06466C, 15/600, initiales. Tailles 32 / 40 / 56 / 72.
+PASTILLE LITURGIQUE : <span style="display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px 0 8px; border-radius: 999px; background: #FFFFFF; border: 1px solid #DDE5EE; font-size: 13px; font-weight: 500; color: #0E1A2B;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2E6B3F;"></span>Vert</span>
+
+CARTE
+<div style="border-radius: 16px; border: 1px solid #DDE5EE; background: #FFFFFF; padding: 16px; box-shadow: 0 1px 2px rgba(14,26,43,0.06);"> ... </div>
+  Variante posée sur blanc sans ombre : background #F7FAFD, border 1px solid #DDE5EE.
+
+EN-TÊTE DE SECTION : <div style="display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 12px;"><h2 style="margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 22px; line-height: 28px; font-weight: 600;">Annonces</h2><a href="…" style="font-size: 15px; font-weight: 500;">Tout voir</a></div>
+
+LISTE GROUPÉE (style Réglages iOS)
+<div style="font-size: 13px; line-height: 18px; font-weight: 500; color: #586677; margin: 24px 4px 8px;">Mon compte</div>
+<div style="border-radius: 14px; background: #F7FAFD; border: 1px solid #DDE5EE; overflow: hidden;">
+  <a href="…" class="jb-row" style="display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 0 14px 0 16px; color: #0E1A2B;">
+    <span style="color: #3A4859; display: inline-flex;">[icône 22]</span>
+    <span style="flex: 1; min-width: 0; font-size: 16px;">Libellé</span>
+    <span style="font-size: 15px; color: #586677;">Valeur</span>
+    <span style="color: #8391A4; display: inline-flex;">[chevron-right 18]</span>
+  </a>
+  <div style="height: 1px; background: #DDE5EE; margin-left: 52px;"></div>
+  ...
+</div>
+
+BANDE DE DATES (7 jours)
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px;">
+  <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0 10px; border-radius: 14px; color: #3A4859;"><span style="font-size: 12px; line-height: 16px; font-weight: 500;">lun.</span><span style="font-size: 17px; line-height: 22px; font-weight: 600; color: #0E1A2B; font-variant-numeric: tabular-nums;">21</span><span style="width: 5px; height: 5px; border-radius: 50%; background: #3FA3DD;"></span></a>
+  SÉLECTIONNÉ : background #0A6BA3 ; tous les textes #FFFFFF ; point #FEFEFE
+  AUJOURD'HUI non sélectionné : numéro #0A6BA3
+</div>
+
+CARTE DE CRÉNEAU (horaire, événement)
+<a href="…" style="display: grid; grid-template-columns: 56px 1px minmax(0, 1fr); gap: 14px; align-items: stretch; padding: 14px 16px; border-radius: 16px; background: #F7FAFD; border: 1px solid #DDE5EE; color: #0E1A2B;">
+  <span style="display: flex; flex-direction: column;"><span style="font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;">18:30</span><span style="font-size: 13px; color: #586677;">45 min</span></span>
+  <span style="background: #B3D8F0;"></span>
+  <span style="display: flex; flex-direction: column; gap: 2px;"><span style="font-size: 16px; font-weight: 600;">Messe du soir</span><span style="font-size: 14px; color: #3A4859;">Église Saint-Dominique</span></span>
+</a>
+
+ALERTE / BANDEAU INFO
+<div role="note" style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: #EEF6FC; color: #052F49; font-size: 14px; line-height: 20px;">[info 20 #0A6BA3]<span>Texte</span></div>
+  attention : bg #FBF1DF, texte #8A5A0B ; erreur : bg #FBE8E5, texte #A12A22 ; succès : bg #E4F2EE, texte #1F6B5C
+
+NOTE DE CONFESSION (messagerie, toujours visible)
+<div role="note" style="display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: #EEF6FC; border: 1px solid #B3D8F0; color: #052F49; font-size: 14px; line-height: 20px;">[info 18 #0A6BA3]<span>La confession ne se fait pas par message. <a href="APP-E07-Confession-Creneau.dc.html" style="font-weight: 600; color: #0A6BA3;">Prendre rendez-vous</a> pour une confession en présentiel.</span></div>
+
+PROGRESSION : <div style="height: 6px; border-radius: 3px; background: #EDF3F9;"><div style="width: 50%; height: 6px; border-radius: 3px; background: #0A6BA3;"></div></div>
+SKELETON : <div style="height: 16px; width: 60%; border-radius: 8px; background: #EDF3F9;"></div>
+
+BOTTOM SHEET (sur voile)
+<div style="position: absolute; inset: 0; background: rgba(14,26,43,0.40);"></div>
+<div role="dialog" aria-label="…" style="position: absolute; left: 0; right: 0; bottom: 0; border-radius: 20px 20px 0 0; background: #FFFFFF; box-shadow: 0 -8px 24px rgba(14,26,43,0.10); padding: 8px 20px 42px;">
+  <div style="width: 36px; height: 5px; border-radius: 3px; background: #DDE5EE; margin: 0 auto 14px;"></div>
+  <div style="font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 16px;">Titre</div>
+  ...
+</div>
+
+ALERTE iOS (dialog centrée)
+<div role="alertdialog" style="position: absolute; left: 60px; top: 330px; width: 270px; border-radius: 14px; background: #F7FAFD; overflow: hidden; text-align: center;">
+  <div style="padding: 20px 16px 16px;"><div style="font-size: 17px; font-weight: 600;">Titre</div><div style="margin-top: 4px; font-size: 13px; line-height: 18px; color: #3A4859;">Message</div></div>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #DDE5EE;"><button type="button" style="height: 44px; border: 0; background: transparent; color: #0A6BA3; font-size: 17px;">Annuler</button><button type="button" style="height: 44px; border: 0; border-left: 1px solid #DDE5EE; background: transparent; color: #0A6BA3; font-size: 17px; font-weight: 600;">OK</button></div>
+</div>
+
+ACTION SHEET iOS : deux blocs rayon 14 fond #F7FAFD en bas (left/right 8px, bottom 42px), rangées 56px centrées 17px #0A6BA3, destructif #A12A22, bloc « Annuler » séparé 600.
+
+TOAST : <div role="status" style="position: absolute; left: 20px; right: 20px; bottom: 100px; display: flex; gap: 10px; align-items: center; padding: 12px 16px; border-radius: 14px; background: #0E1A2B; color: #FFFFFF; font-size: 15px;">[check 18]<span>Ajouté à votre calendrier</span></div>
+
+EMPLACEMENT PHOTO
+<div data-photo-slot="nom" style="position: relative; height: 180px; border-radius: 16px; overflow: hidden; background: #EEF6FC;">
+  <svg width="100%" height="100%" viewBox="0 0 350 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><path d="M140 180V80a35 35 0 0 1 70 0v100" fill="#D9EBF7"></path><path d="M175 0 120 180M175 0 230 180M175 0 175 180" stroke="#B3D8F0" stroke-width="1"></path></svg>
+  <span style="position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: #3A4859;">Photo · Légende</span>
+</div>
+
+ICÔNES LUCIDE (24, stroke-width 1.75) — tracés à coller dans <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+house, book-open, church, file-text, message-circle, bell, search : voir tab bar et en-tête ci-dessus
+chevron-left <path d="m15 18-6-6 6-6"></path> ; chevron-right <path d="m9 18 6-6-6-6"></path> ; chevron-down <path d="m6 9 6 6 6-6"></path>
+x <path d="M18 6 6 18"></path><path d="m6 6 12 12"></path> ; check <path d="M20 6 9 17l-5-5"></path> ; plus <path d="M5 12h14"></path><path d="M12 5v14"></path>
+lock <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+info <circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path>
+circle-alert <circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line>
+clock <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+calendar <path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path>
+map-pin <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle>
+phone <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+share <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" x2="12" y1="2" y2="15"></line>
+bookmark <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+shield-check <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path>
+user <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>
+settings <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle>
+send <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path>
+wifi-off <path d="M12 20h.01"></path><path d="M8.5 16.429a5 5 0 0 1 7 0"></path><path d="M5 12.859a10 10 0 0 1 5.17-2.69"></path><path d="M19 12.859a10 10 0 0 0-2.007-1.523"></path><path d="M2 8.82a15 15 0 0 1 4.177-2.643"></path><path d="M22 8.82a15 15 0 0 0-11.288-3.764"></path><path d="m2 2 20 20"></path>
+log-out <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" x2="9" y1="12" y2="12"></line>
+paperclip <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+sun <circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path>
+moon <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+play <polygon points="6 3 20 12 6 21 6 3"></polygon> ; headphones <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"></path>
+navigation <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon> ; filter <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+-->

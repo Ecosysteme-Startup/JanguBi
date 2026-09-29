@@ -6,18 +6,24 @@ from rest_framework.test import APIClient
 from apps.rosary.models import CommunityRosary
 from apps.users.models import BaseUser
 
+_STATE = {
+    "fidele": ("laic", "aucun"),
+    "diacre": ("clerc", "diacre_permanent"),
+    "pretre": ("clerc", "pretre"),
+}
 
-def _make_user(email, pastoral_role="fidele"):
+
+def _make_user(email, etat="fidele"):
     user = BaseUser.objects.create_user(
         email=email,
         password="StrongPassw0rd!",
-        role="fidele",
         phone_number=f"+221770{abs(hash(email)) % 1_000_000:06d}",
         is_active=True,
         is_verified=True,
     )
-    user.pastoral_role = pastoral_role
-    user.save(update_fields=["pastoral_role"])
+    user.etat_de_vie, user.degre_ordre = _STATE[etat]
+    user.statut_verification = "verifie"
+    user.save(update_fields=["etat_de_vie", "degre_ordre", "statut_verification"])
     return user
 
 

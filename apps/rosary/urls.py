@@ -1,5 +1,6 @@
 from django.urls import path
 
+from apps.core.modules import is_module_active
 from apps.rosary.community_apis import (
     CommunityRosaryEndApi,
     CommunityRosaryIntentionApi,
@@ -32,9 +33,13 @@ urlpatterns = [
     # Search
     path("search/", RosarySearchApi.as_view(), name="search"),
 
-    # Community Rosary (M8)
-    path("community/", CommunityRosaryListCreateApi.as_view(), name="community-list-create"),
-    path("community/<int:rosary_id>/join/", CommunityRosaryJoinApi.as_view(), name="community-join"),
-    path("community/<int:rosary_id>/intentions/", CommunityRosaryIntentionApi.as_view(), name="community-intentions"),
-    path("community/<int:rosary_id>/end/", CommunityRosaryEndApi.as_view(), name="community-end"),
 ]
+
+# Chapelet communautaire (M8) — gelé en V1 (ADR-006, « rosary.communautaire »).
+if is_module_active("rosary.communautaire"):
+    urlpatterns += [
+        path("community/", CommunityRosaryListCreateApi.as_view(), name="community-list-create"),
+        path("community/<int:rosary_id>/join/", CommunityRosaryJoinApi.as_view(), name="community-join"),
+        path("community/<int:rosary_id>/intentions/", CommunityRosaryIntentionApi.as_view(), name="community-intentions"),
+        path("community/<int:rosary_id>/end/", CommunityRosaryEndApi.as_view(), name="community-end"),
+    ]

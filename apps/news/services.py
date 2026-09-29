@@ -1,500 +1,386 @@
+"""Annonces et articles de la V1 (SRS §3.5, lot L4).
+
+Autorisation : ``annonces.publier`` sur le nœud de portée (ADR-003) ; la portée globale
+(aucun nœud) est réservée à l'administration de la plateforme. Toute écriture passe par
+ici ; les vues ne font que traduire HTTP.
+"""
+
 import datetime
+import logging
+import uuid
+from typing import Any
 
 import nh3
-from django.db import models, transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from apps.core.exceptions import ApplicationError
-from apps.news.models import Article, ArticleCategory, ArticleReaction
-from apps.news.selectors import article_get_reactable, article_reaction_summary
-from apps.users.enums import PastoralRole, UserRole
-from apps.users.models import BaseUser
+from apps.core.exceptions import ApplicationError, PermissionDeniedError
+from apps.hierarchy import authz
+from apps.hierarchy.audit import audit_log
+from apps.hierarchy.models import Node, PlaceOfWorship
+from apps.news.models import Article, ArticleCategory, ArticleReaction, ArticleRead
 
-# Rôles d'administration digitale (UserRole) autorisés à gérer/publier des articles.
-_EDITOR_ROLES = {
-    UserRole.SUPER_ADMIN,
-    UserRole.PROVINCE_ADMIN,
-    UserRole.DIOCESE_ADMIN,
-    UserRole.PARISH_ADMIN,
-    UserRole.CHURCH_ADMIN,
-}
+logger = logging.getLogger(__name__)
 
-# Rôles admin équivalant à un évêque pour publier une lettre pastorale.
-_BISHOP_ADMIN_ROLES = {
-    UserRole.SUPER_ADMIN,
-    UserRole.PROVINCE_ADMIN,
-    UserRole.DIOCESE_ADMIN,
-}
-
-# Rôles pastoraux (PastoralRole) — dimension orthogonale à `role`.
-# eveque/archeveque vivent UNIQUEMENT dans pastoral_role (jamais dans role).
-_BISHOP_PASTORAL_ROLES = {PastoralRole.EVEQUE, PastoralRole.ARCHEVEQUE}
-
-# Clergé pouvant créer / gérer un article (brouillon inclus) — diacre compris.
-_CLERGY_EDITOR_ROLES = {
-    PastoralRole.DIACRE,
-    PastoralRole.PRETRE,
-    PastoralRole.EVEQUE,
-    PastoralRole.ARCHEVEQUE,
-}
-
-# Clergé pouvant PUBLIER — diacre EXCLU (brouillon seulement, matrice §16).
-_CLERGY_PUBLISHER_ROLES = {
-    PastoralRole.PRETRE,
-    PastoralRole.EVEQUE,
-    PastoralRole.ARCHEVEQUE,
-}
+# Types publiables en V1 : la lettre pastorale est gelée (ADR-006).
+V1_CONTENT_TYPES = (Article.ContentType.ANNOUNCEMENT, Article.ContentType.ARTICLE, Article.ContentType.MEDITATION)
+UPDATABLE_FIELDS = (
+    "title",
+    "excerpt",
+    "content",
+    "content_format",
+    "category",
+    "cover_image_id",
+    "cover_image_alt",
+    "cover_image_decorative",
+    "place",
+    "is_sunday_notice",
+    "sunday_date",
+    "content_type",
+    "notify_followers",
+)
+# Bannière : formats affichables par tous les navigateurs (le HEIC des iPhone ne l'est pas).
+COVER_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
 
 
-# ---------------------------------------------------------------------------
-# Helpers d'autorisation — source unique, réutilisée par permissions.py
-# ---------------------------------------------------------------------------
+# --- Autorisation --------------------------------------------------------------------------
 
 
-def is_bishop(user: BaseUser) -> bool:
-    """Autorité de niveau évêque : pastoral_role évêque/archevêque, OU admin
-    diocèse-et-plus — par ``user.role`` OU par une RoleAssignment diocèse/province
-    (source de vérité). Utilisé pour la publication des lettres pastorales."""
-    from apps.users.scoping import accessible_diocese_ids, is_global_admin
-
-    if user.pastoral_role in _BISHOP_PASTORAL_ROLES:
-        return True
-    if user.role in _BISHOP_ADMIN_ROLES:
-        return True
-    if is_global_admin(user):
-        return True
-    return bool(accessible_diocese_ids(user))
-
-
-def is_news_editor(user: BaseUser) -> bool:
-    """Peut créer/gérer un article : admin digital (user.role OU RoleAssignment)
-    OU clergé (diacre inclus). L'autorité territoriale fine est vérifiée à part."""
-    from apps.users.scoping import is_any_admin
-
-    return is_any_admin(user) or user.pastoral_role in _CLERGY_EDITOR_ROLES
-
-
-def _check_editor(user: BaseUser) -> None:
-    if not is_news_editor(user):
-        raise ApplicationError("Seuls les administrateurs et le clergé peuvent gérer les articles.")
-
-
-def article_can_publish(*, user: BaseUser, article: Article) -> bool:
-    from apps.users.scoping import is_any_admin
-
-    if article.content_type == Article.ContentType.PASTORAL_LETTER:
-        return is_bishop(user)
-    # Diacre = brouillon seulement (matrice §16), même s'il détient une capacité
-    # admin : la publication reste réservée au curé qui valide.
-    if user.pastoral_role == PastoralRole.DIACRE:
-        return False
-    # ANNOUNCEMENT et ARTICLE : admin digital (role OU RoleAssignment) OU clergé
-    # publicateur. Le « où » est tranché par _check_scope_authority.
-    return is_any_admin(user) or user.pastoral_role in _CLERGY_PUBLISHER_ROLES
-
-
-def _check_scope_consistency(
-    scope_type: str,
-    scope_parish_id: int | None,
-    scope_diocese_id: int | None,
-    scope_church_id: int | None = None,
-) -> None:
-    if scope_type == Article.ScopeType.PARISH and not scope_parish_id:
-        raise ApplicationError("Un article de portée 'paroisse' doit avoir un scope_parish_id.")
-    if scope_type == Article.ScopeType.DIOCESE and not scope_diocese_id:
-        raise ApplicationError("Un article de portée 'diocèse' doit avoir un scope_diocese_id.")
-    if scope_type == Article.ScopeType.CHURCH and not scope_church_id:
-        raise ApplicationError("Un article de portée 'église' doit avoir un scope_church_id.")
-    if scope_type == Article.ScopeType.GLOBAL and (
-        scope_parish_id or scope_diocese_id or scope_church_id
-    ):
-        raise ApplicationError(
-            "Un article global ne doit pas avoir de scope_parish_id, scope_diocese_id "
-            "ou scope_church_id."
-        )
-
-
-def _resolve_scope_targets(
-    *,
-    scope_parish_id: int | None,
-    scope_diocese_id: int | None,
-    scope_church_id: int | None,
-):
-    """Résout les ids de portée (INT, contrat API inchangé) en instances FK.
-    Erreur claire si l'entité n'existe pas — jamais de FK fantôme."""
-    from apps.org.models import Church, Diocese, Parish
-
-    parish = diocese = church = None
-    if scope_parish_id is not None:
-        parish = Parish.objects.filter(pk=scope_parish_id).first()
-        if parish is None:
-            raise ApplicationError("Paroisse introuvable.")
-    if scope_diocese_id is not None:
-        diocese = Diocese.objects.filter(pk=scope_diocese_id).first()
-        if diocese is None:
-            raise ApplicationError("Diocèse introuvable.")
-    if scope_church_id is not None:
-        church = Church.objects.filter(pk=scope_church_id).first()
-        if church is None:
-            raise ApplicationError("Église introuvable.")
-    return parish, diocese, church
-
-
-def _check_scope_authority(
-    *,
-    user: BaseUser,
-    scope_type: str,
-    scope_parish_id: int | None,
-    scope_diocese_id: int | None,
-    scope_church_id: int | None = None,
-) -> None:
-    """L'auteur/éditeur doit avoir autorité territoriale RÉELLE (RoleAssignment)
-    sur la portée de l'article. Ferme l'injection inter-paroisses/diocèses/églises :
-    un curé de la paroisse A ne peut ni créer ni publier un article scopé sur B, et
-    un clergé sans affectation ne peut rien publier de scopé. L'autorité « église »
-    découle de l'autorité sur la paroisse de cette église.
-    """
-    from apps.users.scoping import (
-        accessible_province_ids,
-        is_global_admin,
-        user_can_admin_church,
-        user_can_admin_diocese,
-        user_can_admin_parish,
-    )
-
-    if scope_type == Article.ScopeType.PARISH:
-        # id None → aucune paroisse cible → pas d'autorité (cohérent avec le lookup raté).
-        if scope_parish_id is None or not user_can_admin_parish(user, scope_parish_id):
-            raise ApplicationError("Vous n'avez pas autorité sur cette paroisse.")
-    elif scope_type == Article.ScopeType.CHURCH:
-        # Autorité église (RG-CONT 3b) : church_admin sur X, OU autorité sur sa paroisse.
-        if scope_church_id is None or not user_can_admin_church(user, scope_church_id):
-            raise ApplicationError("Vous n'avez pas autorité sur cette église.")
-    elif scope_type == Article.ScopeType.DIOCESE:
-        if scope_diocese_id is None or not user_can_admin_diocese(user, scope_diocese_id):
-            raise ApplicationError("Vous n'avez pas autorité sur ce diocèse.")
-    else:  # GLOBAL — réservé aux administrateurs province / national.
-        if not (is_global_admin(user) or accessible_province_ids(user)):
-            raise ApplicationError(
-                "La portée globale est réservée aux administrateurs province ou national."
-            )
-
-
-def _check_article_authority(*, editor: BaseUser, article: Article) -> None:
-    """Autorité d'édition sur un article DÉJÀ persisté (update / unpublish / delete).
-
-    Symétrique de ce que `article_create` et `article_publish` font à l'entrée :
-    sans ça, `_check_editor` seul ne dit que « c'est un éditeur quelconque », et
-    un curé de la paroisse A peut réécrire, dépublier ou supprimer le contenu de
-    la paroisse B, d'un diocèse, ou de la portée globale.
-
-    1. PORTÉE — l'éditeur doit avoir autorité territoriale réelle sur la portée
-       de l'article. La portée est IMMUABLE après création : ni `article_update`
-       ni `ArticleUpdateInputSerializer` n'exposent `scope_type` / `scope_*_id`,
-       donc vérifier la portée courante suffit.
-       ⚠️ SI la portée devient un jour modifiable, cette vérification unique ne
-       suffit PLUS : il faudra exiger l'autorité sur l'ANCIENNE **et** la
-       NOUVELLE portée. Sinon un éditeur s'approprie un contenu d'un territoire
-       qu'il ne contrôle pas (ancienne portée non vérifiée), ou l'exfiltre vers
-       un territoire qu'il ne contrôle pas davantage (nouvelle portée non
-       vérifiée). Le test `test_article_update_ne_permet_pas_de_changer_la_portee`
-       garde cet invariant.
-
-    2. TYPE DE CONTENU — une lettre pastorale est un acte d'évêque (matrice §16) :
-       sa publication est déjà réservée à `is_bishop` via `article_can_publish`.
-       La réécrire, la retirer ou la supprimer sont des actes de même gravité —
-       et une lettre pastorale PEUT être scopée paroisse, auquel cas l'autorité
-       territoriale du curé suffirait à passer le point 1. On aligne donc
-       update/unpublish/delete sur la règle de publication : hors évêque, on
-       refuse, même sur son propre territoire.
-    """
-    _check_scope_authority(
-        user=editor,
-        scope_type=article.scope_type,
-        scope_parish_id=article.scope_parish_id,
-        scope_diocese_id=article.scope_diocese_id,
-        scope_church_id=article.scope_church_id,
-    )
-    if article.content_type == Article.ContentType.PASTORAL_LETTER and not is_bishop(editor):
-        raise ApplicationError(
-            "Seul un évêque peut modifier ou retirer une lettre pastorale."
-        )
+def article_publish_check(*, user: Any, node: Node | None) -> None:
+    if node is None:
+        if not authz.peut(user, "plateforme.admin", None):
+            raise PermissionDeniedError("Seule la plateforme publie des contenus globaux.", code="global_scope_forbidden")
+        return
+    if not authz.peut(user, "annonces.publier", node):
+        raise PermissionDeniedError("Vous ne pouvez pas publier sur ce nœud.", code="publish_forbidden")
 
 
 def _clean_content(content: str, content_format: str) -> str:
-    """
-    Sanitize le HTML de l'éditeur riche AVANT persistance (nh3 / ammonia) :
-    aucun HTML non filtré n'entre en base — le client mobile RN, lui, n'a pas
-    de DOMPurify. Le texte brut passe tel quel.
-    """
+    """HTML de l'éditeur riche assaini AVANT persistance (nh3) ; le texte brut passe tel quel."""
     if content_format == Article.ContentFormat.HTML:
         return nh3.clean(content)
     return content
 
 
-def _build_slug(title: str, scope_type: str, scope_id: int | None) -> str:
-    base = slugify(title)
-    suffix = f"{scope_type}-{scope_id}" if scope_id else scope_type
-    candidate = f"{base}-{suffix}"
+def _slug(title: str, node: Node | None) -> str:
+    base = slugify(title)[:180] or "article"
+    suffix = node.code.lower() if node is not None else "global"
+    candidate = f"{base}-{suffix}"[:210]
     if not Article.objects.filter(slug=candidate).exists():
         return candidate
-    count = Article.objects.filter(slug__startswith=candidate).count()
-    return f"{candidate}-{count + 1}"
+    # Suffixe aléatoire plutôt qu'un compteur : deux créations simultanées ne se heurtent pas.
+    return f"{candidate[:200]}-{uuid.uuid4().hex[:8]}"
 
 
-# ---------------------------------------------------------------------------
-# Services publics
-# ---------------------------------------------------------------------------
+def _sunday_check(*, is_sunday_notice: bool, sunday_date: datetime.date | None) -> None:
+    if not is_sunday_notice:
+        return
+    if sunday_date is None:
+        raise ApplicationError("Indiquez le dimanche concerné.", code="sunday_date_required")
+    if sunday_date.weekday() != 6:
+        raise ApplicationError("La date d'une annonce du dimanche doit être un dimanche.", code="sunday_date_invalid")
+
+
+def _place_check(*, node: Node | None, place: PlaceOfWorship | None) -> None:
+    if place is not None and (node is None or place.node_id != node.pk):
+        raise ApplicationError("Le lieu de culte doit appartenir au nœud de l'annonce.", code="place_not_in_node")
+
+
+def _cover_image_get(*, file_id: int | None, user: Any) -> Any:
+    """Bannière d'annonce : un fichier du mécanisme ``apps/files``, envoyé par la personne
+    qui l'attache, entièrement téléversé, et une image affichable."""
+    if file_id is None:
+        return None
+    from apps.files.models import File
+
+    file_obj = File.objects.filter(pk=file_id).first()
+    if file_obj is None:
+        raise ApplicationError("Image introuvable.", {"file_id": file_id}, code="file_not_found")
+    if file_obj.uploaded_by_id is None or file_obj.uploaded_by_id != user.pk:
+        raise PermissionDeniedError("Cette image ne vous appartient pas.", code="file_forbidden")
+    if not file_obj.is_valid:
+        raise ApplicationError("L'image n'a pas fini d'être envoyée.", code="file_incomplete")
+    if (file_obj.file_type or "").split(";")[0].strip().lower() not in COVER_IMAGE_TYPES:
+        raise ApplicationError("La bannière doit être une image JPEG, PNG ou WebP.", code="cover_not_image")
+    return file_obj
+
+
+def _cover_alt_clean(*, has_cover: bool, alt: str, decorative: bool) -> tuple[str, bool]:
+    """Texte alternatif de la bannière : requis si une bannière non décorative est présente.
+    Décorative : alternative vide (``alt=""``). Sans bannière : rien à décrire."""
+    if not has_cover:
+        return "", False
+    if decorative:
+        return "", True
+    alt = (alt or "").strip()
+    if not alt:
+        raise ApplicationError(
+            "Décrivez la bannière (texte alternatif) ou indiquez qu'elle est décorative.",
+            code="cover_alt_required",
+        )
+    return alt, False
+
+
+# --- Écritures -----------------------------------------------------------------------------
 
 
 @transaction.atomic
 def article_create(
     *,
-    author: BaseUser,
+    author: Any,
     title: str,
     content: str,
-    category_id: int,
-    scope_type: str = Article.ScopeType.GLOBAL,
-    content_type: str = Article.ContentType.ARTICLE,
+    category: ArticleCategory,
+    node: Node | None = None,
+    place: PlaceOfWorship | None = None,
+    content_type: str = Article.ContentType.ANNOUNCEMENT,
     content_format: str = Article.ContentFormat.TEXT,
-    announcement_date: datetime.date | None = None,
     excerpt: str = "",
     cover_image_id: int | None = None,
-    scope_parish_id: int | None = None,
-    scope_diocese_id: int | None = None,
-    scope_church_id: int | None = None,
+    cover_image_alt: str = "",
+    cover_image_decorative: bool = False,
+    is_sunday_notice: bool = False,
+    sunday_date: datetime.date | None = None,
+    notify_followers: bool = True,
 ) -> Article:
-    _check_editor(author)
-    if announcement_date is not None and content_type != Article.ContentType.ANNOUNCEMENT:
-        raise ApplicationError("announcement_date est réservé aux annonces.")
-    _check_scope_consistency(scope_type, scope_parish_id, scope_diocese_id, scope_church_id)
-    _check_scope_authority(
-        user=author,
-        scope_type=scope_type,
-        scope_parish_id=scope_parish_id,
-        scope_diocese_id=scope_diocese_id,
-        scope_church_id=scope_church_id,
+    """Crée un brouillon. La publication est une étape distincte (immédiate ou programmée)."""
+    article_publish_check(user=author, node=node)
+    if content_type not in V1_CONTENT_TYPES:
+        raise ApplicationError("Ce type de contenu n'est pas disponible en V1.", code="content_type_frozen")
+    _place_check(node=node, place=place)
+    _sunday_check(is_sunday_notice=is_sunday_notice, sunday_date=sunday_date)
+    cover_image = _cover_image_get(file_id=cover_image_id, user=author)
+    cover_image_alt, cover_image_decorative = _cover_alt_clean(
+        has_cover=cover_image is not None, alt=cover_image_alt, decorative=cover_image_decorative
     )
 
-    # Contrat API inchangé : ids reçus en INT, résolus en FK ici.
-    scope_parish, scope_diocese, scope_church = _resolve_scope_targets(
-        scope_parish_id=scope_parish_id,
-        scope_diocese_id=scope_diocese_id,
-        scope_church_id=scope_church_id,
-    )
-
-    try:
-        category = ArticleCategory.objects.get(pk=category_id, is_active=True)
-    except ArticleCategory.DoesNotExist:
-        raise ApplicationError(f"Catégorie {category_id} introuvable ou inactive.")
-
-    cover_image = None
-    if cover_image_id is not None:
-        from apps.files.models import File
-
-        try:
-            cover_image = File.objects.get(pk=cover_image_id)
-        except File.DoesNotExist:
-            raise ApplicationError(f"Fichier {cover_image_id} introuvable.")
-        if not cover_image.is_valid:
-            raise ApplicationError("Le fichier image n'a pas encore été finalisé.")
-
-    scope_ids_by_type: dict[str, int | None] = {
-        Article.ScopeType.PARISH: scope_parish_id,
-        Article.ScopeType.DIOCESE: scope_diocese_id,
-        Article.ScopeType.CHURCH: scope_church_id,
-    }
-    scope_id = scope_ids_by_type.get(scope_type)
-    slug = _build_slug(title, scope_type, scope_id)
-
-    return Article.objects.create(
+    article = Article.objects.create(
+        author=author,
         title=title,
-        slug=slug,
+        slug=_slug(title, node),
         excerpt=excerpt,
         content=_clean_content(content, content_format),
-        content_type=content_type,
         content_format=content_format,
-        announcement_date=announcement_date,
+        content_type=content_type,
         category=category,
-        author=author,
         cover_image=cover_image,
-        scope_type=scope_type,
-        scope_parish=scope_parish,
-        scope_diocese=scope_diocese,
-        scope_church=scope_church,
+        cover_image_alt=cover_image_alt,
+        cover_image_decorative=cover_image_decorative,
+        scope_node=node,
+        scope_place=place,
+        # Ancienne colonne conservée jusqu'en L9 : cohérente pour les lecteurs historiques.
+        is_sunday_notice=is_sunday_notice,
+        sunday_date=sunday_date,
+        announcement_date=sunday_date,
+        notify_followers=notify_followers,
         status=Article.Status.DRAFT,
     )
-
-
-@transaction.atomic
-def article_update(
-    *,
-    article: Article,
-    editor: BaseUser,
-    title: str | None = None,
-    excerpt: str | None = None,
-    content: str | None = None,
-    content_format: str | None = None,
-    announcement_date: datetime.date | None = None,
-    category_id: int | None = None,
-    cover_image_id: int | None = None,
-) -> Article:
-    _check_editor(editor)
-    # Autorité territoriale + type de contenu sur l'article ciblé (anti inter-paroisses).
-    _check_article_authority(editor=editor, article=article)
-
-    if article.status == Article.Status.UNPUBLISHED:
-        raise ApplicationError("Un article dépublié ne peut pas être modifié.")
-
-    update_fields = ["updated_at"]
-
-    if content_format is not None:
-        article.content_format = content_format
-        update_fields.append("content_format")
-    if announcement_date is not None:
-        if article.content_type != Article.ContentType.ANNOUNCEMENT:
-            raise ApplicationError("announcement_date est réservé aux annonces.")
-        article.announcement_date = announcement_date
-        update_fields.append("announcement_date")
-
-    if title is not None:
-        article.title = title
-        update_fields.append("title")
-    if excerpt is not None:
-        article.excerpt = excerpt
-        update_fields.append("excerpt")
-    if content is not None:
-        article.content = _clean_content(content, article.content_format)
-        update_fields.append("content")
-
-    if category_id is not None:
-        try:
-            article.category = ArticleCategory.objects.get(pk=category_id, is_active=True)
-        except ArticleCategory.DoesNotExist:
-            raise ApplicationError(f"Catégorie {category_id} introuvable ou inactive.")
-        update_fields.append("category")
-
-    if cover_image_id is not None:
-        from apps.files.models import File
-
-        try:
-            img = File.objects.get(pk=cover_image_id)
-        except File.DoesNotExist:
-            raise ApplicationError(f"Fichier {cover_image_id} introuvable.")
-        if not img.is_valid:
-            raise ApplicationError("Le fichier image n'a pas encore été finalisé.")
-        article.cover_image = img
-        update_fields.append("cover_image")
-
-    article.save(update_fields=update_fields)
+    audit_log(actor=author, action="annonce.creation", target=article, node=node)
     return article
 
 
 @transaction.atomic
-def article_publish(*, article: Article, editor: BaseUser) -> Article:
-    _check_editor(editor)
-    if not article_can_publish(user=editor, article=article):
-        raise ApplicationError(
-            "Vous n'avez pas les droits nécessaires pour publier ce type de contenu."
+def article_update(*, article: Article, editor: Any, data: dict[str, Any]) -> Article:
+    article_publish_check(user=editor, node=article.scope_node)
+    unknown = set(data) - set(UPDATABLE_FIELDS)
+    if unknown:
+        raise ApplicationError("Champs non modifiables.", {"fields": sorted(unknown)}, code="field_not_updatable")
+    if data.get("content_type", article.content_type) not in V1_CONTENT_TYPES:
+        raise ApplicationError("Ce type de contenu n'est pas disponible en V1.", code="content_type_frozen")
+    is_sunday = data.get("is_sunday_notice", article.is_sunday_notice)
+    sunday_date = data.get("sunday_date", article.sunday_date)
+    _sunday_check(is_sunday_notice=is_sunday, sunday_date=sunday_date)
+    data = dict(data)
+    if "place" in data:
+        _place_check(node=article.scope_node, place=data["place"])
+        article.scope_place = data.pop("place")
+    # Bannière touchée (image, alternative ou caractère décoratif) : l'état final est vérifié.
+    cover_touched = bool({"cover_image_id", "cover_image_alt", "cover_image_decorative"} & set(data))
+    if "cover_image_id" in data:
+        cover_id = data.pop("cover_image_id")
+        # La bannière déjà en place (envoyée par un collègue) se renvoie telle quelle.
+        if cover_id != article.cover_image_id:
+            article.cover_image = _cover_image_get(file_id=cover_id, user=editor)
+    if cover_touched:
+        article.cover_image_alt, article.cover_image_decorative = _cover_alt_clean(
+            has_cover=article.cover_image is not None,
+            alt=data.pop("cover_image_alt", article.cover_image_alt),
+            decorative=data.pop("cover_image_decorative", article.cover_image_decorative),
         )
-    # Autorité territoriale sur la portée réelle de l'article (anti inter-paroisses).
-    _check_scope_authority(
-        user=editor,
-        scope_type=article.scope_type,
-        scope_parish_id=article.scope_parish_id,
-        scope_diocese_id=article.scope_diocese_id,
-        scope_church_id=article.scope_church_id,
-    )
 
-    if article.status == Article.Status.PUBLISHED:
-        raise ApplicationError("L'article est déjà publié.")
-
-    article.status = Article.Status.PUBLISHED
-    article.published_at = timezone.now()
-    article.save(update_fields=["status", "published_at", "updated_at"])
+    for field, value in data.items():
+        setattr(article, field, value)
+    if "content" in data or "content_format" in data:
+        article.content = _clean_content(article.content, article.content_format)
+    if "sunday_date" in data:
+        article.announcement_date = article.sunday_date
+    article.save()
+    audit_log(actor=editor, action="annonce.modification", target=article, node=article.scope_node)
     return article
 
 
 @transaction.atomic
-def article_unpublish(*, article: Article, editor: BaseUser, reason: str = "") -> Article:
-    _check_editor(editor)
-    # Autorité territoriale + type de contenu : on ne retire pas le contenu d'autrui.
-    _check_article_authority(editor=editor, article=article)
+def article_publish(
+    *, article: Article, editor: Any, publish_at: datetime.datetime | None = None, notify: bool | None = None
+) -> Article:
+    """Publie tout de suite, ou programme la publication (EF-PAROI-03).
 
-    if article.status != Article.Status.PUBLISHED:
-        raise ApplicationError("Seul un article publié peut être dépublié.")
+    ``notify`` : notifier les fidèles à la publication (``None`` : garder le choix enregistré).
+    Le choix est conservé sur l'article, donc appliqué aussi à une publication programmée."""
+    article_publish_check(user=editor, node=article.scope_node)
+    # Relu sous verrou : la tâche de publication programmée peut agir en même temps.
+    article = Article.objects.select_for_update(of=("self",)).select_related("scope_node").get(pk=article.pk)
+    if article.status == Article.Status.PUBLISHED:
+        raise ApplicationError("L'article est déjà publié.", code="already_published")
+    if notify is not None and notify != article.notify_followers:
+        article.notify_followers = notify
+        article.save(update_fields=["notify_followers", "updated_at"])
+    now = timezone.now()
+    if publish_at is not None and publish_at > now:
+        article.status = Article.Status.SCHEDULED
+        article.publish_at = publish_at
+        article.save(update_fields=["status", "publish_at", "updated_at"])
+        audit_log(actor=editor, action="annonce.programmation", target=article, node=article.scope_node)
+        return article
+    _publish_now(article=article, at=now)
+    audit_log(actor=editor, action="annonce.publication", target=article, node=article.scope_node)
+    return article
 
+
+def _publish_now(*, article: Article, at: datetime.datetime) -> None:
+    article.status = Article.Status.PUBLISHED
+    article.published_at = at
+    article.publish_at = None
+    article.save(update_fields=["status", "published_at", "publish_at", "updated_at"])
+    if not article.notify_followers:
+        return
+    from apps.news.notifications import article_published_notify
+
+    transaction.on_commit(lambda: article_published_notify(article_id=str(article.pk)))
+
+
+def articles_publish_due(*, now: datetime.datetime | None = None) -> int:
+    """Tâche Beat : publie les articles programmés arrivés à échéance.
+
+    Un article par transaction : un article en erreur n'empêche pas la publication des autres
+    (et un article publié ne repasse pas en « programmé » à cause d'un voisin)."""
+    now = now or timezone.now()
+    due_ids = list(
+        Article.objects.filter(status=Article.Status.SCHEDULED, publish_at__lte=now).values_list("pk", flat=True)
+    )
+    count = 0
+    for article_id in due_ids:
+        try:
+            with transaction.atomic():
+                article = (
+                    Article.objects.select_for_update(skip_locked=True)
+                    .filter(pk=article_id, status=Article.Status.SCHEDULED)
+                    .first()
+                )
+                if article is None:
+                    continue
+                _publish_now(article=article, at=article.publish_at or now)
+                audit_log(actor=None, action="annonce.publication", target=article, node=article.scope_node)
+                count += 1
+        except Exception:  # noqa: BLE001 — journalisé, l'article sera repris au prochain passage
+            logger.exception("news.publish_due_failed", extra={"article_id": str(article_id)})
+    return count
+
+
+@transaction.atomic
+def article_unpublish(*, article: Article, editor: Any, reason: str = "") -> Article:
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.status not in (Article.Status.PUBLISHED, Article.Status.SCHEDULED):
+        raise ApplicationError("Seul un article publié ou programmé peut être retiré.", code="not_published")
     article.status = Article.Status.UNPUBLISHED
     article.unpublished_at = timezone.now()
     article.unpublished_by = editor
     article.unpublish_reason = reason
+    article.publish_at = None
+    article.pinned_until = None
+    article.pinned_at = None
     article.save(
         update_fields=[
-            "status", "unpublished_at", "unpublished_by", "unpublish_reason", "updated_at"
+            "status", "unpublished_at", "unpublished_by", "unpublish_reason", "publish_at",
+            "pinned_until", "pinned_at", "updated_at",
         ]
+    )
+    audit_log(actor=editor, action="annonce.retrait", target=article, node=article.scope_node)
+    return article
+
+
+PIN_MAX_DAYS = 60
+
+
+@transaction.atomic
+def article_pin(*, article: Article, editor: Any, until: datetime.datetime) -> Article:
+    """Épingle un contenu publié ou programmé en tête des listes jusqu'à ``until`` (G06).
+    Au-delà de la date de fin, il reprend sa place chronologique (aucune tâche à lancer)."""
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.status not in (Article.Status.PUBLISHED, Article.Status.SCHEDULED):
+        raise ApplicationError("Seul un contenu publié ou programmé peut être épinglé.", code="not_published")
+    now = timezone.now()
+    if until <= now:
+        raise ApplicationError("La date de fin de l'épinglage doit être future.", code="pin_until_past")
+    if until > now + datetime.timedelta(days=PIN_MAX_DAYS):
+        raise ApplicationError(
+            f"Un contenu s'épingle pour {PIN_MAX_DAYS} jours au plus.", code="pin_until_too_far"
+        )
+    article.pinned_until = until
+    article.pinned_at = now
+    article.save(update_fields=["pinned_until", "pinned_at", "updated_at"])
+    audit_log(
+        actor=editor, action="annonce.epinglage", target=article, node=article.scope_node,
+        metadata={"until": until.isoformat()},
     )
     return article
 
 
 @transaction.atomic
-def article_delete(*, article: Article, editor: BaseUser) -> None:
-    _check_editor(editor)
-    # Autorité territoriale + type de contenu : on ne supprime pas le contenu d'autrui.
-    _check_article_authority(editor=editor, article=article)
+def article_unpin(*, article: Article, editor: Any) -> Article:
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.pinned_until is None:
+        return article
+    article.pinned_until = None
+    article.pinned_at = None
+    article.save(update_fields=["pinned_until", "pinned_at", "updated_at"])
+    audit_log(actor=editor, action="annonce.desepinglage", target=article, node=article.scope_node)
+    return article
 
-    if article.status == Article.Status.PUBLISHED:
+
+@transaction.atomic
+def article_delete(*, article: Article, editor: Any) -> None:
+    article_publish_check(user=editor, node=article.scope_node)
+    if article.status in (Article.Status.PUBLISHED, Article.Status.SCHEDULED):
         raise ApplicationError(
-            "Un article publié ne peut pas être supprimé. Dépubliez-le d'abord."
+            "Un article publié ou programmé ne peut pas être supprimé. Retirez-le d'abord.", code="published"
         )
+    audit_log(actor=editor, action="annonce.suppression", target=article, node=article.scope_node)
     article.delete()
 
 
 @transaction.atomic
-def article_increment_views(*, article: Article) -> None:
-    Article.objects.filter(pk=article.pk).update(views_count=models.F("views_count") + 1)
+def article_mark_read(*, article: Article, user: Any) -> bool:
+    """Une lecture par personne (EF-PAROI-05). Renvoie vrai si c'est la première."""
+    if article.status != Article.Status.PUBLISHED:
+        raise ApplicationError("Article introuvable.", code="not_found")
+    try:
+        with transaction.atomic():
+            _, created = ArticleRead.objects.get_or_create(article=article, user=user)
+    except IntegrityError:
+        return False
+    return created
 
 
 @transaction.atomic
-def article_reaction_set(
-    *,
-    article_id: str,
-    user: BaseUser,
-    reaction_type: str,
-    active: bool,
-) -> dict:
-    """Pose (``active=True``) ou retire (``active=False``) une réaction.
-
-    IDEMPOTENT PAR CONSTRUCTION — et c'est délibérément un « set », pas un
-    « toggle ». Une bascule aveugle est non-idempotente : un double-clic ou un
-    rejeu réseau la fait repasser dans l'autre sens, et l'utilisateur se retrouve
-    avec l'inverse de ce qu'il a demandé. Le client envoie donc l'état VOULU ;
-    rejouer la même requête laisse le système dans le même état.
-
-    ``get_or_create`` s'appuie sur la contrainte d'unicité en base : deux
-    requêtes concurrentes ne peuvent pas créer deux lignes (la seconde retombe
-    sur le ``get``), donc le compteur ne peut pas doubler.
-
-    Retourne l'état réconcilié (compteurs + réactions du lecteur) pour que le
-    client remplace sa mise à jour optimiste par la vérité serveur.
-    """
+def article_reaction_set(*, article: Article, user: Any, reaction_type: str, active: bool) -> None:
+    """Pose ou retire une réaction : un « set » idempotent, jamais une bascule."""
     if reaction_type not in ArticleReaction.ReactionType.values:
-        raise ApplicationError("Type de réaction inconnu.")
-
-    # Autorisation : réagir suppose de pouvoir lire — même cloisonnement que le
-    # fil, pas une règle parallèle qui dériverait. Message unique (et donc non
-    # énumérant) que l'article n'existe pas ou soit hors portée.
-    article = article_get_reactable(article_id=article_id, user=user)
-    if article is None:
-        raise ApplicationError("Article introuvable ou hors de votre portée.")
-
+        raise ApplicationError("Type de réaction inconnu.", code="invalid_reaction")
+    if article.status != Article.Status.PUBLISHED:
+        raise ApplicationError("Article introuvable.", code="not_found")
     if active:
-        ArticleReaction.objects.get_or_create(
-            article=article, user=user, reaction_type=reaction_type
-        )
+        ArticleReaction.objects.get_or_create(article=article, user=user, reaction_type=reaction_type)
     else:
-        ArticleReaction.objects.filter(
-            article=article, user=user, reaction_type=reaction_type
-        ).delete()
-
-    return article_reaction_summary(article=article, user=user)
+        ArticleReaction.objects.filter(article=article, user=user, reaction_type=reaction_type).delete()

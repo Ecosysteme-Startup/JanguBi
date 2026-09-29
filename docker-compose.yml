@@ -57,6 +57,18 @@ services:
   # ===========================================
   db:
     image: pgvector/pgvector:pg17
+    # pg_stat_statements : mesurer avant d'indexer (docs/SCALING.md). Le chargement au démarrage
+    # est obligatoire ; l'extension est créée par docker/postgres/init à la création du volume.
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_stat_statements"
+      - "-c"
+      - "pg_stat_statements.track=top"
+      - "-c"
+      - "pg_stat_statements.max=10000"
+      - "-c"
+      - "track_io_timing=on"
     environment:
       # Bonne pratique : On utilise les variables du .env plutôt que de les écrire en dur
       POSTGRES_DB: ${POSTGRES_DB}
@@ -64,6 +76,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "5433:5432"
     healthcheck:
@@ -137,12 +150,18 @@ services:
   # ===========================================
   # Serveur SMTP de dev (MailHog)
   # ===========================================
-  mailhog:
-    image: mailhog/mailhog:latest
-    container_name: mailhog
+  # Piège à e-mails de dev (Django ET Keycloak) : tout est capturé, rien ne part.
+  # Interface http://localhost:8025, API REST http://localhost:8025/api/v1/messages (tests e2e).
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "2000"
     ports:
       - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI → http://localhost:8025
+      - "8025:8025"   # Interface web + API
     networks:
       - app_network
 
@@ -177,10 +196,24 @@ services:
   # ===========================================
   # Workers Asynchrones
   # ===========================================
+  # File « default » : e-mails, notifications, push, webhooks (config/settings/celery.py).
   celery:
     <<: *app-base
     container_name: celery_worker
-    command: celery -A apps.tasks worker -l info --concurrency=1 --without-gossip --without-mingle --without-heartbeat
+    command: celery -A apps.tasks worker -Q default,celery -l info --concurrency=1 --without-gossip --without-mingle --without-heartbeat
+
+  # File « media » : encodage audio ffmpeg (lot B3). Séparé pour qu'un encodage ne retarde
+  # jamais un e-mail ; concurrence 1 à 2 (CPU), une tâche réservée à la fois.
+  celery-media:
+    <<: *app-base
+    container_name: celery_worker_media
+    command: celery -A apps.tasks worker -Q media -n media@%h -l info --concurrency=1 --prefetch-multiplier=1 --without-gossip --without-mingle --without-heartbeat
+
+  # File « reco » : recommandations précalculées (lots B3/B4).
+  celery-reco:
+    <<: *app-base
+    container_name: celery_worker_reco
+    command: celery -A apps.tasks worker -Q reco -n reco@%h -l info --concurrency=1 --prefetch-multiplier=1 --without-gossip --without-mingle --without-heartbeat
 
   # ===========================================
   # Planificateur Tâches
@@ -193,7 +226,93 @@ services:
     # file-locking sur le bind mount Docker Desktop (FS "fakeowner").
     command: celery -A apps.tasks beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
+  # ===========================================
+  # Exploitation — profil « ops » : docker compose --profile ops up flower
+  # ===========================================
+  # Flower : files et workers Celery. Écoute sur 127.0.0.1 seulement ; définir un mot de passe
+  # (FLOWER_BASIC_AUTH=utilisateur:motdepasse). Ne jamais l'exposer par Traefik sans authentification.
+  flower:
+    image: mher/flower:2.0
+    profiles: ["ops"]
+    container_name: flower
+    environment:
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-amqp://guest:guest@rabbitmq:5672//}
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-}
+      FLOWER_PORT: "5555"
+      FLOWER_PURGE_OFFLINE_WORKERS: "300"
+    ports:
+      - "127.0.0.1:5555:5555"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ===========================================
+  # Keycloak (ADR-004) — profil « keycloak » : make kc-up
+  # ===========================================
+  keycloak-db:
+    image: postgres:17-alpine
+    profiles: ["keycloak"]
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    profiles: ["keycloak"]
+    container_name: keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HEALTH_ENABLED: "true"
+      # Substitués dans infra/keycloak/realm-jangubi.json à l'import.
+      # Aucun secret par défaut : make kc-up refuse de démarrer sans KEYCLOAK_ADMIN_CLIENT_SECRET.
+      KC_ADMIN_SYNC_SECRET: ${KEYCLOAK_ADMIN_CLIENT_SECRET:-}
+      KC_WEB_REDIRECT_URI: ${KC_WEB_REDIRECT_URI:-http://localhost:3000/auth/callback}
+      KC_WEB_LEGACY_REDIRECT_URI: ${KC_WEB_LEGACY_REDIRECT_URI:-http://localhost:3000/api/auth/callback/keycloak}
+      KC_MOBILE_REDIRECT_URI: ${KC_MOBILE_REDIRECT_URI:-sn.numerisen.jangubi://oauth}
+      KC_WEB_POST_LOGOUT_URI: ${KC_WEB_POST_LOGOUT_URI:-http://localhost:3000/}
+      KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
+      # Lu par le thème de connexion (bandeau liturgique).
+      JANGUBI_API_URL: ${JANGUBI_API_URL:-http://localhost:8001/api/v1}
+      # SMTP du realm (vérification d'e-mail, mot de passe oublié) : Mailpit en dev.
+      KC_SMTP_HOST: ${KC_SMTP_HOST:-mailpit}
+      KC_SMTP_PORT: ${KC_SMTP_PORT:-1025}
+      KC_SMTP_FROM: ${KC_SMTP_FROM:-noreply@jangubi.sn}
+      KC_SMTP_STARTTLS: ${KC_SMTP_STARTTLS:-false}
+      KC_SMTP_AUTH: ${KC_SMTP_AUTH:-false}
+      KC_SMTP_USER: ${KC_SMTP_USER:-}
+      KC_SMTP_PASSWORD: ${KC_SMTP_PASSWORD:-}
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+      # Thème de connexion Jàngu Bi (maquettes PUB-Connexion, PUB-Inscription-Compte).
+      - ./infra/keycloak/themes/jangubi:/opt/keycloak/themes/jangubi:ro
+    ports:
+      - "8180:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - app_network
+
 volumes:
+  keycloak_db_data:
   traefik_letsencrypt:
   minio_data:
   postgres_data:

@@ -24,7 +24,6 @@ from apps.messaging.selectors import (
     export_list,
     message_list,
     notification_list,
-    priest_list_available,
     unread_count,
 )
 from apps.users.tests.factories import BaseUserFactory
@@ -34,7 +33,6 @@ from .factories import (
     MessageBlockFactory,
     MessageFactory,
     NotificationFactory,
-    PriestProfileFactory,
 )
 
 # ---------------------------------------------------------------------------
@@ -309,38 +307,6 @@ def test_unread_count_returns_zero_when_no_messages():
 
     # Assert
     assert count == 0
-
-
-# ---------------------------------------------------------------------------
-# priest_list_available
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_priest_list_available_returns_only_accepting_priests():
-    # Arrange
-    available = PriestProfileFactory(accepts_pastoral_chat=True)
-    unavailable = PriestProfileFactory(accepts_pastoral_chat=False)
-
-    # Act
-    result = priest_list_available()
-    result_ids = {p.id for p in result}
-
-    # Assert
-    assert available.id in result_ids
-    assert unavailable.id not in result_ids
-
-
-@pytest.mark.django_db
-def test_priest_list_available_returns_empty_when_none_configured():
-    # Arrange
-    PriestProfileFactory(accepts_pastoral_chat=False)
-
-    # Act
-    result = priest_list_available()
-
-    # Assert
-    assert result.count() == 0
 
 
 # ---------------------------------------------------------------------------

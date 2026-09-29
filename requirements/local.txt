@@ -8,6 +8,7 @@ pytest-mock==3.15.1
 respx==0.22.0          # mock httpx — test-only (déplacé de base.txt)
 
 factory-boy==3.3.3
+freezegun==1.5.5
 Faker==37.11.0
 
 ipdb==0.13.13

@@ -72,5 +72,23 @@ if FILE_UPLOAD_STORAGE == FileUploadStorage.S3:
     if _AWS_S3_CUSTOM_DOMAIN:
         AWS_S3_CUSTOM_DOMAIN = _AWS_S3_CUSTOM_DOMAIN
 
-# Public URL for MinIO (replaces internal Docker hostname in generated audio URLs)
-MINIO_PUBLIC_URL = env("MINIO_PUBLIC_URL", default="http://localhost:9002")
+# URL publique de MinIO — remplace le nom d'hôte Docker interne dans les URLs
+# audio générées (apps/rosary/storage.py).
+#
+# ⚠️ Le défaut DOIT rester vide. `rosary/storage.py` fait
+# `MINIO_PUBLIC_URL or AWS_S3_ENDPOINT_URL` : un défaut « http://localhost:9002 »
+# est toujours truthy, donc le repli sur l'endpoint réel ne se déclenchait JAMAIS
+# et la production servait des URLs pointant vers la machine du visiteur
+# (audio du chapelet entièrement mort — audit beta 2026-07-20).
+MINIO_PUBLIC_URL = env("MINIO_PUBLIC_URL", default="")
+
+# Audios du chapelet (apps/rosary/storage.py). Historique : un bucket dédié
+# `rosary-audio` en lecture anonyme. En recette/production (Infrastructure
+# Ecosysteme-Startup), un seul bucket PRIVÉ par environnement (`jangubi-<env>`)
+# et un préfixe : ROSARY_AUDIO_BUCKET=jangubi-staging, ROSARY_AUDIO_LOCATION=rosary-audio,
+# ROSARY_AUDIO_PUBLIC=false → URL présignées (durée ROSARY_AUDIO_PRESIGNED_EXPIRY).
+ROSARY_AUDIO_BUCKET = env("ROSARY_AUDIO_BUCKET", default="rosary-audio")
+ROSARY_AUDIO_LOCATION = env("ROSARY_AUDIO_LOCATION", default="").strip("/")
+# Faux par défaut : aucune lecture anonyme sauf choix explicite (développement local).
+ROSARY_AUDIO_PUBLIC = env.bool("ROSARY_AUDIO_PUBLIC", default=False)
+ROSARY_AUDIO_PRESIGNED_EXPIRY = env.int("ROSARY_AUDIO_PRESIGNED_EXPIRY", default=3600)

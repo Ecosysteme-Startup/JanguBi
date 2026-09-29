@@ -1,0 +1,5 @@
+<p>Bonjour,</p>
+<p>Votre rendez-vous du <strong>{{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}</strong>, {{ place }}, a été annulé par le prêtre.</p>
+{% if message %}<p>Son message : {{ message }}</p>{% endif %}
+<p>Vous pouvez choisir un autre créneau dans l'application.</p>
+<p>Jàngu Bi</p>

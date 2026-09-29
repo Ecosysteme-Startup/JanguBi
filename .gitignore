@@ -138,3 +138,13 @@ google_client_secret.json
 .idea/
 .python-version
 pyrightconfig.json
+
+# Secrets locaux pour act (voir .secrets.example)
+.secrets
+
+# Recette (docs/RECETTE.md) : copie locale non versionnée
+.env.staging
+
+# Données de test (docs/DONNEES-DE-TEST.md) : aucun binaire, seulement le manifeste
+seed_assets/*
+!seed_assets/manifest.yaml

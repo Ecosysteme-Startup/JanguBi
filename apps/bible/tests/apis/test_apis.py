@@ -6,6 +6,7 @@ from rest_framework.test import APITestCase
 
 from apps.bible.models import Book, Chapter, Testament, Verse
 from apps.users.models import BaseUser
+from apps.users.tests.factories import platform_identity
 
 
 class BibleApiTests(APITestCase):
@@ -132,7 +133,7 @@ class BibleApiTests(APITestCase):
         # Norm user
         user = BaseUser.objects.create_user(
             email="test@test.com", password="pwd",
-            role="fidele", phone_number="+221771000001",
+            phone_number="+221771000001",
             is_active=True, is_verified=True,
         )
         self.client.force_authenticate(user=user)
@@ -141,14 +142,14 @@ class BibleApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
         # Admin
-        admin = BaseUser.objects.create_superuser(email="admin@test.com", password="pwd")
+        admin = platform_identity(BaseUser.objects.create_superuser(email="admin@test.com", password="pwd"))
         self.client.force_authenticate(user=admin)
         response = self.client.post(url, {"filename": "bible.json", "source": "b"})
         # Accepted
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
 
     def test_import_invalid_file(self):
-        admin = BaseUser.objects.create_superuser(email="admin2@test.com", password="pwd")
+        admin = platform_identity(BaseUser.objects.create_superuser(email="admin2@test.com", password="pwd"))
         self.client.force_authenticate(user=admin)
         url = reverse("api:bible:import-file")
         response = self.client.post(url, {"filename": "bible.json"})  # missing source

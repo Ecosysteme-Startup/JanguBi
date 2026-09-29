@@ -14,28 +14,28 @@ import os
 
 from celery.schedules import crontab
 
+from apps.core.modules import V1_DEFAULT_MODULES, filter_beat_schedule
 from config.env import APPS_DIR, BASE_DIR, env
 
 env.read_env(os.path.join(BASE_DIR, ".env"))
+
+# Modules actifs (ADR-006). Les modules gelés gardent code et migrations, mais
+# leurs routes et leurs tâches Beat sont retirées. Surcharge par variable
+# d'environnement : JANGUBI_MODULES=bible,liturgy,...
+JANGUBI_MODULES = env.list("JANGUBI_MODULES", default=list(V1_DEFAULT_MODULES))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "=ug_ucl@yi6^mrcjyz%(u0%&g2adt#bz3@yos%#@*t#t!ypx=a"
+# Clé de développement seulement : production.py exige SECRET_KEY dans l'environnement.
+# L'ancienne clé codée en dur est dans l'historique Git : ne jamais la réutiliser.
+SECRET_KEY = env("SECRET_KEY", default="dev-insecure-ne-pas-utiliser-en-production")
 
-CELERY_BEAT_SCHEDULE = {
-    "fetch_aelf_daily_readings": {
-        "task": "apps.bible.tasks.fetch_aelf_daily",
-        "schedule": crontab(hour=2, minute=0),
-    },
+_CELERY_BEAT_SCHEDULE_ALL = {
     "sync_aelf_liturgy_data_daily": {
         "task": "apps.liturgy.tasks.daily_sync",
         "schedule": crontab(hour=3, minute=0),
-    },
-    "purge_expired_admin_accounts": {
-        "task": "apps.users.tasks.purge_expired_unactivated_admin_accounts",
-        "schedule": crontab(hour=4, minute=0),
     },
     "purge_expired_conversations": {
         "task": "apps.messaging.tasks.purge_expired_conversations",
@@ -45,17 +45,95 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.messaging.tasks.notify_purge_upcoming",
         "schedule": crontab(hour=3, minute=30),
     },
+    "keycloak_staff_reconcile": {
+        "task": "apps.authentication.tasks.keycloak_staff_reconcile_task",
+        "schedule": crontab(hour=0, minute=45),
+    },
+    # Réconciliation Keycloak ↔ application (docs/ADMIN-KEYCLOAK.md) : écarts détectés et corrigés.
+    "keycloak_events_poll": {
+        "task": "apps.users.tasks.keycloak_events_poll_task",
+        "schedule": crontab(minute="*"),
+    },
+    "keycloak_accounts_reconcile": {
+        "task": "apps.users.tasks.keycloak_accounts_reconcile_task",
+        "schedule": crontab(minute=20),
+    },
+    "news_publish_scheduled": {
+        "task": "apps.news.tasks.articles_publish_due_task",
+        "schedule": crontab(minute="*/5"),
+    },
+    "confessions_slots_generate": {
+        "task": "apps.confessions.tasks.confession_slots_generate_task",
+        "schedule": crontab(minute=15, hour=2),
+    },
+    "confessions_reminders": {
+        "task": "apps.confessions.tasks.confession_reminders_task",
+        "schedule": crontab(minute="*/15"),
+    },
+    "agenda_event_reminders": {
+        "task": "apps.agenda.tasks.event_reminders_task",
+        "schedule": crontab(minute=0),
+    },
+    "hierarchy_assignments_sync": {
+        "task": "apps.hierarchy.tasks.assignments_sync_task",
+        "schedule": crontab(hour=0, minute=15),
+    },
+    "document_attachments_purge": {
+        "task": "apps.documents.tasks.document_attachments_purge_task",
+        "schedule": crontab(hour=2, minute=30),
+    },
+    "donations_reconcile": {
+        "task": "apps.donations.tasks.donations_reconcile_task",
+        "schedule": crontab(minute="*/10"),
+    },
+    "donations_payouts_sync": {
+        "task": "apps.donations.tasks.donations_payouts_sync_task",
+        "schedule": crontab(hour=5, minute=10),
+    },
+    "donations_month_close": {
+        "task": "apps.donations.tasks.donations_month_close_task",
+        "schedule": crontab(hour=3, minute=40),
+    },
+    "donations_donor_email_purge": {
+        "task": "apps.donations.tasks.donations_donor_email_purge_task",
+        "schedule": crontab(hour=4, minute=20),
+    },
+    "bible_reco_recompute": {
+        # « Pour vous aujourd'hui » (plan V2 §6), file dédiée `reco`.
+        "task": "apps.bible.tasks.bible_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=30),
+        "options": {"queue": "reco"},
+    },
+    # Sonothèque (plan suite V2, §5) : recommandations précalculées la nuit (file « reco »),
+    # partitions mensuelles des événements d'écoute créées d'avance et purgées après 13 mois.
+    "audio_reco_recompute": {
+        "task": "apps.audio.tasks.audio_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=5),
+    },
+    "audio_play_event_partitions": {
+        "task": "apps.audio.tasks.audio_play_event_partitions_task",
+        "schedule": crontab(day_of_month=1, hour=1, minute=10),
+    },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
         "schedule": crontab(hour=8, minute=0),
     },
 }
+CELERY_BEAT_SCHEDULE = filter_beat_schedule(_CELERY_BEAT_SCHEDULE_ALL, active=JANGUBI_MODULES)
 
 EMAIL_FROM_ADDRESS = env.str("EMAIL_FROM_ADDRESS", default="noreply@jangubi.sn")
 ADMIN_ACCOUNT_EXPIRY_DAYS = env.int("ADMIN_ACCOUNT_EXPIRY_DAYS", default=7)
 
+# Formulaire public « Pour les paroisses » (POST /api/v1/public/contact/) : destinataire
+# interne des demandes de présentation, et quota par adresse IP.
+CONTACT_EMAIL = env.str("CONTACT_EMAIL", default="contact@numerisen.sn")
+CONTACT_THROTTLE_RATE = env.str("CONTACT_THROTTLE_RATE", default="5/hour")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
+
+DJANGO_ADMIN_ENABLED = env.bool("DJANGO_ADMIN_ENABLED", default=True)
+DJANGO_ADMIN_URL = env.str("DJANGO_ADMIN_URL", default="admin/")
 
 ALLOWED_HOSTS = ["*"]
 
@@ -69,32 +147,30 @@ WS_ALLOWED_ORIGINS = env.list("WS_ALLOWED_ORIGINS", default=[])
 LOCAL_APPS = [
     "apps.core.apps.CoreConfig",
     "apps.common.apps.CommonConfig",
-    "apps.org.apps.OrgConfig",
+    "apps.hierarchy.apps.HierarchyConfig",
+    "apps.confessions.apps.ConfessionsConfig",
     "apps.tasks.apps.TasksConfig",
     "apps.api.apps.ApiConfig",
     "apps.authentication.apps.AuthenticationConfig",
     "apps.users.apps.UsersConfig",
-    "apps.errors.apps.ErrorsConfig",
-    #"apps.testing_examples.apps.TestingExamplesConfig",
     "apps.integrations.apps.IntegrationsConfig",
     "apps.files.apps.FilesConfig",
     "apps.emails.apps.EmailsConfig",
     "apps.bible.apps.BibleConfig",
     "apps.rosary.apps.RosaryConfig",
-    "apps.rag.apps.RagConfig",
     "apps.liturgy.apps.LiturgyConfig",
-    "apps.tv.apps.TvConfig",
     "apps.messaging.apps.MessagingConfig",
     "apps.documents.apps.DocumentsConfig",
     "apps.news.apps.NewsConfig",
-    "apps.clergy_accounts.apps.ClergyAccountsConfig",
     "apps.agenda.apps.AgendaConfig",
-    "apps.mass_intentions.apps.MassIntentionsConfig",
-    "apps.donations.apps.DonationsConfig",
     "apps.dashboards.apps.DashboardsConfig",
-    "apps.spiritual.apps.SpiritualConfig",
-    "apps.transfers.apps.TransfersConfig",
-    #"apps.blog_examples.apps.BlogExamplesConfig",
+    "apps.contact.apps.ContactConfig",
+    "apps.donations.apps.DonationsConfig",
+    "apps.invitations.apps.InvitationsConfig",
+    "apps.intentions.apps.IntentionsConfig",
+    "apps.search.apps.SearchConfig",
+    "apps.audio.apps.AudioConfig",
+    "apps.realtime.apps.RealtimeConfig",
 ]
 
 THIRD_PARTY_APPS = [
@@ -102,12 +178,12 @@ THIRD_PARTY_APPS = [
     "django_celery_results",
     "django_celery_beat",
     "django_filters",
+    "treebeard",
     "corsheaders",
     "django_extensions",
-    "rest_framework_simplejwt",
-    "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
     "channels",
+    "django_prometheus",
 ]
 
 INSTALLED_APPS = [
@@ -115,7 +191,6 @@ INSTALLED_APPS = [
     "django.contrib.admin",
     # If you want to have required 2FA for the Django admin
     # Uncomment the line below and comment out the default admin
-    # "apps.custom_admin.apps.CustomAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -128,6 +203,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Métriques Prometheus (/metrics, lot B2) : la première et la dernière couche mesurent tout.
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -135,8 +212,12 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.core.request_context.RequestContextMiddleware",
+    # Hors de la transaction ATOMIC_REQUESTS : le rattachement du compte survit à un 401/403.
+    "apps.authentication.middleware.KeycloakProvisioningMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -164,7 +245,16 @@ CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [env("REDIS_URL", default="redis://redis:6379/0")],
+            # Délai de socket explicite, supérieur à l'attente bloquante de channels_redis (5 s) :
+            # avec redis-py 8, le délai par défaut coupait chaque WebSocket au bout de 5 s
+            # (« Timeout reading from redis », fermeture 1011) — plus aucun temps réel.
+            "hosts": [
+                {
+                    "address": env("REDIS_URL", default="redis://redis:6379/0"),
+                    "socket_timeout": 15,
+                    "socket_connect_timeout": 5,
+                }
+            ],
             "capacity": 1500,
             "expiry": 10,
         },
@@ -186,17 +276,6 @@ DATABASES = {
     "default": env.db("DATABASE_URL", default="postgres:///apps"),
 }
 
-if os.environ.get("GITHUB_WORKFLOW"):
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": "github_actions",
-            "USER": "postgres",
-            "PASSWORD": "postgres",
-            "HOST": "127.0.0.1",
-            "PORT": "5432",
-        }
-    }
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
 
 # Password validation
@@ -224,7 +303,9 @@ AUTH_USER_MODEL = "users.BaseUser"
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+# Dakar = UTC+0 toute l'année (pas d'heure d'été) : même horloge que UTC, mais les
+# plages de silence des notifications et les dates affichées sont explicitement locales.
+TIME_ZONE = "Africa/Dakar"
 
 USE_I18N = True
 
@@ -248,9 +329,8 @@ REST_FRAMEWORK = {
     # retombe sur le défaut DRF (Session+Basic) et IGNORE le Bearer JWT — c'était
     # la cause du 401 systématique de la Liturgie des Heures côté SPA/mobile.
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'apps.authentication.authentication.JwtKeyEnforcingJWTAuthentication',
-        'apps.api.mixins.CsrfExemptedSessionAuthentication',
-        'apps.api.mixins.SessionAsHeaderAuthentication',
+        # Keycloak seul (ADR-004).
+        'apps.authentication.keycloak.KeycloakJWTAuthentication',
     ],
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_FILTER_BACKENDS': [
@@ -274,6 +354,7 @@ REST_FRAMEWORK = {
         'user': '240/min',
         'rag': '20/min',
         'login': env.str("LOGIN_THROTTLE_RATE", default="10/min"),
+        'register': env.str("REGISTER_THROTTLE_RATE", default="10/hour"),
     },
     # Nombre de proxys de confiance DEVANT l'application. Réglage de SÉCURITÉ,
     # pas de confort : sans lui, DRF laissé à `None` construit l'identité de
@@ -299,13 +380,30 @@ CACHES = {
         "LOCATION": env("REDIS_URL", default="redis://:root@127.0.0.1:6379/1"),
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "KEY_PREFIX": "guiss_talli",
+            # Préfixe propre à Jàngu Bi (l'ancien, « guiss_talli », venait d'un autre projet
+            # hébergé sur le même serveur : risque de collision de clés sur un Redis partagé).
+            "KEY_PREFIX": "jangubi",
         }
     }
 }
 
 APP_DOMAIN = env("APP_DOMAIN", default="http://localhost:8001")
-FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
+
+# Base des liens envoyés par email (vérification de compte, réinitialisation) —
+# cf. `_build_url` dans apps/users/services.py.
+#
+# ⚠️ Repli sur `BASE_FRONTEND_URL` (issu de DJANGO_BASE_FRONTEND_URL, défini par
+# l'infra pour le CORS) : ce sont DEUX variables distinctes pour la MÊME notion.
+# Le déploiement ne renseignait que la seconde, donc les liens d'activation
+# partaient vers `http://localhost:3000` — l'email arrivait, le lien était mort,
+# et le compte restait inactivable (audit beta 2026-07-20).
+# NB : on relit `DJANGO_BASE_FRONTEND_URL` depuis l'environnement plutôt que la
+# constante `BASE_FRONTEND_URL` — `config.settings.cors` n'est importé que plus
+# bas dans ce fichier, elle n'existe pas encore ici.
+FRONTEND_URL = env(
+    "FRONTEND_URL",
+    default=env.str("DJANGO_BASE_FRONTEND_URL", default="http://localhost:3000"),
+)
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 from config.settings.loggers.settings import *  # noqa
@@ -320,7 +418,12 @@ from config.settings.cors import *  # noqa
 from config.settings.email_sending import *  # noqa
 from config.settings.files_and_storages import *  # noqa
 #from config.settings.google_oauth2 import *  # noqa
-from config.settings.jwt import *  # noqa
+from config.settings.keycloak import *  # noqa
+from config.settings.parole import *  # noqa
+from config.settings.conformite import *  # noqa
+from config.settings.dons import *  # noqa
+from config.settings.audio import *  # noqa
+from config.settings.temps_reel import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
@@ -332,4 +435,4 @@ from config.settings.debug_toolbar.setup import DebugToolbarSetup  # noqa
 INSTALLED_APPS, MIDDLEWARE = DebugToolbarSetup.do_settings(INSTALLED_APPS, MIDDLEWARE)
 
 
-SHELL_PLUS_IMPORTS = ["from apps.blog_examples.print_qs_in_shell.utils import print_qs"]
+from config.settings.actes import *  # noqa

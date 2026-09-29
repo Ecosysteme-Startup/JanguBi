@@ -12,12 +12,6 @@ class Event(BaseModel):
         ORDINATION = "ordination", _("Ordination")
         OTHER = "other", _("Autre")
 
-    class ScopeType(models.TextChoices):
-        GLOBAL = "global", _("Mondial")
-        DIOCESE = "diocese", _("Diocèse")
-        PARISH = "parish", _("Paroisse")
-        CHURCH = "church", _("Église")
-
     title = models.CharField(_("titre"), max_length=200)
     description = models.TextField(_("description"), blank=True)
     event_type = models.CharField(
@@ -36,42 +30,27 @@ class Event(BaseModel):
         null=True,
         related_name="organized_events",
     )
-    scope_type = models.CharField(
-        _("portée"),
-        max_length=20,
-        choices=ScopeType.choices,
-        default=ScopeType.GLOBAL,
-        db_index=True,
-    )
-    # FK territoriales réelles (Chantier 3b — ex-placeholder scope_id IntegerField).
-    scope_diocese = models.ForeignKey(
-        "org.Diocese",
+    # --- Portée : un nœud, ou rien (global).
+    scope_node = models.ForeignKey(
+        "hierarchy.Node",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_events",
-        db_index=True,
-        verbose_name=_("diocèse de portée"),
+        on_delete=models.PROTECT,
+        related_name="events",
+        verbose_name=_("nœud de portée"),
     )
-    scope_parish = models.ForeignKey(
-        "org.Parish",
+    scope_place = models.ForeignKey(
+        "hierarchy.PlaceOfWorship",
         null=True,
         blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_events",
-        db_index=True,
-        verbose_name=_("paroisse de portée"),
+        on_delete=models.PROTECT,
+        related_name="events",
+        verbose_name=_("lieu de culte"),
     )
-    scope_church = models.ForeignKey(
-        "org.Church",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="scoped_events",
-        db_index=True,
-        verbose_name=_("église de portée"),
-    )
+    reminder_sent_at = models.DateTimeField(_("rappel envoyé le"), null=True, blank=True)
     max_participants = models.PositiveIntegerField(null=True, blank=True)
+    # Au-delà, plus d'inscription ni de modification (vide : jusqu'à la fin de l'événement).
+    registration_closes_at = models.DateTimeField(_("clôture des inscriptions"), null=True, blank=True)
 
     # Annulation DOUCE : un événement supprimé garde ses inscriptions (des fidèles
     # s'y sont engagés et sont prévenus par email) et sort simplement des feeds.
@@ -94,10 +73,7 @@ class Event(BaseModel):
         verbose_name = _("Événement")
         verbose_name_plural = _("Événements")
         indexes = [
-            models.Index(fields=["start_at", "scope_type"], name="event_start_scope_idx"),
-            models.Index(fields=["scope_type", "scope_parish"], name="event_parish_idx"),
-            models.Index(fields=["scope_type", "scope_diocese"], name="event_diocese_idx"),
-            models.Index(fields=["scope_type", "scope_church"], name="event_church_idx"),
+            models.Index(fields=["scope_node", "start_at"], name="event_node_start_idx"),
         ]
 
     @property
@@ -120,6 +96,11 @@ class EventRegistration(BaseModel):
         related_name="event_registrations",
     )
     registered_at = models.DateTimeField(auto_now_add=True)
+    # Places réservées par cette inscription (la personne et ceux qui l'accompagnent) :
+    # la jauge compte les places, pas les inscriptions.
+    seats = models.PositiveSmallIntegerField(_("nombre de personnes"), default=1, db_default=1)
+    # Lue par les organisateurs uniquement.
+    note = models.CharField(_("remarque"), max_length=300, blank=True, default="", db_default="")
 
     class Meta:
         unique_together = [["event", "user"]]
