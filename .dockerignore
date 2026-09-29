@@ -223,3 +223,7 @@ coverage.xml
 desktop.ini
 ehthumbs.db
 Thumbs.db
+
+# Configuration d'identité lue par l'infrastructure (make keycloak-extraire) :
+# les motifs *password* ci-dessus excluraient des pages du thème.
+!deploy/keycloak/**
