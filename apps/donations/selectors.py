@@ -265,6 +265,23 @@ def operation_get(*, donation_id: UUID | str) -> Donation:
     return donation
 
 
+def funds_for_mass(*, node: Node, mass_date: datetime.date) -> list[Fund]:
+    """Fonds proposés pour la saisie de la quête d'une messe : quêtes impérées qui couvrent cette messe
+    (messe anticipée comprise si le diocèse l'a décidé), puis les autres fonds ouverts à cette date."""
+    from apps.donations.services import imperee_covers  # la règle vit avec la saisie
+
+    funds = (
+        Fund.objects.filter(node=node, status=FundStatus.OUVERT)
+        .filter(Q(ends_on__isnull=True) | Q(ends_on__gte=mass_date - datetime.timedelta(days=1)))
+        .select_related("node", "image", "place")
+    )
+    imperees = [f for f in funds if f.kind == FundKind.QUETE_IMPEREE and imperee_covers(fund=f, mass_date=mass_date)]
+    others = [f for f in funds if f.kind != FundKind.QUETE_IMPEREE and (f.starts_on is None or f.starts_on <= mass_date)
+              and (f.ends_on is None or f.ends_on >= mass_date)]  # fmt: skip
+    others.sort(key=lambda f: (f.kind != FundKind.QUETE_DOMINICALE, alpha_key(f.title)))
+    return imperees + others
+
+
 def cash_collections_for_parish(*, node: Node, status: str | None = None) -> QuerySet[CashCollection]:
     qs = CashCollection.objects.filter(node=node).select_related(
         "fund", "place", "entered_by__profile", "validated_by__profile"
@@ -348,7 +365,8 @@ def export_rows(
 
 
 def donor_label(donation: Donation, *, with_names: bool) -> str:
-    """Nom affiché d'un donateur. Un don anonyme ne l'est jamais, même pour ``dons.voir_donateurs``."""
+    """Nom affiché d'un donateur. Un don anonyme reste « Anonyme » dans les listes ; seul le curé peut
+    consulter le nom, au cas par cas, avec un motif journalisé (``services.donor_reveal``)."""
     if donation.channel == DonationChannel.ESPECES:
         return "Quête en espèces"
     if donation.anonymous:

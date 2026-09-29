@@ -315,11 +315,14 @@ def imperee_create(
     parishes: list[Node] | None = None,
     authorization_ref: str = "",
     remit_by: datetime.date | None = None,
+    messe_anticipee_incluse: bool = False,
 ) -> Fund:
     """Quête impérée diocésaine, déclinée en un fonds par paroisse concernée (destination : curie).
 
     Sans liste de paroisses : toutes les paroisses du diocèse dont la collecte est activée.
-    Échéance de remise des espèces à la curie : ``remit_by``, par défaut sept jours après la quête."""
+    Échéance de remise des espèces à la curie : ``remit_by``, par défaut sept jours après la quête.
+    ``messe_anticipee_incluse`` : la quête de la messe anticipée de la veille au soir en fait partie
+    (décision du diocèse, quête par quête)."""
     access.require_diocese(actor, "dons.definir_quete_imperee", diocese)
     _check_period(starts_on, ends_on)
     remit_by = remit_by or (ends_on or starts_on) + datetime.timedelta(days=IMPEREE_REMIT_DAYS)
@@ -354,6 +357,7 @@ def imperee_create(
         "decided_by_office": office,
         "authorization_ref": authorization_ref,
         "remit_by": remit_by,
+        "messe_anticipee_incluse": messe_anticipee_incluse,
         "status": FundStatus.OUVERT,
         "published_at": timezone.now(),
     }
@@ -817,6 +821,48 @@ def payout_reconcile(*, payout: Payout) -> Payout:
     return payout
 
 
+def imperee_covers(*, fund: Fund, mass_date: datetime.date) -> bool:
+    """Une messe entre dans une quête impérée si elle tombe dans sa période, ou si c'est la messe
+    anticipée de la veille et que le diocèse l'a incluse."""
+    if fund.starts_on is None:
+        return True
+    last = fund.ends_on or fund.starts_on
+    if fund.starts_on <= mass_date <= last:
+        return True
+    return fund.messe_anticipee_incluse and mass_date == fund.starts_on - datetime.timedelta(days=1)
+
+
+# --- Anonymat partiel (décision de revue du 27/09/2026) --------------------------------------
+
+REVEAL_OFFICES = frozenset({"cure", "cure_in_solidum"})
+
+
+@transaction.atomic
+def donor_reveal(*, donation: Donation, actor: Any, reason: str) -> dict[str, Any]:
+    """Le curé consulte, en cas de besoin, le nom d'un donateur anonyme. Motif obligatoire ; chaque
+    consultation est journalisée (AuditEvent). Le nom reste masqué partout ailleurs."""
+    node = donation.fund.node
+    access.require_parish_level(actor, "dons.voir_donateurs", node)
+    if not any(
+        g.capability == "dons.voir_donateurs" and g.node_id == str(node.pk) and g.office in REVEAL_OFFICES
+        for g in authz.grants(actor)
+    ):
+        raise PermissionDeniedError("Réservé au curé de la paroisse.", code="dons_forbidden")
+    if donation.channel != DonationChannel.EN_LIGNE or not donation.anonymous:
+        raise ApplicationError("Ce don n'est pas anonyme.", code="not_anonymous")
+    motif = " ".join(reason.split())
+    if len(motif) < 10:
+        raise ApplicationError("Indiquez le motif de la consultation (10 caractères au moins).", code="reason_required")
+    audit_log(actor=actor, action="dons.anonymat_consultation", target=donation, node=node,
+              metadata={"reference": donation.reference, "motif": motif[:300]})  # fmt: skip
+    name = None
+    if donation.donor_id is not None:
+        profile = getattr(donation.donor, "profile", None)
+        name = f"{getattr(profile, 'first_name', '')} {getattr(profile, 'last_name', '')}".strip() or None
+    return {"donation_id": donation.pk, "reference": donation.reference, "donateur": name,
+            "sans_compte": donation.donor_id is None}  # fmt: skip
+
+
 # --- Clôture mensuelle : verrou -------------------------------------------------------------
 
 
@@ -857,6 +903,11 @@ def cash_collection_create(
     if mass_date > timezone.localdate():
         raise ApplicationError("La messe ne peut pas être à venir.", code="future_mass")
     month_open_check(node=node, day=mass_date)
+    if fund.kind == FundKind.QUETE_IMPEREE and not imperee_covers(fund=fund, mass_date=mass_date):
+        raise ApplicationError(
+            "Cette messe n'entre pas dans la quête impérée.", {"messe_anticipee_incluse": fund.messe_anticipee_incluse},
+            code="mass_outside_imperee",
+        )  # fmt: skip
     one, two = counter_one.strip(), counter_two.strip()
     if not one or not two or one.casefold() == two.casefold():
         raise ApplicationError("La quête est comptée par deux personnes distinctes.", code="two_counters_required")

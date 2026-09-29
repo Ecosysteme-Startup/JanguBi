@@ -87,6 +87,8 @@ class Fund(BaseModel):
     image = models.ForeignKey("files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     # Quête impérée : échéance de la remise des espèces à la curie (ex. le dimanche suivant).
     remit_by = models.DateField(_("à remettre à la curie avant le"), null=True, blank=True)
+    # Quête impérée : la messe anticipée du samedi soir compte-t-elle ? Décidé par le diocèse, quête par quête.
+    messe_anticipee_incluse = models.BooleanField(_("messe anticipée incluse"), default=False)
     # Lieu de culte propre au fonds (campagne de la chapelle) : repris sur les dons en ligne.
     place = models.ForeignKey(
         "hierarchy.PlaceOfWorship", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"

@@ -157,10 +157,12 @@ def build(world: Any) -> SimpleNamespace:
     parent = Fund.objects.create(
         node=dakar, kind=FundKind.QUETE_IMPEREE, destination=FundDestination.CURIE, status=FundStatus.OUVERT,
         title="Quête impérée · Grand Séminaire de Brin", starts_on=SUNDAYS[27], remit_by=datetime.date(2026, 10, 4),
+        messe_anticipee_incluse=True,
     )  # fmt: skip
     funds["imp"] = Fund.objects.create(
         node=sd, parent=parent, kind=FundKind.QUETE_IMPEREE, destination=FundDestination.CURIE,
         status=FundStatus.OUVERT, title=parent.title, starts_on=parent.starts_on, remit_by=parent.remit_by,
+        messe_anticipee_incluse=True,
     )  # fmt: skip
 
     # Dons en ligne confirmés.

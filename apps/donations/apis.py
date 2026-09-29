@@ -30,6 +30,7 @@ from apps.donations import (
     services_tresorerie,
 )
 from apps.donations.enums import DonationStatus
+from apps.donations.models import Fund
 from apps.donations.providers import known_provider
 from apps.donations.serializers import (
     ActivationInputSerializer,
@@ -45,6 +46,8 @@ from apps.donations.serializers import (
     CheckoutInputSerializer,
     CheckoutOutputSerializer,
     DonationStatusSerializer,
+    DonorRevealInputSerializer,
+    DonorRevealSerializer,
     DonorSummarySerializer,
     ExportQuerySerializer,
     FundCreateInputSerializer,
@@ -58,6 +61,7 @@ from apps.donations.serializers import (
     ImpereeSerializer,
     IncidentFilterSerializer,
     IncidentResolveInputSerializer,
+    MassFundsQuerySerializer,
     MonthClosingInputSerializer,
     MonthClosingSerializer,
     MonthQuerySerializer,
@@ -488,6 +492,39 @@ class CashCollectionListCreateApi(_StaffApi):
         place = _place_or_none(data.pop("place_id"))
         collection = services.cash_collection_create(actor=request.user, node=node, fund=fund, place=place, **data)
         return Response(CashCollectionSerializer(collection).data, status=status.HTTP_201_CREATED)
+
+
+class MassFundsApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_cash_funds",
+        summary="Fonds proposés pour la quête d'une messe (quête impérée d'abord, messe anticipée selon le diocèse)",
+        parameters=[MassFundsQuerySerializer],
+        responses=StaffFundSerializer(many=True),
+    )
+    def get(self, request: Request) -> Response:
+        filters = _query(MassFundsQuerySerializer, request)
+        node = _parish(filters["node"])
+        access.require_parish_level(request.user, "dons.saisir_quete", node)
+        funds = selectors.funds_for_mass(node=node, mass_date=filters["date"])
+        with_totals = {f.pk: f for f in selectors.funds_with_totals(Fund.objects.filter(pk__in=[f.pk for f in funds]))}
+        return Response(StaffFundSerializer([with_totals[f.pk] for f in funds], many=True).data)
+
+
+class DonorRevealApi(_StaffApi):
+    @extend_schema(
+        tags=TAG,
+        operation_id="staff_dons_donor_reveal",
+        summary="Consulter le nom d'un donateur anonyme (curé seulement, motif obligatoire, journalisé)",
+        request=DonorRevealInputSerializer,
+        responses=DonorRevealSerializer,
+    )
+    def post(self, request: Request, donation_id: str) -> Response:
+        data = _body(DonorRevealInputSerializer, request)
+        result = services.donor_reveal(
+            donation=selectors.operation_get(donation_id=donation_id), actor=request.user, reason=data["motif"]
+        )
+        return Response(DonorRevealSerializer(result).data)
 
 
 class CashCollectionValidateApi(_StaffApi):

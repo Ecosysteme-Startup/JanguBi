@@ -181,6 +181,24 @@ class ImpereeCreateInputSerializer(serializers.Serializer):
         required=False, allow_null=True, default=None,
         help_text="Échéance de remise des espèces à la curie (défaut : sept jours après la quête)",
     )  # fmt: skip
+    messe_anticipee_incluse = serializers.BooleanField(
+        default=False, help_text="La quête de la messe anticipée de la veille au soir fait partie de la quête impérée"
+    )
+
+
+class MassFundsQuerySerializer(NodeQuerySerializer):
+    date = serializers.DateField(help_text="Date de la messe")
+
+
+class DonorRevealInputSerializer(serializers.Serializer):
+    motif = serializers.CharField(min_length=10, max_length=300, help_text="Obligatoire, journalisé")
+
+
+class DonorRevealSerializer(serializers.Serializer):
+    donation_id = serializers.UUIDField()
+    reference = serializers.CharField()
+    donateur = serializers.CharField(allow_null=True, help_text="null : don sans compte (aucun nom connu)")
+    sans_compte = serializers.BooleanField()
 
 
 class CashDepositInputSerializer(serializers.Serializer):
@@ -265,7 +283,7 @@ class PublicFundSerializer(serializers.ModelSerializer):
     class Meta:
         model = Fund
         fields = ["id", "kind", "destination", "title", "description", "starts_on", "ends_on", "goal_amount",
-                  "raised", "status", "image_url", "place"]  # fmt: skip
+                  "raised", "status", "image_url", "place", "messe_anticipee_incluse"]  # fmt: skip
 
     def get_image_url(self, obj: Fund) -> str | None:
         return obj.image.url if obj.image and obj.image.is_valid else None
@@ -501,7 +519,8 @@ class ImpereeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Fund
-        fields = ["id", "title", "description", "starts_on", "ends_on", "remit_by", "status", "authorization_ref",
+        fields = ["id", "title", "description", "starts_on", "ends_on", "remit_by", "messe_anticipee_incluse", "status",
+                  "authorization_ref",
                   "decided_by_office", "raised", "parishes_count", "created_at"]  # fmt: skip
 
 

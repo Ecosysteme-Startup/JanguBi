@@ -552,7 +552,7 @@ def _quetes_imperees(scope_nodes: Q, period: Period) -> list[dict[str, Any]]:
             continue
         group = groups.setdefault(parent.pk, {
             "fonds_id": parent.pk, "titre": parent.title, "date": parent.starts_on, "echeance": parent.remit_by,
-            "messe_anticipee_incluse": getattr(parent, "messe_anticipee_incluse", False), "paroisses": [],
+            "messe_anticipee_incluse": parent.messe_anticipee_incluse, "paroisses": [],
         })  # fmt: skip
         total = row["en_ligne"] + row["especes"]
         group["paroisses"].append({
