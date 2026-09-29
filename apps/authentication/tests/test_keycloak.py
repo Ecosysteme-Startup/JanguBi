@@ -605,3 +605,27 @@ def test_realm_declares_the_mobile_client_as_public_pkce_with_an_exact_redirect(
     audience = [m for m in client["protocolMappers"] if m["protocolMapper"] == "oidc-audience-mapper"]
     assert audience[0]["config"]["included.client.audience"] == "jangubi-api"
     assert any(m["protocolMapper"] == "oidc-amr-mapper" for m in client["protocolMappers"])
+
+
+def test_realm_declares_the_web_client_with_exact_redirects_and_logout():
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    client = next(c for c in realm["clients"] if c["clientId"] == "jangubi-web")
+    assert client["publicClient"] and client["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert client["redirectUris"] == [
+        "${KC_WEB_REDIRECT_URI:http://localhost:3000/auth/callback}",
+        "${KC_WEB_LEGACY_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}",
+    ]
+    assert all("*" not in uri for uri in client["redirectUris"])
+    assert client["attributes"]["post.logout.redirect.uris"] == "${KC_WEB_POST_LOGOUT_URI:http://localhost:3000/}"
+    assert client["webOrigins"] == ["${KC_WEB_ORIGIN:http://localhost:3000}"]
+
+
+def test_cors_allows_the_last_event_id_header():
+    from django.conf import settings
+
+    assert "last-event-id" in settings.CORS_ALLOW_HEADERS

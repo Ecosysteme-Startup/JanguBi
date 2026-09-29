@@ -39,4 +39,6 @@ CORS_ALLOW_HEADERS = (
     "x-csrftoken",
     "x-requested-with",
     "x-auth-transport",
+    # Reprise des flux SSE (dons) avec @microsoft/fetch-event-source (docs/TEMPS-REEL.md §3.4).
+    "last-event-id",
 )

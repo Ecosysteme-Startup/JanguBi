@@ -87,7 +87,8 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "redirectUris": [
-        "${KC_WEB_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}"
+        "${KC_WEB_REDIRECT_URI:http://localhost:3000/auth/callback}",
+        "${KC_WEB_LEGACY_REDIRECT_URI:http://localhost:3000/api/auth/callback/keycloak}"
       ],
       "webOrigins": [
         "${KC_WEB_ORIGIN:http://localhost:3000}"
