@@ -19,6 +19,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
     from django.db.models import Prefetch
 
     from apps.agenda.models import EventRegistration
+    from apps.bible.selectors import parole_personal_data
     from apps.confessions.models import ConfessionBooking
     from apps.documents.models import DocumentRequest
     from apps.messaging.models import Conversation, Message, NotificationPreference
@@ -80,6 +81,7 @@ def personal_data_export(*, user: Any) -> dict[str, Any]:
             {"event": r.event.title, "start_at": _iso(r.event.start_at), "registered_at": _iso(r.registered_at)}
             for r in EventRegistration.objects.filter(user=user).select_related("event")
         ],
+        "parole": parole_personal_data(user=user),
         "conversations": [
             {
                 "id": str(c.pk),

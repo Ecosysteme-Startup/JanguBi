@@ -85,6 +85,12 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.donations.tasks.donations_donor_email_purge_task",
         "schedule": crontab(hour=4, minute=20),
     },
+    "bible_reco_recompute": {
+        # « Pour vous aujourd'hui » (plan V2 §6), file dédiée `reco`.
+        "task": "apps.bible.tasks.bible_reco_recompute_task",
+        "schedule": crontab(hour=3, minute=30),
+        "options": {"queue": "reco"},
+    },
     "document_requests_auto_escalate": {
         "task": "apps.documents.tasks.document_requests_auto_escalate",
         "schedule": crontab(hour=8, minute=0),
