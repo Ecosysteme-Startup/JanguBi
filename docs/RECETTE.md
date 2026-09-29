@@ -75,6 +75,15 @@ set -a; . ./.env.staging; set +a
 bash infra/keycloak/seed-demo-users.sh
 ```
 
+### Données de test réalistes
+
+Pour une recette peuplée (12 paroisses, 5 000 fidèles, dons sur douze mois, sonothèque encodée par le vrai
+pipeline, écoutes et recommandations) : `make seed-recette` (détails : `docs/DONNEES-DE-TEST.md`). Les médias
+libres sont rangés une fois dans le bucket MinIO `seed-assets` (`fetch_seed_assets --profil recette`) ; les
+comptes Keycloak des personas sont créés avec le mot de passe commun de recette `KC_DEMO_PASSWORD`
+(`.env.staging`). Remise à zéro **manuelle uniquement** : `make seed-recette-reset`. Trafic simulé pour voir
+bouger le SSE : `make seed-recette-trafic`.
+
 Optionnel : Bible, Rosaire et liturgie du jour (`import_bible`, `seed_rosary`, `import_aelf`),
 mêmes commandes que la cible `init-data` du `Makefile`, avec `docker compose exec django …`.
 

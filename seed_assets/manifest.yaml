@@ -1,0 +1,60 @@
+# Manifeste des médias de test (plan des données de test §5). AUCUN binaire dans Git : seulement ce fichier.
+# `python manage.py fetch_seed_assets` télécharge chaque fichier une fois, vérifie son sha256 et le range dans le
+# cache local (~/.cache/jangubi-seed/) ou, en recette (--profil recette), dans le bucket MinIO « seed-assets ».
+#
+# Règle : domaine public, CC0, CC BY ou CC BY-SA uniquement (pas de NC ni de ND) ; l'attribution est reprise
+# dans les crédits de la piste. Les photos Unsplash (licence Unsplash) servent de pochettes, comme dans l'app.
+#
+# sha256 vide : empreinte à épingler au premier téléchargement (`fetch_seed_assets --epingler` réécrit ce
+# fichier). Ces entrées reprennent les médias déjà utilisés par les maquettes de l'app (mocks audio mobile).
+#
+# Champs : id, url, licence, auteur, attribution, usage (chant | orgue | pochette), titre, sha256, duree (s).
+fichiers:
+  - id: ave-maria-schola-gregoriana
+    url: https://upload.wikimedia.org/wikipedia/commons/transcoded/2/23/Schola_Gregoriana-Ave_Maria.ogg/Schola_Gregoriana-Ave_Maria.ogg.mp3
+    licence: CC BY-SA 3.0
+    auteur: Schola Gregoriana (Fundacja Caecilianum & WSD SAC)
+    attribution: "« Ave Maria », Schola Gregoriana (Fundacja Caecilianum & WSD SAC), CC BY-SA 3.0, via Wikimedia Commons"
+    usage: chant
+    titre: Ave Maria (grégorien)
+    sha256:
+  - id: salve-regina-petits-chanteurs-passy
+    url: https://upload.wikimedia.org/wikipedia/commons/transcoded/4/46/Petits_Chanteurs_de_Passy_-_Salve_Regina_de_Hermann_Contract.ogg/Petits_Chanteurs_de_Passy_-_Salve_Regina_de_Hermann_Contract.ogg.mp3
+    licence: CC BY-SA 3.0
+    auteur: Les Petits Chanteurs de Passy
+    attribution: "« Salve Regina » (Hermann Contract), Les Petits Chanteurs de Passy, CC BY-SA 3.0, via Wikimedia Commons"
+    usage: chant
+    titre: Salve Regina
+    sha256:
+  - id: ave-maria-in-due-usaf-band
+    url: https://upload.wikimedia.org/wikipedia/commons/3/3a/Ave_Maria_in_Due_-_Concert_Band_-_United_States_Air_Force_Heritage_of_America_Band.mp3
+    licence: Domaine public
+    auteur: U.S. Air Force Heritage of America Band
+    attribution: "« Ave Maria in Due », U.S. Air Force Heritage of America Band, domaine public, via Wikimedia Commons"
+    usage: orgue
+    titre: Ave Maria in Due
+    sha256:
+  - id: pochette-bancs
+    url: https://images.unsplash.com/photo-1725654020255-6d98526b01c8?w=800&q=70&fm=jpg&fit=crop
+    fichier: pochette-bancs.jpg
+    licence: Licence Unsplash
+    auteur: Drew Dempsey
+    attribution: "Photo : Drew Dempsey (Unsplash)"
+    usage: pochette
+    sha256:
+  - id: pochette-chapelet
+    url: https://images.unsplash.com/photo-1762894110127-87fee1d11a57?w=800&q=70&fm=jpg&fit=crop
+    fichier: pochette-chapelet.jpg
+    licence: Licence Unsplash
+    auteur: Christian Harb
+    attribution: "Photo : Christian Harb (Unsplash)"
+    usage: pochette
+    sha256:
+  - id: pochette-vitrail
+    url: https://images.unsplash.com/photo-1691036073374-b638e4c285f1?w=800&q=70&fm=jpg&fit=crop
+    fichier: pochette-vitrail.jpg
+    licence: Licence Unsplash
+    auteur: Jacob Bentzinger
+    attribution: "Photo : Jacob Bentzinger (Unsplash)"
+    usage: pochette
+    sha256:

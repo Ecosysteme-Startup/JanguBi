@@ -7,6 +7,7 @@ export
 	   down-v rebuild dev-deps \
        flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-hierarchy seed-demo seed-reset \
+       seed-realiste seed-realiste-reset seed-charge fetch-seed-assets seed-recette seed-recette-reset seed-recette-trafic \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
 	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
@@ -182,6 +183,39 @@ seed: seed-hierarchy seed-demo
 	@echo "==========================================================="
 	@echo "   Seed termine (référentiel + démonstration sur la paroisse pilote)"
 	@echo "==========================================================="
+
+# ==============================================================================
+# DONNÉES DE TEST RÉALISTES (docs/DONNEES-DE-TEST.md) — jamais en production
+# ==============================================================================
+# Options supplémentaires : make seed-realiste SEED_ARGS="--graine 7 --medias-dossier /chemin/album --bible-json …"
+SEED_ARGS ?=
+STAGING = docker compose -f docker-compose.staging.yml --env-file .env.staging
+
+# Local : échelle petite, médias légers, vérification des invariants (< 1 min).
+seed-realiste:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier $(SEED_ARGS)
+
+seed-realiste-reset:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --reset $(SEED_ARGS)
+
+# Tests de charge : échelle grande (COPY en masse), sans fichiers audio.
+seed-charge:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier $(SEED_ARGS)
+
+fetch-seed-assets:
+	docker compose exec django python manage.py fetch_seed_assets
+
+# Recette : médias du manifeste dans le bucket MinIO « seed-assets », échelle moyenne, médias complets
+# (vrai pipeline d'encodage sur la file media). Remise à zéro MANUELLE uniquement (seed-recette-reset).
+seed-recette:
+	$(STAGING) exec django python manage.py fetch_seed_assets --profil recette
+	$(STAGING) exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil recette --echelle moyenne --medias complets --verifier $(SEED_ARGS)
+
+seed-recette-reset:
+	$(STAGING) exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil recette --reset $(SEED_ARGS)
+
+seed-recette-trafic:
+	$(STAGING) exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil recette --modules socle --simuler-trafic 10min $(SEED_ARGS)
 
 # Le référentiel (types, province, diocèses, doyennés, paroisse pilote) fait partie de
 # l'initialisation : sans lui, personne ne peut choisir sa paroisse. Idempotent.
