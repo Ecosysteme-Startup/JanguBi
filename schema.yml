@@ -4149,6 +4149,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/Activation'
           description: ''
+  /api/v1/platform/dons/activite/:
+    get:
+      operationId: platform_dons_activity
+      description: À placer en premier dans les bases des vues V1.
+      summary: 'Activité des paiements : nombres, taux, délais, incidents — aucun
+        montant (docs/API-DONS-ANALYSE.md)'
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          default: ''
+        description: Comme pour l'analyse
+      - in: query
+        name: periode
+        schema:
+          enum:
+          - semaine
+          - mois
+          - trimestre
+          - annee
+          type: string
+          default: mois
+          minLength: 1
+        description: |-
+          * `semaine` - Semaine ISO (paroisse)
+          * `mois` - Mois
+          * `trimestre` - Trimestre
+          * `annee` - Année
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Activite'
+          description: ''
   /api/v1/platform/dons/sante/:
     get:
       operationId: platform_dons_health
@@ -5561,6 +5601,245 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatsOutput'
           description: ''
+  /api/v1/staff/dons/ajustements/:
+    get:
+      operationId: staff_dons_adjustments_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Écritures d'ajustement (remboursements, corrections de mois clos)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAdjustmentList'
+          description: ''
+    post:
+      operationId: staff_dons_adjustments_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Passer une écriture de correction (datée du jour, motif obligatoire)
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AdjustmentInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AdjustmentInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Adjustment'
+          description: ''
+  /api/v1/staff/dons/analyse/:
+    get:
+      operationId: staff_dons_analysis
+      description: 'niveau=paroisse : `dons.voir_fonds` par une nomination sur la
+        paroisse même, montants exacts. niveau=diocese : `dons.voir_agregats` sur
+        le diocèse ou le doyenné, montants arrondis au millier. Aucun nom de donateur
+        ; paroisses en ordre alphabétique ; aucun tri par montant ; « à traiter »
+        trié par échéance croissante.'
+      summary: 'Analyse des dons : synthèse, tendance, à traiter (contrat : docs/API-DONS-ANALYSE.md)'
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          default: ''
+        description: 'mois : AAAA-MM · trimestre : AAAA-Tn · annee : AAAA · semaine
+          : AAAA-Www. Défaut : période en cours.'
+      - in: query
+        name: niveau
+        schema:
+          enum:
+          - paroisse
+          - diocese
+          type: string
+          minLength: 1
+        description: |-
+          * `paroisse` - Paroisse (montants exacts)
+          * `diocese` - Diocèse ou doyenné (agrégats arrondis)
+        required: true
+      - in: query
+        name: noeud
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (niveau=paroisse) ; diocèse ou doyenné (niveau=diocese)
+        required: true
+      - in: query
+        name: periode
+        schema:
+          enum:
+          - semaine
+          - mois
+          - trimestre
+          - annee
+          type: string
+          default: mois
+          minLength: 1
+        description: |-
+          * `semaine` - Semaine ISO (paroisse)
+          * `mois` - Mois
+          * `trimestre` - Trimestre
+          * `annee` - Année
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Analyse'
+          description: ''
+  /api/v1/staff/dons/clotures/:
+    get:
+      operationId: staff_dons_closings_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Mois clos d'une paroisse
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonthClosing'
+          description: ''
+    post:
+      operationId: staff_dons_closings_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Clore un mois écoulé (totaux figés ; plus aucune quête ne s'y saisit)
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonthClosingInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MonthClosingInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MonthClosingInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthClosing'
+          description: ''
+  /api/v1/staff/dons/depots/:
+    get:
+      operationId: staff_dons_deposits_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Dépôts en banque des espèces d'une paroisse
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCashDepositList'
+          description: ''
+    post:
+      operationId: staff_dons_deposits_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Déclarer le dépôt en banque de quêtes validées (montant = somme des
+        quêtes)
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashDepositInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CashDepositInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CashDepositInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashDeposit'
+          description: ''
   /api/v1/staff/dons/export/:
     get:
       operationId: staff_dons_export
@@ -5836,6 +6115,79 @@ paths:
               schema:
                 $ref: '#/components/schemas/StaffFund'
           description: ''
+  /api/v1/staff/dons/incidents/:
+    get:
+      operationId: staff_dons_incidents_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Incidents de paiement (paiements tardifs, montants incohérents) d'une
+        paroisse
+      parameters:
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      - in: query
+        name: status
+        schema:
+          enum:
+          - ouvert
+          - resolu
+          type: string
+          minLength: 1
+        description: |-
+          * `ouvert` - À régulariser
+          * `resolu` - Régularisé
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentIncident'
+          description: ''
+  /api/v1/staff/dons/incidents/{incident_id}/regulariser/:
+    post:
+      operationId: staff_dons_incidents_resolve
+      description: À placer en premier dans les bases des vues V1.
+      summary: Régulariser un incident (intégrer le paiement tardif, remboursé, sans
+        suite)
+      parameters:
+      - in: path
+        name: incident_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IncidentResolveInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentIncident'
+          description: ''
   /api/v1/staff/dons/operations/:
     get:
       operationId: staff_dons_operations
@@ -5915,6 +6267,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedOperationList'
+          description: ''
+  /api/v1/staff/dons/operations/{donation_id}/donateur/:
+    post:
+      operationId: staff_dons_donor_reveal
+      description: À placer en premier dans les bases des vues V1.
+      summary: Consulter le nom d'un donateur anonyme (curé seulement, motif obligatoire,
+        journalisé)
+      parameters:
+      - in: path
+        name: donation_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DonorRevealInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DonorRevealInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DonorRevealInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DonorReveal'
           description: ''
   /api/v1/staff/dons/operations/{donation_id}/rembourser/:
     post:
@@ -6158,6 +6546,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/CashCollection'
           description: ''
+  /api/v1/staff/dons/quetes/fonds-proposes/:
+    get:
+      operationId: staff_dons_cash_funds
+      description: À placer en premier dans les bases des vues V1.
+      summary: Fonds proposés pour la quête d'une messe (quête impérée d'abord, messe
+        anticipée selon le diocèse)
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+          format: date
+        description: Date de la messe
+        required: true
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StaffFund'
+          description: ''
   /api/v1/staff/dons/rapprochement/:
     get:
       operationId: staff_dons_reconciliation
@@ -6193,6 +6615,137 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Reconciliation'
+          description: ''
+  /api/v1/staff/dons/remises-curie/:
+    get:
+      operationId: staff_dons_remittances_list
+      description: À placer en premier dans les bases des vues V1.
+      summary: Remises à la curie des espèces de quête impérée (d'une paroisse, ou
+        de tout le diocèse)
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+        description: Nombre de résultats (défaut 10, max 50)
+      - in: query
+        name: node
+        schema:
+          type: string
+          format: uuid
+        description: Paroisse (ou diocèse pour les quêtes impérées)
+        required: true
+      - in: query
+        name: offset
+        schema:
+          type: integer
+        description: Décalage
+      - in: query
+        name: status
+        schema:
+          enum:
+          - declaree
+          - confirmee
+          - contestee
+          type: string
+          minLength: 1
+        description: |-
+          * `declaree` - Déclarée par la paroisse
+          * `confirmee` - Réception confirmée par la curie
+          * `contestee` - Contestée par la curie
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRemittanceList'
+          description: ''
+    post:
+      operationId: staff_dons_remittances_create
+      description: À placer en premier dans les bases des vues V1.
+      summary: Déclarer une remise à la curie (espèces d'une quête impérée)
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemittanceInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RemittanceInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RemittanceInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Remittance'
+          description: ''
+  /api/v1/staff/dons/remises-curie/{remittance_id}/confirmer/:
+    post:
+      operationId: staff_dons_remittances_confirm
+      description: À placer en premier dans les bases des vues V1.
+      summary: Confirmer la réception d'une remise (curie, autre personne que la déclaration)
+      parameters:
+      - in: path
+        name: remittance_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - dons
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Remittance'
+          description: ''
+  /api/v1/staff/dons/remises-curie/{remittance_id}/contester/:
+    post:
+      operationId: staff_dons_remittances_contest
+      description: À placer en premier dans les bases des vues V1.
+      summary: Contester une remise (motif obligatoire)
+      parameters:
+      - in: path
+        name: remittance_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - dons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashRejectInput'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CashRejectInput'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CashRejectInput'
+        required: true
+      security:
+      - keycloakBearer: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Remittance'
           description: ''
   /api/v1/staff/dons/reversements/:
     get:
@@ -6550,6 +7103,61 @@ paths:
           description: ''
 components:
   schemas:
+    ATraiter:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/ATraiterTypeEnum'
+        echeance:
+          type: string
+          format: date
+          description: Tri croissant ; la plus proche en premier
+        libelle:
+          type: string
+        nombre:
+          type: integer
+        montant:
+          type: integer
+          nullable: true
+        depuis:
+          type: string
+          format: date-time
+          nullable: true
+        paroisse:
+          allOf:
+          - $ref: '#/components/schemas/ParoisseBrief'
+          nullable: true
+        objet_id:
+          type: string
+          nullable: true
+          description: Quête, fonds, remise ou incident concerné
+      required:
+      - depuis
+      - echeance
+      - libelle
+      - montant
+      - nombre
+      - objet_id
+      - paroisse
+      - type
+    ATraiterTypeEnum:
+      enum:
+      - quete_a_confirmer
+      - paiements_en_attente
+      - paiement_tardif
+      - especes_a_deposer
+      - remise_curie
+      - remise_a_confirmer
+      - cloture_mois
+      type: string
+      description: |-
+        * `quete_a_confirmer` - Quête en espèces à confirmer (second compteur) — échéance : messe + 48 h
+        * `paiements_en_attente` - Paiements en ligne en attente — échéance : expiration du plus ancien
+        * `paiement_tardif` - Paiement tardif à régulariser — échéance : détection + 7 jours
+        * `especes_a_deposer` - Espèces validées à déposer en banque — échéance : plus ancienne messe + 7 jours
+        * `remise_curie` - Espèces de quête impérée à remettre à la curie — échéance : Fund.remit_by
+        * `remise_a_confirmer` - Remise à la curie à confirmer (diocèse) — échéance : remise + 7 jours
+        * `cloture_mois` - Mois à clore — échéance : jour DONATIONS_MONTH_CLOSE_DAY du mois suivant
     AccountDetailOutput:
       type: object
       properties:
@@ -6785,6 +7393,468 @@ components:
       required:
       - enabled
       - node
+    Activite:
+      type: object
+      properties:
+        periode:
+          $ref: '#/components/schemas/Periode'
+        genere_le:
+          type: string
+          format: date-time
+        paiements:
+          $ref: '#/components/schemas/ActivitePaiements'
+        delais:
+          $ref: '#/components/schemas/ActiviteDelais'
+        par_jour:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteJour'
+        par_moyen:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteMoyen'
+        par_source:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteSource'
+        par_paroisse:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteParoisse'
+          description: Paroisses engagées, ordre alphabétique
+        notifications:
+          $ref: '#/components/schemas/ActiviteNotifications'
+        charge:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteCharge'
+          description: Carte jour × heure des paiements lancés (cases non nulles)
+        incidents:
+          $ref: '#/components/schemas/ActiviteIncidents'
+        reversements:
+          $ref: '#/components/schemas/ActiviteReversements'
+      required:
+      - charge
+      - delais
+      - genere_le
+      - incidents
+      - notifications
+      - paiements
+      - par_jour
+      - par_moyen
+      - par_paroisse
+      - par_source
+      - periode
+      - reversements
+    ActiviteCharge:
+      type: object
+      properties:
+        jour_semaine:
+          type: integer
+          description: 1 = lundi … 7 = dimanche
+        heure:
+          type: integer
+          description: 0 à 23, heure de Dakar
+        nombre:
+          type: integer
+      required:
+      - heure
+      - jour_semaine
+      - nombre
+    ActiviteDelais:
+      type: object
+      properties:
+        confirmation_mediane_s:
+          type: integer
+          nullable: true
+        confirmation_p95_s:
+          type: integer
+          nullable: true
+        reversement_moyen_jours:
+          type: integer
+          nullable: true
+        reversement_median_jours:
+          type: integer
+          nullable: true
+        echantillon_confirmation:
+          type: integer
+      required:
+      - confirmation_mediane_s
+      - confirmation_p95_s
+      - echantillon_confirmation
+      - reversement_median_jours
+      - reversement_moyen_jours
+    ActiviteIncident:
+      type: object
+      properties:
+        type:
+          type: string
+          description: late_payment, amount_mismatch, invalid_signature, unknown_reference…
+        reference:
+          type: string
+          description: Référence du paiement, jamais de montant
+        paroisse:
+          type: string
+          nullable: true
+        detecte_le:
+          type: string
+          format: date-time
+        statut:
+          type: string
+      required:
+      - detecte_le
+      - paroisse
+      - reference
+      - statut
+      - type
+    ActiviteIncidents:
+      type: object
+      properties:
+        ouverts:
+          type: integer
+        par_type:
+          type: object
+          additionalProperties:
+            type: integer
+        liste:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActiviteIncident'
+          description: Vingt plus récents
+      required:
+      - liste
+      - ouverts
+      - par_type
+    ActiviteJour:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        lances:
+          type: integer
+        confirmes:
+          type: integer
+        en_attente:
+          type: integer
+        echoues:
+          type: integer
+        expires:
+          type: integer
+      required:
+      - confirmes
+      - date
+      - echoues
+      - en_attente
+      - expires
+      - lances
+    ActiviteMoyen:
+      type: object
+      properties:
+        moyen:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        libelle:
+          type: string
+        confirmes:
+          type: integer
+        echecs:
+          type: integer
+          description: Le moyen n'est souvent connu qu'à la confirmation
+        taux_echec:
+          type: integer
+          nullable: true
+      required:
+      - confirmes
+      - echecs
+      - libelle
+      - moyen
+      - taux_echec
+    ActiviteNotifications:
+      type: object
+      properties:
+        recues:
+          type: integer
+        traitees:
+          type: integer
+        doublons:
+          type: integer
+        rejetees:
+          type: integer
+        erreurs:
+          type: integer
+        en_cours:
+          type: integer
+        derniere_recue:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - derniere_recue
+      - doublons
+      - en_cours
+      - erreurs
+      - recues
+      - rejetees
+      - traitees
+    ActivitePaiements:
+      type: object
+      properties:
+        lances:
+          type: integer
+          description: Dons en ligne créés sur la période
+        confirmes:
+          type: integer
+        en_attente:
+          type: integer
+        echoues:
+          type: integer
+        expires:
+          type: integer
+        rembourses:
+          type: integer
+        taux_confirmation:
+          type: integer
+          nullable: true
+        taux_echec:
+          type: integer
+          nullable: true
+          description: (échoués + expirés) / lancés
+        plus_ancien_en_attente:
+          type: string
+          format: date-time
+          nullable: true
+          description: Toutes périodes confondues
+      required:
+      - confirmes
+      - echoues
+      - en_attente
+      - expires
+      - lances
+      - plus_ancien_en_attente
+      - rembourses
+      - taux_confirmation
+      - taux_echec
+    ActiviteParoisse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        collecte_ouverte:
+          type: boolean
+        lances:
+          type: integer
+        confirmes:
+          type: integer
+        en_attente:
+          type: integer
+        echoues:
+          type: integer
+        expires:
+          type: integer
+        taux_confirmation:
+          type: integer
+          nullable: true
+        derniere_confirmation:
+          type: string
+          format: date-time
+          nullable: true
+        quetes_saisies:
+          type: integer
+      required:
+      - collecte_ouverte
+      - confirmes
+      - derniere_confirmation
+      - echoues
+      - en_attente
+      - expires
+      - id
+      - lances
+      - nom
+      - quetes_saisies
+      - taux_confirmation
+    ActiviteReversements:
+      type: object
+      properties:
+        a_rapprocher:
+          type: integer
+        en_ecart:
+          type: integer
+      required:
+      - a_rapprocher
+      - en_ecart
+    ActiviteSource:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        libelle:
+          type: string
+        lances:
+          type: integer
+        confirmes:
+          type: integer
+        taux_confirmation:
+          type: integer
+          nullable: true
+        retours:
+          type: integer
+          description: Parcours revenus sur la page de statut (lien de retour)
+        taux_retour:
+          type: integer
+          nullable: true
+      required:
+      - confirmes
+      - lances
+      - libelle
+      - retours
+      - source
+      - taux_confirmation
+      - taux_retour
+    Adjustment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        fund:
+          $ref: '#/components/schemas/FundBrief'
+        kind:
+          $ref: '#/components/schemas/AdjustmentKindEnum'
+        channel:
+          $ref: '#/components/schemas/DonationChannelEnum'
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          title: Montant donné (signé)
+        net_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+          title: Montant affecté (signé)
+        value_date:
+          type: string
+          format: date
+          title: Date de valeur
+        reason:
+          type: string
+          title: Motif
+          maxLength: 300
+        donation_reference:
+          type: string
+          nullable: true
+        created_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - channel
+      - created_by
+      - fund
+      - id
+      - kind
+      - net_amount
+      - reason
+      - value_date
+    AdjustmentInput:
+      type: object
+      properties:
+        fund_id:
+          type: string
+          format: uuid
+        channel:
+          $ref: '#/components/schemas/DonationChannelEnum'
+        amount:
+          type: integer
+          description: 'FCFA, signé : négatif pour retirer, jamais nul'
+        reason:
+          type: string
+          maxLength: 300
+      required:
+      - amount
+      - channel
+      - fund_id
+      - reason
+    AdjustmentKindEnum:
+      enum:
+      - remboursement
+      - correction
+      type: string
+      description: |-
+        * `remboursement` - Remboursement (ligne négative du mois du remboursement)
+        * `correction` - Correction d'un mois clos
+    Analyse:
+      type: object
+      properties:
+        niveau:
+          $ref: '#/components/schemas/NiveauEnum'
+        noeud:
+          $ref: '#/components/schemas/Noeud'
+        periode:
+          $ref: '#/components/schemas/Periode'
+        genere_le:
+          type: string
+          format: date-time
+        confidentialite:
+          $ref: '#/components/schemas/Confidentialite'
+        synthese:
+          $ref: '#/components/schemas/Synthese'
+        tendance:
+          $ref: '#/components/schemas/Tendance'
+        a_traiter:
+          type: array
+          items:
+            $ref: '#/components/schemas/ATraiter'
+        paroisses:
+          allOf:
+          - $ref: '#/components/schemas/Paroisses'
+          nullable: true
+          description: Diocèse ou doyenné seulement
+        quetes_imperees:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueteImperee'
+        tresorerie:
+          allOf:
+          - $ref: '#/components/schemas/Tresorerie'
+          nullable: true
+          description: Paroisse seulement
+        paiements:
+          allOf:
+          - $ref: '#/components/schemas/Paiements'
+          nullable: true
+          description: Paroisse seulement
+        campagnes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campagne'
+          nullable: true
+          description: Paroisse seulement
+        notes:
+          type: array
+          items:
+            type: string
+      required:
+      - a_traiter
+      - campagnes
+      - confidentialite
+      - genere_le
+      - niveau
+      - noeud
+      - notes
+      - paiements
+      - paroisses
+      - periode
+      - quetes_imperees
+      - synthese
+      - tendance
+      - tresorerie
     ArticleContentTypeEnum:
       enum:
       - announcement
@@ -7464,6 +8534,87 @@ components:
         * `annulee_pretre` - Annulée par le prêtre
         * `honoree` - Honorée
         * `absent` - Absent
+    Campagne:
+      type: object
+      properties:
+        fonds_id:
+          type: string
+          format: uuid
+        titre:
+          type: string
+        objectif:
+          type: integer
+          nullable: true
+        reuni:
+          type: integer
+          description: Cumul donné depuis l'ouverture (montant donné)
+        part:
+          type: integer
+          nullable: true
+        nombre:
+          type: integer
+        periode:
+          type: integer
+          description: Donné sur la période analysée
+        debut:
+          type: string
+          format: date
+          nullable: true
+        fin:
+          type: string
+          format: date
+          nullable: true
+        statut:
+          type: string
+        rythme_hebdo:
+          type: integer
+          description: Moyenne des quatre dernières semaines
+        projection_fin:
+          type: integer
+          nullable: true
+        part_projection:
+          type: integer
+          nullable: true
+      required:
+      - debut
+      - fin
+      - fonds_id
+      - nombre
+      - objectif
+      - part
+      - part_projection
+      - periode
+      - projection_fin
+      - reuni
+      - rythme_hebdo
+      - statut
+      - titre
+    CanalLigne:
+      type: object
+      properties:
+        canal:
+          $ref: '#/components/schemas/DonationChannelEnum'
+        libelle:
+          type: string
+        total:
+          type: integer
+        nombre:
+          type: integer
+        part:
+          type: integer
+          nullable: true
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceLigne'
+          description: Ventilation du canal en ligne (vide pour les espèces)
+      required:
+      - canal
+      - libelle
+      - nombre
+      - part
+      - sources
+      - total
     CapabilityOverride:
       type: object
       properties:
@@ -7572,6 +8723,10 @@ components:
         rejection_reason:
           type: string
           maxLength: 300
+        deposit_id:
+          type: integer
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -7579,6 +8734,7 @@ components:
       - amount
       - counter_one
       - counter_two
+      - deposit_id
       - entered_by
       - fund
       - id
@@ -7635,6 +8791,89 @@ components:
         * `saisie` - Saisie, à valider
         * `validee` - Validée
         * `rejetee` - Rejetée
+    CashDeposit:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        node_id:
+          type: string
+          format: uuid
+          readOnly: true
+        deposited_on:
+          type: string
+          format: date
+          title: Date du dépôt
+        bank_label:
+          type: string
+          title: Banque et compte
+          maxLength: 120
+        slip_number:
+          type: string
+          title: Numéro de bordereau
+          maxLength: 60
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Montant déposé (FCFA)
+        note:
+          type: string
+          title: Observation
+          maxLength: 300
+        collections_count:
+          type: integer
+          readOnly: true
+        declared_by:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - bank_label
+      - collections_count
+      - declared_by
+      - deposited_on
+      - id
+      - node_id
+      - slip_number
+    CashDepositInput:
+      type: object
+      properties:
+        node:
+          type: string
+          format: uuid
+          description: Paroisse
+        collection_ids:
+          type: array
+          items:
+            type: integer
+          description: Quêtes validées incluses dans le dépôt
+          minItems: 1
+        deposited_on:
+          type: string
+          format: date
+        bank_label:
+          type: string
+          description: Banque et compte
+          maxLength: 120
+        slip_number:
+          type: string
+          description: Numéro de bordereau
+          maxLength: 60
+        note:
+          type: string
+          default: ''
+          maxLength: 300
+      required:
+      - bank_label
+      - collection_ids
+      - deposited_on
+      - node
+      - slip_number
     CashRejectInput:
       type: object
       properties:
@@ -7711,6 +8950,23 @@ components:
           format: email
           default: ''
           description: 'Sans compte seulement : envoi du reçu, effacé après 90 jours'
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          default: inconnu
+          description: |-
+            Canal d'entrée relayé par la page de don (paramètre ?src= de l'URL ouverte par l'app)
+
+            * `app_ios` - App iOS
+            * `app_android` - App Android
+            * `web` - Site
+            * `qr` - QR code
+            * `inconnu` - Non précisé
+        place_id:
+          type: integer
+          nullable: true
+          description: Lieu de culte (paramètre ?lieu= du QR code) ; sinon le lieu
+            du fonds
       required:
       - amount
       - fund_id
@@ -7781,6 +9037,26 @@ components:
       - mystery_group_name
       - started_at
       - status
+    Confidentialite:
+      type: object
+      properties:
+        arrondi:
+          type: integer
+          description: 1 (paroisse, exact) ou 1000 (au-dessus de la paroisse)
+        noms_donateurs:
+          type: boolean
+          description: Toujours false
+        ordre_paroisses:
+          type: string
+          description: Toujours « alphabetique »
+        tri_par_montant:
+          type: boolean
+          description: Toujours false
+      required:
+      - arrondi
+      - noms_donateurs
+      - ordre_paroisses
+      - tri_par_montant
     ConsentInput:
       type: object
       properties:
@@ -8008,6 +9284,17 @@ components:
         * `diacre_permanent` - Diacre permanent
         * `pretre` - Prêtre
         * `eveque` - Évêque
+    Destination:
+      type: object
+      properties:
+        paroisse:
+          type: integer
+        curie:
+          type: integer
+          description: Quêtes impérées (c. 1266)
+      required:
+      - curie
+      - paroisse
     DocumentRequestOptions:
       type: object
       properties:
@@ -8072,6 +9359,16 @@ components:
       description: |-
         * `en_ligne` - En ligne
         * `especes` - Espèces
+    DonationPlace:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required:
+      - id
+      - name
     DonationStatus:
       type: object
       description: 'Statut d''un don après le retour du navigateur : aucune donnée
@@ -8154,6 +9451,35 @@ components:
       - parish
       - title
       - total
+    DonorReveal:
+      type: object
+      properties:
+        donation_id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        donateur:
+          type: string
+          nullable: true
+          description: 'null : don sans compte (aucun nom connu)'
+        sans_compte:
+          type: boolean
+      required:
+      - donateur
+      - donation_id
+      - reference
+      - sans_compte
+    DonorRevealInput:
+      type: object
+      properties:
+        motif:
+          type: string
+          description: Obligatoire, journalisé
+          maxLength: 300
+          minLength: 10
+      required:
+      - motif
     DonorSummary:
       type: object
       properties:
@@ -8345,6 +9671,16 @@ components:
         * `retreat` - Retraite
         * `ordination` - Ordination
         * `other` - Autre
+    EvolutionEnum:
+      enum:
+      - stable
+      - en_hausse
+      - en_baisse
+      type: string
+      description: |-
+        * `stable` - stable
+        * `en_hausse` - en hausse
+        * `en_baisse` - en baisse
     ExportOutput:
       type: object
       properties:
@@ -8379,6 +9715,39 @@ components:
           description: Fichier à téléverser (multipart/form-data).
       required:
       - file
+    FondsLigne:
+      type: object
+      properties:
+        fonds_id:
+          type: string
+          format: uuid
+        titre:
+          type: string
+        type:
+          $ref: '#/components/schemas/FundKindEnum'
+        destination:
+          type: string
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        total:
+          type: integer
+        nombre:
+          type: integer
+        part:
+          type: integer
+          nullable: true
+      required:
+      - destination
+      - en_ligne
+      - especes
+      - fonds_id
+      - nombre
+      - part
+      - titre
+      - total
+      - type
     FundBrief:
       type: object
       properties:
@@ -8427,6 +9796,10 @@ components:
         image_id:
           type: integer
           nullable: true
+        place_id:
+          type: integer
+          nullable: true
+          description: Lieu de culte propre au fonds (campagne d'une chapelle)
       required:
       - kind
       - node
@@ -8489,6 +9862,16 @@ components:
         * `brouillon` - Brouillon
         * `ouvert` - Ouvert
         * `clos` - Clos
+    GrainEnum:
+      enum:
+      - jour
+      - semaine
+      - mois
+      type: string
+      description: |-
+        * `jour` - jour
+        * `semaine` - semaine
+        * `mois` - mois
     Group:
       type: object
       properties:
@@ -8619,6 +10002,14 @@ components:
           format: date
           nullable: true
           title: Fin
+        remit_by:
+          type: string
+          format: date
+          nullable: true
+          title: À remettre à la curie avant le
+        messe_anticipee_incluse:
+          type: boolean
+          title: Messe anticipée incluse
         status:
           $ref: '#/components/schemas/FundStatusEnum'
         authorization_ref:
@@ -8677,6 +10068,17 @@ components:
           type: string
           default: ''
           maxLength: 120
+        remit_by:
+          type: string
+          format: date
+          nullable: true
+          description: 'Échéance de remise des espèces à la curie (défaut : sept jours
+            après la quête)'
+        messe_anticipee_incluse:
+          type: boolean
+          default: false
+          description: La quête de la messe anticipée de la veille au soir fait partie
+            de la quête impérée
       required:
       - node
       - starts_on
@@ -8702,6 +10104,19 @@ components:
           type: integer
         total:
           type: integer
+        remitted_confirmed:
+          type: integer
+          description: Espèces remises, réception confirmée par la curie
+        remitted_declared:
+          type: integer
+          description: Remises déclarées, en attente de confirmation
+        to_remit:
+          type: integer
+          description: Espèces restant à remettre
+        remit_by:
+          type: string
+          format: date
+          nullable: true
       required:
       - cash
       - count
@@ -8709,7 +10124,46 @@ components:
       - online
       - parish
       - parish_id
+      - remit_by
+      - remitted_confirmed
+      - remitted_declared
       - status
+      - to_remit
+      - total
+    ImpereeParoisse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        total:
+          type: integer
+        remis:
+          type: integer
+          description: Remises confirmées par la curie
+        remise_declaree:
+          type: integer
+          description: Remises déclarées, non encore confirmées
+        reste_a_remettre:
+          type: integer
+        part_remise:
+          type: integer
+          nullable: true
+      required:
+      - en_ligne
+      - especes
+      - id
+      - nom
+      - part_remise
+      - remis
+      - remise_declaree
+      - reste_a_remettre
       - total
     ImportInput:
       type: object
@@ -8787,6 +10241,17 @@ components:
       - error
       - provider
       - status
+    IncidentResolveInput:
+      type: object
+      properties:
+        resolution:
+          $ref: '#/components/schemas/ResolutionEnum'
+        note:
+          type: string
+          default: ''
+          maxLength: 300
+      required:
+      - resolution
     Input:
       type: object
       properties:
@@ -8890,6 +10355,34 @@ components:
       - passage_id
       - session_date
       - updated_at
+    LieuLigne:
+      type: object
+      properties:
+        lieu_id:
+          type: integer
+          nullable: true
+          description: 'null : « Lieu non renseigné »'
+        nom:
+          type: string
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        total:
+          type: integer
+        nombre:
+          type: integer
+        part:
+          type: integer
+          nullable: true
+      required:
+      - en_ligne
+      - especes
+      - lieu_id
+      - nom
+      - nombre
+      - part
+      - total
     MeNodeRef:
       type: object
       properties:
@@ -9081,6 +10574,82 @@ components:
       required:
       - accepted
       - accepted_at
+    ModeEnum:
+      enum:
+      - especes
+      - virement
+      - compensation
+      type: string
+      description: |-
+        * `especes` - Espèces remises à la curie
+        * `virement` - Virement
+        * `compensation` - Compensation sur la rétrocession de l'économat
+    MonthClosing:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        node_id:
+          type: string
+          format: uuid
+          readOnly: true
+        month:
+          type: string
+          format: date
+          title: Mois (premier jour)
+        closed_by:
+          type: string
+          readOnly: true
+          description: 'Vide : clôture automatique'
+        totals:
+          type: object
+          additionalProperties: {}
+          description: 'Totaux figés : collecte, en_ligne, especes, affecte, par_type_fonds'
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - closed_by
+      - id
+      - month
+      - node_id
+      - totals
+    MonthClosingInput:
+      type: object
+      properties:
+        node:
+          type: string
+          format: uuid
+          description: Paroisse (ou diocèse pour les quêtes impérées)
+        month:
+          type: string
+          description: AAAA-MM, mois écoulé
+          pattern: ^\d{4}-(0[1-9]|1[0-2])$
+      required:
+      - month
+      - node
+    MoyenLigne:
+      type: object
+      properties:
+        moyen:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        libelle:
+          type: string
+        total:
+          type: integer
+        nombre:
+          type: integer
+        part:
+          type: integer
+          nullable: true
+          description: Part du total en ligne
+      required:
+      - libelle
+      - moyen
+      - nombre
+      - part
+      - total
     MyDonation:
       type: object
       properties:
@@ -9186,6 +10755,14 @@ components:
       - order
       - prayers
       - title
+    NiveauEnum:
+      enum:
+      - paroisse
+      - diocese
+      type: string
+      description: |-
+        * `paroisse` - Paroisse (montants exacts)
+        * `diocese` - Diocèse ou doyenné (agrégats arrondis)
     NodeBrief:
       type: object
       properties:
@@ -9470,6 +11047,21 @@ components:
       - occurrences
       - places
       - start
+    Noeud:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        type:
+          type: string
+          description: 'Code du type de nœud : paroisse, diocese, doyenne…'
+      required:
+      - id
+      - nom
+      - type
     NoteInput:
       type: object
       properties:
@@ -9554,6 +11146,9 @@ components:
           type: integer
       required:
       - unread
+    NullEnum:
+      enum:
+      - null
     OccurrenceOutput:
       type: object
       properties:
@@ -9726,6 +11321,9 @@ components:
           maximum: 2147483647
           minimum: 0
           title: Frais (FCFA)
+        fee_is_actual:
+          type: boolean
+          title: Frais réels
         charged_amount:
           type: integer
           maximum: 2147483647
@@ -9738,8 +11336,19 @@ components:
           title: Montant affecté au fonds (FCFA)
         channel:
           $ref: '#/components/schemas/DonationChannelEnum'
+        source:
+          nullable: true
+          oneOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+          - $ref: '#/components/schemas/NullEnum'
         payment_method:
           $ref: '#/components/schemas/PaymentMethodEnum'
+        place:
+          allOf:
+          - $ref: '#/components/schemas/DonationPlace'
+          readOnly: true
+          nullable: true
         status:
           $ref: '#/components/schemas/DonationStatusEnum'
         created_at:
@@ -9749,6 +11358,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        value_date:
+          type: string
+          format: date
+          nullable: true
+          title: Date de valeur
+        anonymous:
+          type: boolean
+          title: Don anonyme
         donor:
           type: string
           readOnly: true
@@ -9759,6 +11376,7 @@ components:
       - fund
       - id
       - net_amount
+      - place
       - reference
     PaginatedAccountOutputList:
       type: object
@@ -9779,6 +11397,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AccountOutput'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedAdjustmentList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Adjustment'
       required:
       - count
       - limit
@@ -9909,6 +11553,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CashCollection'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
+    PaginatedCashDepositList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/CashDeposit'
       required:
       - count
       - limit
@@ -10202,6 +11872,32 @@ components:
       - offset
       - previous
       - results
+    PaginatedRemittanceList:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        count:
+          type: integer
+        next:
+          type: string
+          nullable: true
+        previous:
+          type: string
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Remittance'
+      required:
+      - count
+      - limit
+      - next
+      - offset
+      - previous
+      - results
     PaginatedRequesterOutputList:
       type: object
       properties:
@@ -10306,6 +12002,29 @@ components:
       - offset
       - previous
       - results
+    Paiements:
+      type: object
+      properties:
+        lances:
+          type: integer
+        confirmes:
+          type: integer
+        en_attente:
+          type: integer
+        echoues:
+          type: integer
+        expires:
+          type: integer
+        taux_confirmation:
+          type: integer
+          nullable: true
+      required:
+      - confirmes
+      - echoues
+      - en_attente
+      - expires
+      - lances
+      - taux_confirmation
     ParishFundKindEnum:
       enum:
       - quete_dominicale
@@ -10324,7 +12043,7 @@ components:
           format: date
         total:
           type: integer
-          description: Affecté ce mois (dons confirmés)
+          description: Affecté ce mois (date de valeur), remboursements déduits
         online:
           type: integer
         cash:
@@ -10333,10 +12052,32 @@ components:
           type: integer
         count:
           type: integer
+          description: 'Obsolète : additionne dons en ligne et quêtes. Utiliser les
+            deux champs suivants.'
+        online_count:
+          type: integer
+          description: Dons en ligne
+        cash_collections_count:
+          type: integer
+          description: Quêtes en espèces validées
         pending_count:
           type: integer
+          description: Paiements lancés ce mois encore en attente
+        pending_oldest_at:
+          type: string
+          format: date-time
+          nullable: true
         cash_to_validate:
           type: integer
+        closed:
+          type: boolean
+          description: 'Mois clos : aucune opération ne s''y ajoute plus'
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        by_destination:
+          $ref: '#/components/schemas/SummaryDestination'
         by_fund:
           type: array
           items:
@@ -10350,17 +12091,73 @@ components:
           items:
             $ref: '#/components/schemas/SummaryDay'
       required:
+      - by_destination
       - by_fund
       - by_method
       - cash
+      - cash_collections_count
       - cash_to_validate
+      - closed
+      - closed_at
       - count
       - daily
       - fees
       - month
       - online
+      - online_count
       - pending_count
+      - pending_oldest_at
       - total
+    ParoisseBrief:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+      required:
+      - id
+      - nom
+    ParoisseLigne:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nom:
+          type: string
+        statut_collecte:
+          $ref: '#/components/schemas/StatutCollecteEnum'
+        collecte:
+          type: integer
+          nullable: true
+          description: Arrondi au millier ; null en préparation
+        part_en_ligne:
+          type: integer
+          nullable: true
+        quetes_a_valider:
+          type: integer
+          nullable: true
+        evolution:
+          nullable: true
+          description: |-
+            La paroisse face à elle-même (trois périodes précédentes) ; null sans historique
+
+            * `stable` - stable
+            * `en_hausse` - en hausse
+            * `en_baisse` - en baisse
+          oneOf:
+          - $ref: '#/components/schemas/EvolutionEnum'
+          - $ref: '#/components/schemas/NullEnum'
+      required:
+      - collecte
+      - evolution
+      - id
+      - nom
+      - part_en_ligne
+      - quetes_a_valider
+      - statut_collecte
     ParoisseSuivieInput:
       type: object
       properties:
@@ -10380,6 +12177,32 @@ components:
           nullable: true
       required:
       - node
+    Paroisses:
+      type: object
+      properties:
+        compteurs:
+          $ref: '#/components/schemas/ParoissesCompteurs'
+        lignes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ParoisseLigne'
+          description: Ordre alphabétique imposé
+      required:
+      - compteurs
+      - lignes
+    ParoissesCompteurs:
+      type: object
+      properties:
+        engagees:
+          type: integer
+        collecte_ouverte:
+          type: integer
+        en_preparation:
+          type: integer
+      required:
+      - collecte_ouverte
+      - en_preparation
+      - engagees
     PatchedArticleUpdateInput:
       type: object
       properties:
@@ -10487,6 +12310,9 @@ components:
           type: string
           maxLength: 120
         image_id:
+          type: integer
+          nullable: true
+        place_id:
           type: integer
           nullable: true
     PatchedHomilieNoteInput:
@@ -10618,6 +12444,72 @@ components:
           nullable: true
         is_active:
           type: boolean
+    PaymentIncident:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          $ref: '#/components/schemas/PaymentIncidentKindEnum'
+        status:
+          $ref: '#/components/schemas/PaymentIncidentStatusEnum'
+        reference:
+          type: string
+        fund:
+          $ref: '#/components/schemas/FundBrief'
+        amount:
+          type: integer
+          description: Montant attendu (payé)
+        reported_amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          nullable: true
+        donation_status:
+          type: string
+        resolution:
+          oneOf:
+          - $ref: '#/components/schemas/ResolutionEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        note:
+          type: string
+          maxLength: 300
+        resolved_by:
+          type: string
+          nullable: true
+          readOnly: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - donation_status
+      - fund
+      - id
+      - kind
+      - reference
+      - resolved_by
+    PaymentIncidentKindEnum:
+      enum:
+      - late_payment
+      - amount_mismatch
+      type: string
+      description: |-
+        * `late_payment` - Paiement réussi après expiration ou échec
+        * `amount_mismatch` - Montant payé différent du montant attendu
+    PaymentIncidentStatusEnum:
+      enum:
+      - ouvert
+      - resolu
+      type: string
+      description: |-
+        * `ouvert` - À régulariser
+        * `resolu` - Régularisé
     PaymentMethodEnum:
       enum:
       - wave
@@ -10694,6 +12586,42 @@ components:
         * `recu` - Reçu, à rapprocher
         * `rapproche` - Rapproché
         * `ecart` - Écart constaté
+    Periode:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/PeriodeTypeEnum'
+        code:
+          type: string
+          description: Ex. 2026-09
+        debut:
+          type: string
+          format: date
+        fin:
+          type: string
+          format: date
+          description: Inclus
+        libelle:
+          type: string
+          description: Ex. « septembre 2026 »
+      required:
+      - code
+      - debut
+      - fin
+      - libelle
+      - type
+    PeriodeTypeEnum:
+      enum:
+      - semaine
+      - mois
+      - trimestre
+      - annee
+      type: string
+      description: |-
+        * `semaine` - Semaine ISO (paroisse)
+        * `mois` - Mois
+        * `trimestre` - Trimestre
+        * `annee` - Année
     PersonRef:
       type: object
       properties:
@@ -10971,7 +12899,7 @@ components:
           type: integer
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeEnum'
+          $ref: '#/components/schemas/TypeBd4Enum'
         type_display:
           type: string
           readOnly: true
@@ -11330,10 +13258,19 @@ components:
           type: string
           nullable: true
           readOnly: true
+        place:
+          allOf:
+          - $ref: '#/components/schemas/DonationPlace'
+          readOnly: true
+          nullable: true
+        messe_anticipee_incluse:
+          type: boolean
+          title: Messe anticipée incluse
       required:
       - id
       - image_url
       - kind
+      - place
       - raised
       - title
     PublicFundDetail:
@@ -11382,6 +13319,14 @@ components:
           type: string
           nullable: true
           readOnly: true
+        place:
+          allOf:
+          - $ref: '#/components/schemas/DonationPlace'
+          readOnly: true
+          nullable: true
+        messe_anticipee_incluse:
+          type: boolean
+          title: Messe anticipée incluse
         parish:
           $ref: '#/components/schemas/NodeBrief'
         updates:
@@ -11394,6 +13339,7 @@ components:
       - image_url
       - kind
       - parish
+      - place
       - raised
       - title
       - updates
@@ -11700,6 +13646,35 @@ components:
       - created_at
       - id
       - platform
+    QueteImperee:
+      type: object
+      properties:
+        fonds_id:
+          type: string
+          format: uuid
+        titre:
+          type: string
+        date:
+          type: string
+          format: date
+        echeance:
+          type: string
+          format: date
+          nullable: true
+        messe_anticipee_incluse:
+          type: boolean
+        paroisses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImpereeParoisse'
+          description: Montants exacts (argent de la curie) ; ordre alphabétique
+      required:
+      - date
+      - echeance
+      - fonds_id
+      - messe_anticipee_incluse
+      - paroisses
+      - titre
     QueueItem:
       type: object
       properties:
@@ -12026,6 +14001,98 @@ components:
       - id
       - registered_at
       - user_id
+    Remittance:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        fund:
+          $ref: '#/components/schemas/FundBrief'
+        node_id:
+          type: string
+          format: uuid
+          readOnly: true
+        parish:
+          type: string
+        amount:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          title: Montant remis (FCFA)
+        remitted_on:
+          type: string
+          format: date
+          title: Date de la remise
+        mode:
+          $ref: '#/components/schemas/ModeEnum'
+        reference:
+          type: string
+          title: Référence (reçu de la curie, virement)
+          maxLength: 120
+        status:
+          $ref: '#/components/schemas/RemittanceStatusEnum'
+        declared_by:
+          type: string
+          readOnly: true
+        confirmed_by:
+          type: string
+          nullable: true
+          readOnly: true
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+          maxLength: 300
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - amount
+      - confirmed_by
+      - declared_by
+      - fund
+      - id
+      - node_id
+      - parish
+      - remitted_on
+    RemittanceInput:
+      type: object
+      properties:
+        fund_id:
+          type: string
+          format: uuid
+          description: Quête impérée de la paroisse (déclinaison paroissiale)
+        amount:
+          type: integer
+          minimum: 1
+        remitted_on:
+          type: string
+          format: date
+        mode:
+          allOf:
+          - $ref: '#/components/schemas/ModeEnum'
+          default: especes
+        reference:
+          type: string
+          default: ''
+          maxLength: 120
+      required:
+      - amount
+      - fund_id
+      - remitted_on
+    RemittanceStatusEnum:
+      enum:
+      - declaree
+      - confirmee
+      - contestee
+      type: string
+      description: |-
+        * `declaree` - Déclarée par la paroisse
+        * `confirmee` - Réception confirmée par la curie
+        * `contestee` - Contestée par la curie
     RequestCreateInput:
       type: object
       properties:
@@ -12267,6 +14334,16 @@ components:
         * `diacre` - Diacre
         * `pretre` - Prêtre
         * `eveque` - Évêque
+    ResolutionEnum:
+      enum:
+      - integre
+      - rembourse
+      - sans_suite
+      type: string
+      description: |-
+        * `integre` - Paiement intégré au fonds (don confirmé)
+        * `rembourse` - Remboursé chez l'agrégateur
+        * `sans_suite` - Sans suite (vérifié, rien à faire)
     RosaryDay:
       type: object
       properties:
@@ -12529,7 +14606,7 @@ components:
           type: integer
           readOnly: true
         type:
-          $ref: '#/components/schemas/TypeEnum'
+          $ref: '#/components/schemas/TypeBd4Enum'
         type_display:
           type: string
           readOnly: true
@@ -12608,6 +14685,41 @@ components:
       - priest_id
       - priest_name
       - starts_at
+    SourceEnum:
+      enum:
+      - app_ios
+      - app_android
+      - web
+      - qr
+      - inconnu
+      type: string
+      description: |-
+        * `app_ios` - App iOS
+        * `app_android` - App Android
+        * `web` - Site
+        * `qr` - QR code
+        * `inconnu` - Non précisé
+    SourceLigne:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        libelle:
+          type: string
+        total:
+          type: integer
+        nombre:
+          type: integer
+        part:
+          type: integer
+          nullable: true
+          description: Part du total en ligne
+      required:
+      - libelle
+      - nombre
+      - part
+      - source
+      - total
     StaffArticleOutput:
       type: object
       properties:
@@ -12766,6 +14878,14 @@ components:
           type: string
           nullable: true
           readOnly: true
+        place:
+          allOf:
+          - $ref: '#/components/schemas/DonationPlace'
+          readOnly: true
+          nullable: true
+        messe_anticipee_incluse:
+          type: boolean
+          title: Messe anticipée incluse
         node_id:
           type: string
           format: uuid
@@ -12802,6 +14922,7 @@ components:
       - kind
       - node_id
       - parent_id
+      - place
       - raised
       - title
     StatsOutput:
@@ -12851,6 +14972,14 @@ components:
           format: date-time
       required:
       - to_status
+    StatutCollecteEnum:
+      enum:
+      - ouverte
+      - en_preparation
+      type: string
+      description: |-
+        * `ouverte` - Collecte ouverte
+        * `en_preparation` - En préparation
     StatutVerificationEnum:
       enum:
       - declare
@@ -12869,11 +14998,28 @@ components:
         date:
           type: string
           format: date
+          description: Date de valeur (jour de la messe pour les espèces)
+        online:
+          type: integer
+        cash:
+          type: integer
         total:
           type: integer
       required:
+      - cash
       - date
+      - online
       - total
+    SummaryDestination:
+      type: object
+      properties:
+        paroisse:
+          type: integer
+        curie:
+          type: integer
+      required:
+      - curie
+      - paroisse
     SummaryFund:
       type: object
       properties:
@@ -12884,12 +15030,16 @@ components:
           type: string
         kind:
           type: string
+        destination:
+          type: string
+          description: paroisse ou curie (quête impérée)
         total:
           type: integer
         count:
           type: integer
       required:
       - count
+      - destination
       - fund_id
       - kind
       - title
@@ -12977,6 +15127,104 @@ components:
         attachment_file_id:
           type: integer
           nullable: true
+    Synthese:
+      type: object
+      properties:
+        collecte:
+          type: integer
+          description: Montant donné, dons confirmés, sur la date de valeur
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        nombre_dons_en_ligne:
+          type: integer
+        nombre_quetes:
+          type: integer
+        par_destination:
+          $ref: '#/components/schemas/Destination'
+        par_type_fonds:
+          type: array
+          items:
+            $ref: '#/components/schemas/TypeFondsLigne'
+          description: 'Ordre fixe de la palette : dominicale, impérée, campagne,
+            contribution'
+        par_fonds:
+          type: array
+          items:
+            $ref: '#/components/schemas/FondsLigne'
+          nullable: true
+          description: Paroisse seulement ; null au-dessus
+        par_canal:
+          type: array
+          items:
+            $ref: '#/components/schemas/CanalLigne'
+          description: En ligne (avec ses sources), puis espèces
+        par_moyen:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoyenLigne'
+          description: En ligne ; ordre canonique Wave, Orange Money, Free Money,
+            carte
+        par_lieu:
+          type: array
+          items:
+            $ref: '#/components/schemas/LieuLigne'
+          nullable: true
+          description: Paroisse seulement ; null au-dessus
+      required:
+      - collecte
+      - en_ligne
+      - especes
+      - nombre_dons_en_ligne
+      - nombre_quetes
+      - par_canal
+      - par_destination
+      - par_fonds
+      - par_lieu
+      - par_moyen
+      - par_type_fonds
+    Tendance:
+      type: object
+      properties:
+        grain:
+          $ref: '#/components/schemas/GrainEnum'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/TendancePoint'
+          description: Sous-périodes déjà commencées, dans l'ordre du calendrier
+      required:
+      - grain
+      - points
+    TendancePoint:
+      type: object
+      properties:
+        debut:
+          type: string
+          format: date
+        fin:
+          type: string
+          format: date
+        libelle:
+          type: string
+          description: Ex. « au dim. 6 »
+        total:
+          type: integer
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        par_type_fonds:
+          $ref: '#/components/schemas/TypeFondsMontants'
+      required:
+      - debut
+      - en_ligne
+      - especes
+      - fin
+      - libelle
+      - par_type_fonds
+      - total
     TestamentWithBooksOutput:
       type: object
       properties:
@@ -13036,6 +15284,93 @@ components:
           type: string
           default: ''
           maxLength: 255
+    Tresorerie:
+      type: object
+      properties:
+        en_ligne:
+          $ref: '#/components/schemas/TresorerieEnLigne'
+        especes:
+          $ref: '#/components/schemas/TresorerieEspeces'
+      required:
+      - en_ligne
+      - especes
+    TresorerieEnLigne:
+      type: object
+      properties:
+        paye:
+          type: integer
+        frais:
+          type: integer
+        frais_reels:
+          type: integer
+          description: Part des frais transmise par l'agrégateur (le reste est estimé)
+        net:
+          type: integer
+        reverse:
+          type: integer
+          description: Net inclus dans un reversement de l'agrégateur
+        en_attente_reversement:
+          type: integer
+        part_reversee:
+          type: integer
+          nullable: true
+        net_pour_100:
+          type: integer
+          nullable: true
+          description: Pour 100 FCFA payés en ligne, FCFA affectés
+        dons_frais_couverts:
+          type: integer
+        nombre:
+          type: integer
+      required:
+      - dons_frais_couverts
+      - en_attente_reversement
+      - frais
+      - frais_reels
+      - net
+      - net_pour_100
+      - nombre
+      - part_reversee
+      - paye
+      - reverse
+    TresorerieEspeces:
+      type: object
+      properties:
+        validees:
+          type: integer
+        deposees:
+          type: integer
+        en_caisse:
+          type: integer
+        a_confirmer:
+          type: integer
+      required:
+      - a_confirmer
+      - deposees
+      - en_caisse
+      - validees
+    TypeBd4Enum:
+      enum:
+      - SIGN_OF_CROSS
+      - CREED
+      - OUR_FATHER
+      - HAIL_MARY
+      - GLORY_BE
+      - FATIMA
+      - HOLY_QUEEN
+      - FINAL_PRAYER
+      - OTHER
+      type: string
+      description: |-
+        * `SIGN_OF_CROSS` - Signe de la croix
+        * `CREED` - Je crois en Dieu
+        * `OUR_FATHER` - Notre Père
+        * `HAIL_MARY` - Je vous salue Marie
+        * `GLORY_BE` - Gloire au Père
+        * `FATIMA` - Prière de Fatima
+        * `HOLY_QUEEN` - Salve Regina
+        * `FINAL_PRAYER` - Prière finale
+        * `OTHER` - Autre
     TypeDelayItemInput:
       type: object
       properties:
@@ -13106,28 +15441,49 @@ components:
             $ref: '#/components/schemas/TypeDelayItemInput'
       required:
       - items
-    TypeEnum:
-      enum:
-      - SIGN_OF_CROSS
-      - CREED
-      - OUR_FATHER
-      - HAIL_MARY
-      - GLORY_BE
-      - FATIMA
-      - HOLY_QUEEN
-      - FINAL_PRAYER
-      - OTHER
-      type: string
-      description: |-
-        * `SIGN_OF_CROSS` - Signe de la croix
-        * `CREED` - Je crois en Dieu
-        * `OUR_FATHER` - Notre Père
-        * `HAIL_MARY` - Je vous salue Marie
-        * `GLORY_BE` - Gloire au Père
-        * `FATIMA` - Prière de Fatima
-        * `HOLY_QUEEN` - Salve Regina
-        * `FINAL_PRAYER` - Prière finale
-        * `OTHER` - Autre
+    TypeFondsLigne:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/FundKindEnum'
+        libelle:
+          type: string
+        en_ligne:
+          type: integer
+        especes:
+          type: integer
+        total:
+          type: integer
+        nombre:
+          type: integer
+          description: Dons en ligne + quêtes (ne pas en tirer de don moyen)
+        part:
+          type: integer
+          nullable: true
+      required:
+      - en_ligne
+      - especes
+      - libelle
+      - nombre
+      - part
+      - total
+      - type
+    TypeFondsMontants:
+      type: object
+      properties:
+        quete_dominicale:
+          type: integer
+        quete_imperee:
+          type: integer
+        campagne:
+          type: integer
+        contribution_annuelle:
+          type: integer
+      required:
+      - campagne
+      - contribution_annuelle
+      - quete_dominicale
+      - quete_imperee
     VerificationDecisionInput:
       type: object
       properties:

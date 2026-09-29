@@ -270,7 +270,7 @@ class FundBriefSerializer(serializers.Serializer):
     kind = serializers.CharField()
 
 
-class PlaceBriefSerializer(serializers.Serializer):
+class DonationPlaceSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
 
@@ -278,7 +278,7 @@ class PlaceBriefSerializer(serializers.Serializer):
 class PublicFundSerializer(serializers.ModelSerializer):
     raised = serializers.IntegerField(read_only=True, help_text="Montant affecté (dons confirmés), FCFA")
     image_url = serializers.SerializerMethodField()
-    place = PlaceBriefSerializer(allow_null=True, read_only=True)
+    place = DonationPlaceSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Fund
@@ -464,7 +464,7 @@ class OperationSerializer(serializers.ModelSerializer):
 
     fund = FundBriefSerializer()
     donor = serializers.SerializerMethodField()
-    place = PlaceBriefSerializer(allow_null=True, read_only=True)
+    place = DonationPlaceSerializer(allow_null=True, read_only=True)
 
     class Meta:
         model = Donation
