@@ -245,3 +245,25 @@ class AelfService:
                 await cls._save_office_sync(ld, ot, payloads[ot])
                 
         logger.info(f"Successfully synced AELF data for {date_str}")
+
+
+def readings_link_verses(*, only_missing: bool = True) -> int:
+    """Rattache chaque lecture aux versets de la Bible locale d'après sa référence.
+
+    À relancer après un import (ou un réimport) de la Bible : le lien est posé à l'import AELF et
+    disparaît quand les versets sont supprimés. Renvoie le nombre de lectures rattachées.
+    """
+    from django.db import transaction
+
+    CitationMatcher._books_cache = None
+    linked = 0
+    readings = Reading.objects.exclude(citation="")
+    if only_missing:
+        readings = readings.filter(matched_verses__isnull=True)
+    with transaction.atomic():
+        for reading in readings.distinct().iterator():
+            verses = CitationMatcher.match(reading.citation)
+            if verses:
+                reading.matched_verses.set(verses)
+                linked += 1
+    return linked

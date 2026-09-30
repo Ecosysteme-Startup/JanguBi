@@ -35,16 +35,32 @@ def liturgical_date_get(*, day: datetime.date, zone: str | None = None) -> Litur
     )
 
 
+def _reading_verses(reading: Reading) -> list[Verse]:
+    """Versets de la lecture. Le rattachement est fait à l'import AELF ; s'il manque (Bible importée
+    après les lectures, ou réimportée, ce qui vide le lien), on le recalcule à la volée depuis la
+    référence plutôt que de servir une lecture sans texte. `liturgy_link_verses` le rend durable."""
+    verses = list(reading.matched_verses.all())
+    if verses or not reading.citation:
+        return verses
+    from apps.liturgy.matcher import CitationMatcher
+
+    return CitationMatcher.match(reading.citation)
+
+
 def _reading(reading: Reading, *, source: str) -> dict[str, Any]:
-    verses = [
-        {"book": v.chapter.book.name, "chapter": v.chapter.number, "number": v.number, "text": v.text}
-        for v in reading.matched_verses.all()
-    ]
+    verses = (
+        [
+            {"book": v.chapter.book.name, "chapter": v.chapter.number, "number": v.number, "text": v.text}
+            for v in _reading_verses(reading)
+        ]
+        if source == "crampon_refs"
+        else []
+    )
     return {
         "type": reading.type,
         "citation": reading.citation,
         "text": reading.text if source == "aelf" else None,
-        "verses": verses if source == "crampon_refs" else [],
+        "verses": verses,
     }
 
 

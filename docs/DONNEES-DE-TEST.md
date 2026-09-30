@@ -41,6 +41,24 @@ Options (`--help`) :
 | `--piper-voix <modèle.onnx>` | voix Piper (sinon `PIPER_VOICE`) |
 | `--hors-ligne` | aucun appel réseau (AELF, Keycloak) : replis directs |
 
+## Musique de démonstration (pack de samples, local et recette)
+
+La sonothèque de démo peut utiliser une sélection de 10 pistes instrumentales calmes (piano, orgue, cordes,
+flûtes) tirées du pack « The Polyphonic Elements Vol. 6 ». **Jamais en production ni dans Git** : sa licence
+n'autorise pas la diffusion des boucles telles quelles. La sélection (fichiers retenus, titres français,
+crédits) est versionnée dans `seed_assets/musique-demo.yaml` ; le pack reste sur votre machine.
+
+```bash
+# 1. Décompresser Polyphonic.Elements6.rar dans seed_assets/ (ignoré par Git) :
+#    seed_assets/The Polyphonic Elements Vol.6/...
+make musique-demo              # → seed_assets/musique-demo/ : 10 FLAC + credits.yaml
+make seed-realiste-musique     # sonothèque de démo avec cette musique (--medias complets)
+```
+
+Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --sortie <dossier>`, puis
+`seed_realiste --medias-dossier <dossier>`. En `--medias legers`, seules les 4 premières pistes servent (extraits
+de 30 s) ; en `--medias complets`, les 10.
+
 ## Échelles
 
 | Échelle | Usage | Paroisses | Fidèles | Dons (12 mois) | Pistes | Écoutes | Durée cible |

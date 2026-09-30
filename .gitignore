@@ -148,3 +148,4 @@ pyrightconfig.json
 # Données de test (docs/DONNEES-DE-TEST.md) : aucun binaire, seulement le manifeste
 seed_assets/*
 !seed_assets/manifest.yaml
+!seed_assets/musique-demo.yaml

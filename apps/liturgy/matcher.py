@@ -1,6 +1,8 @@
 import re
 from typing import List
 
+from django.db.models import Q
+
 from apps.bible.editions import edition_filter
 from apps.bible.models import Book, Verse
 
@@ -15,7 +17,9 @@ class CitationMatcher:
 
     @classmethod
     def _get_books(cls) -> List[Book]:
-        if cls._books_cache is None:
+        # Une liste vide n'est pas gardée : sinon un premier appel avant l'import de la Bible
+        # bloquerait tout rattachement jusqu'au redémarrage du processus (worker Celery).
+        if not cls._books_cache:
             # Load into memory once per worker process to avoid fetching on every match
             cls._books_cache = list(Book.objects.all())
         return cls._books_cache
@@ -85,25 +89,23 @@ class CitationMatcher:
             return []
         chapter_num = int(chapter_match.group(1))
         
-        # 4. Parse verses like "51-62" or "1-2a.5" or "5a.8,9"
-        # We'll replace non-numeric sequence seperators like ',' and '.' with spaces
-        # and extract all integers to create a bounding range.
-        clean_verses_str = verses_str.replace(",", " ").replace(".", " ")
-        verse_numbers = [int(n) for n in re.findall(r"\d+", clean_verses_str)]
-        if not verse_numbers:
+        # 4. Plages de versets : « 1-12.14-16 », « 10bc-11, 12-13, 14-15 », « 5a.8 ». Chaque segment
+        # (séparé par « . » ou « , ») est une plage ou un verset seul ; les lettres (demi-versets)
+        # sont ignorées. On garde les trous (Jb 9, 1-12.14-16 n'inclut pas le verset 13).
+        ranges: list[tuple[int, int]] = []
+        for segment in re.split(r"[.,]", verses_str):
+            bounds = [int(n) for n in re.findall(r"\d+", segment)]
+            if bounds:
+                ranges.append((min(bounds), max(bounds)))
+        if not ranges:
             return []
-            
-        min_v = min(verse_numbers)
-        max_v = max(verse_numbers)
+        in_ranges = Q()
+        for low, high in ranges:
+            in_ranges |= Q(number__gte=low, number__lte=high)
 
         # 5. Bring it together into a Verse QuerySet
         qs = edition_filter(
-            Verse.objects.filter(
-                chapter__book=matched_book,
-                chapter__number=chapter_num,
-                number__gte=min_v,
-                number__lte=max_v,
-            )
+            Verse.objects.filter(in_ranges, chapter__book=matched_book, chapter__number=chapter_num)
         ).order_by("number")
-        
+
         return list(qs)
