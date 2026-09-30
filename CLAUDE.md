@@ -66,7 +66,7 @@ tasks.py       → Tâches Celery. Import des services dans le corps de la fonct
 
 ## 6. Vérification AVANT push — CI locale OBLIGATOIRE (ADR-010)
 
-> **Aucun push ni PR vers `develop`, `stage` ou `main` sans `make act` vert.** Chaque push vert sur ces branches **déclenche un déploiement** et consomme des minutes GitHub Actions.
+> **Aucun push ni PR vers `develop`, `stage` ou `main` sans `make act` vert.** Chaque push consomme des minutes GitHub Actions ; un push sur `stage` **livre en recette**.
 
 ```bash
 make act          # act push --job build : ruff + mypy + pytest, exactement comme la CI (Postgres/Redis en services)
@@ -74,7 +74,7 @@ make ci-docker    # build local de l'image de prod, SANS push (si requirements/,
 make hooks        # installe le hook pre-push qui lance make act vers develop/stage/main
 ```
 
-- **Ne jamais lancer via act** les jobs `build-docker` (push DockerHub) et `trigger-deploy` (déploiement).
+- **Ne jamais lancer via act** `livraison-recette.yml` (push DockerHub et livraison en recette). La livraison ne part que d'un push sur `stage`.
 - Plan B si act ne tourne pas : `ruff check apps/ config/ && mypy apps/ config/`, puis `make up && make test`. À signaler dans la PR.
 - Détails, branches et conventions : `docs/v1/04-CI-LOCALE-ET-GIT.md`.
 - Claude Code travaille sur `feat/v1-lX-…`, ouvre une PR et **ne merge jamais** lui-même vers `develop`, `stage` ou `main`.
