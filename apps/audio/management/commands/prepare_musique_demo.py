@@ -2,9 +2,12 @@
 
     python manage.py prepare_musique_demo
     python manage.py prepare_musique_demo --pack "/chemin/The Polyphonic Elements Vol.6" --sortie /tmp/musique
+    python manage.py prepare_musique_demo --publier   # recette : copie aussi dans le bucket « seed-assets »
 
 Convertit les pistes retenues en FLAC et écrit ``credits.yaml`` (lu par ``seed_realiste --medias-dossier``).
-Local et recette seulement : rien n'est envoyé nulle part, rien n'entre dans Git (``seed_assets/`` est ignoré).
+Rien n'entre dans Git (``seed_assets/`` est ignoré). ``--publier`` copie le dossier dans le bucket MinIO
+``seed-assets/musique-demo/`` du serveur de recette : ``seed_realiste --musique-demo`` l'y reprend après un
+reset, sans le pack. Jamais en production (licence du pack : démonstration interne).
 """
 
 from __future__ import annotations
@@ -17,6 +20,8 @@ import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError, CommandParser
 
+from apps.audio.seed_medias import LocalStore, publish_folder, store_for
+
 ROOT = pathlib.Path(settings.BASE_DIR) / "seed_assets"
 SELECTION = ROOT / "musique-demo.yaml"
 
@@ -27,8 +32,10 @@ class Command(BaseCommand):
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--pack", default=None, help="Dossier du pack décompressé (défaut : seed_assets/<pack>).")
         parser.add_argument("--sortie", default=str(ROOT / "musique-demo"), help="Dossier produit.")
+        parser.add_argument("--publier", action="store_true",
+                            help="Copie aussi le dossier dans le bucket MinIO « seed-assets » (recette).")  # fmt: skip
 
-    def handle(self, *args: Any, pack: str | None, sortie: str, **options: Any) -> None:
+    def handle(self, *args: Any, pack: str | None, sortie: str, publier: bool = False, **options: Any) -> None:
         selection = yaml.safe_load(SELECTION.read_text(encoding="utf-8"))
         source = pathlib.Path(pack).expanduser() if pack else ROOT / selection["pack"]
         if not source.is_dir():
@@ -61,3 +68,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"{done} piste(s) prête(s) dans {out}."))
         if not done:
             raise CommandError("Aucune piste préparée.")
+        if publier:
+            store = store_for("recette")
+            if isinstance(store, LocalStore):
+                raise CommandError("--publier : MinIO non configuré (AWS_S3_ACCESS_KEY_ID absent).")
+            count = publish_folder(store, out)
+            self.stdout.write(self.style.SUCCESS(f"{count} fichier(s) copiés dans {store.kind}, dossier musique-demo/."))

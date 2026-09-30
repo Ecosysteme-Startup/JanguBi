@@ -56,7 +56,13 @@ make seed-realiste-musique     # sonothèque de démo avec cette musique (--medi
 ```
 
 Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --sortie <dossier>`, puis
-`seed_realiste --medias-dossier <dossier>`. En `--medias legers`, seules les 4 premières pistes servent (extraits
+`seed_realiste --medias-dossier <dossier>`.
+
+**En recette, une seule fois** : `prepare_musique_demo --publier` copie les 10 FLAC et `credits.yaml` dans le
+bucket MinIO `seed-assets/musique-demo/` du serveur (bucket privé, jamais servi au public). Ensuite, même après
+une remise à zéro de la base, `seed_realiste --profil recette --medias complets --musique-demo` reprend la
+musique dans ce bucket : plus besoin du pack. `--musique-demo` lit d'abord `seed_assets/musique-demo/` s'il
+existe, sinon le bucket. Si le bucket `seed-assets` est vidé, repartir du RAR (copie de référence hors Git). En `--medias legers`, seules les 4 premières pistes servent (extraits
 de 30 s) ; en `--medias complets`, les 10.
 
 ## Échelles

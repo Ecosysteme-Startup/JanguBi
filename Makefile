@@ -215,7 +215,7 @@ musique-demo:
 	docker compose exec django python manage.py prepare_musique_demo
 
 seed-realiste-musique:
-	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias complets --medias-dossier /app/seed_assets/musique-demo --verifier $(SEED_ARGS)
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias complets --musique-demo --verifier $(SEED_ARGS)
 
 fetch-seed-assets:
 	docker compose exec django python manage.py fetch_seed_assets
