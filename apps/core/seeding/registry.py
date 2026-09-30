@@ -73,6 +73,11 @@ class Seeder:
     def verify(self, ctx: SeedContext) -> list[Check]:
         return []
 
+    def produced(self, result: dict[str, Any]) -> bool:
+        """Le passage a-t-il produit ce que le semeur doit semer ? Faux : il n'est PAS marqué « fait » et
+        sera repris au passage suivant (ex. écoutes sans aucune piste écoutable)."""
+        return True
+
 
 REGISTRY: dict[str, type[Seeder]] = {}
 

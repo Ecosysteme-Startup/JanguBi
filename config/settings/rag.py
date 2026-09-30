@@ -16,6 +16,8 @@ from config.env import env
 GEMINI_API_KEY = env.str("GEMINI_API_KEY", default="")
 EMBEDDING_PROVIDER = env.str("EMBEDDING_PROVIDER", default="stub")  # "local" en prod
 PGVECTOR_ENABLED = env.bool("PGVECTOR_ENABLED", default=False)      # True en prod
+# Versets envoyés au modèle par appel (mémoire bornée ; enregistrés après chaque paquet).
+EMBEDDING_BATCH_SIZE = env.int("EMBEDDING_BATCH_SIZE", default=128)
 
 # Modèle d'embeddings local (multilingue FR, 768 dims ; non normalisé -> on
 # interroge en cosine côté pgvector). Cache persistant recommandé (volume).

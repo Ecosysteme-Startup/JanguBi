@@ -96,7 +96,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"- {seeder.name} …")
                 result = seeder.seed(ctx)
                 if not seeder.always:
-                    ctx.mark_done(seeder.name)
+                    if seeder.produced(result or {}):
+                        ctx.mark_done(seeder.name)
+                    else:
+                        ctx.note(f"{seeder.name} : rien produit, non marqué fait — repris au prochain passage.")
                 summary = ", ".join(f"{k} {v}" for k, v in (result or {}).items())
                 self.stdout.write(f"  {seeder.name} : {summary} ({time.monotonic() - t0:.1f} s)")
         if dropped:

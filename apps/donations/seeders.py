@@ -840,14 +840,30 @@ class DonsSeeder(Seeder):
     def _closings(self, plans: list[ParishPlan]) -> int:
         from apps.core.exceptions import ApplicationError
         from apps.donations.models import MonthClosing
+        from apps.donations.selectors_analyse import month_totals
         from apps.donations.services_cloture import month_close
+        from apps.hierarchy.models import AuditEvent
 
         created = []
+        tracked = set(self.ctx.tracked_ids(MonthClosing))
         current = self.ctx.today.replace(day=1)
         for plan in plans:
             for month in calendrier.month_iter(self.ctx.start, current - datetime.timedelta(days=1)):
-                if MonthClosing.objects.filter(node=plan.node, month=month).exists():
-                    continue
+                existing = MonthClosing.objects.filter(node=plan.node, month=month).first()
+                if existing is not None:
+                    # Clôture AUTOMATIQUE (tâche de nuit, sans auteur) figée avant que le seed ne remplisse le
+                    # mois — recette du 30/09/2026 : août clos à 0 à 03:40 sur une base vide. On la refait,
+                    # suivie par le lot (le reset la retire, la tâche de nuit reclôt sur les vraies données).
+                    # Une clôture faite à la main n'est jamais touchée.
+                    stale = (
+                        existing.closed_by_id is None and str(existing.pk) not in tracked
+                        and existing.totals.get("collecte") != month_totals(node=plan.node, month=month)["collecte"]
+                    )  # fmt: skip
+                    if not stale:
+                        continue
+                    AuditEvent.objects.filter(action="dons.cloture_mois", target_id=existing.pk).delete()
+                    existing.delete()
+                    self.ctx.note(f"Clôture automatique {month:%Y-%m} de {plan.node.name} périmée (antérieure au seed) : refaite.")
                 try:
                     created.append(month_close(node=plan.node, month=month).pk)
                 except ApplicationError as exc:

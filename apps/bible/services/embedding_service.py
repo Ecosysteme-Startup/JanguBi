@@ -163,7 +163,8 @@ class EmbeddingService:
     def __init__(self, provider: Optional[EmbedderProvider] = None):
         self.provider = provider or _build_provider(getattr(settings, "EMBEDDING_PROVIDER", "stub"))
 
-    @transaction.atomic
+    # Pas de transaction sur tout le livre : une par paquet (plus bas), pour qu'un calcul interrompu
+    # garde les paquets déjà faits.
     def compute_bulk_embeddings(self, book_id: int, *, force: bool = False) -> int:
         """Calcule et stocke les embeddings des versets d'un livre.
 
@@ -182,22 +183,24 @@ class EmbeddingService:
             logger.info("No verses to embed for book_id %s (force=%s).", book_id, force)
             return 0
 
-        # "Genèse 1:1 - Au commencement Dieu créa le ciel et la terre."
-        texts = [
-            f"{v.chapter.book.name} {v.chapter.number}:{v.number} - {v.text}"
-            for v in verses
-        ]
-
-        vectors = self.provider.embed_texts(texts)
-        if len(vectors) != len(verses):
-            raise ApplicationError(
-                f"Embedding provider returned {len(vectors)} vectors for {len(verses)} verses."
-            )
-
-        for verse, vector in zip(verses, vectors):
-            verse.embedding = vector
-
-        Verse.objects.bulk_update(verses, ["embedding"], batch_size=500)
+        # Par paquets bornés, enregistrés au fil de l'eau : un livre entier d'un seul appel (2 500 versets
+        # pour les Psaumes) faisait monter le modèle au-delà de 3 Go — tué par le noyau en recette le
+        # 30/09/2026, sans rien avoir enregistré. Un calcul interrompu reprend où il s'était arrêté
+        # (seuls les versets encore NULL sont sélectionnés).
+        size = max(1, int(getattr(settings, "EMBEDDING_BATCH_SIZE", 128)))
+        for start in range(0, len(verses), size):
+            batch = verses[start : start + size]
+            # "Genèse 1:1 - Au commencement Dieu créa le ciel et la terre."
+            texts = [f"{v.chapter.book.name} {v.chapter.number}:{v.number} - {v.text}" for v in batch]
+            vectors = self.provider.embed_texts(texts)
+            if len(vectors) != len(batch):
+                raise ApplicationError(
+                    f"Embedding provider returned {len(vectors)} vectors for {len(batch)} verses."
+                )
+            for verse, vector in zip(batch, vectors):
+                verse.embedding = vector
+            with transaction.atomic():
+                Verse.objects.bulk_update(batch, ["embedding"], batch_size=500)
         logger.info("Computed embeddings for %d verses in book_id %s.", len(verses), book_id)
         return len(verses)
 
