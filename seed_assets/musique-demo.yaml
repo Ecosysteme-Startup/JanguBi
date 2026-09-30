@@ -1,0 +1,30 @@
+# Sélection de MUSIQUE DE DÉMONSTRATION pour `seed_realiste --medias-dossier` (local et recette seulement).
+# Aucun fichier audio dans Git : ce fichier dit quoi prendre dans le pack, `prepare_musique_demo` le fabrique.
+#
+# Source : banque de samples « The Polyphonic Elements Vol. 6 » (fournie par l'équipe). Licence de production
+# musicale : les boucles ne se redistribuent pas telles quelles. JAMAIS en production, jamais publié.
+#
+#   1. Décompresser le pack dans seed_assets/ (dossier ignoré par Git) :
+#        seed_assets/The Polyphonic Elements Vol.6/...
+#   2. make musique-demo            → seed_assets/musique-demo/ (FLAC + credits.yaml)
+#   3. make seed-realiste-musique   → sonothèque de démo avec cette musique
+#
+# Critères : instrumental calme (piano, orgue, cordes, flûtes), 45 s au moins (extrait de 30 s à partir de 15 s
+# en --medias legers). Écartés : percussions isolées, voix en anglais, boucles funk ou « psych ».
+pack: "The Polyphonic Elements Vol.6"
+album:
+  titre: "Musique de démonstration"
+  artiste: "The Polyphonic Elements Vol. 6 (banque de samples)"
+  licence: "Démonstration interne, ne pas diffuser"
+  source: "Banque de samples fournie par l'équipe"
+pistes:
+  - {source: "Chord Progressions/Gospel 70s Piano Bpm 66.wav", fichier: "01-piano-gospel", titre: "Piano gospel"}
+  - {source: "Chord Progressions/Piano Prog 2 Bpm 68.wav", fichier: "02-piano-meditation", titre: "Méditation au piano"}
+  - {source: "Woodwinds/String Luxury Bpm 70.wav", fichier: "03-cordes", titre: "Cordes"}
+  - {source: "Woodwinds/Symphony Flutes Bpm 70.wav", fichier: "04-flutes", titre: "Flûtes"}
+  - {source: "Chord Progressions/Gospel '86 MK-80  Bpm 64.wav", fichier: "05-orgue-gospel", titre: "Orgue gospel"}
+  - {source: "Chord Progressions/Piano Prog 3 Bpm 68.wav", fichier: "06-piano-louange", titre: "Louange au piano"}
+  - {source: "Guitars/Guitar Swells.wav", fichier: "07-guitare-ambiance", titre: "Guitare d'ambiance"}
+  - {source: "Chord Progressions/Soul Piano Bpm 70.wav", fichier: "08-piano-soul", titre: "Piano soul"}
+  - {source: "Loops/Gospel 80s MK-80 Loop Bpm 64.wav", fichier: "09-clavier-gospel", titre: "Clavier gospel"}
+  - {source: "Chord Progressions/Piano Prog 1 Bpm 64.wav", fichier: "10-piano-recueillement", titre: "Recueillement"}

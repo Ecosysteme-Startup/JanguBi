@@ -5,7 +5,7 @@ export
 .PHONY: up down restart build logs shell dbshell makemigrations migrate check test \
        init-data init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
-       flush-redis flush-db link-verses check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
+       flush-redis flush-db link-verses musique-demo seed-realiste-musique check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-hierarchy seed-demo seed-reset \
        seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
@@ -209,6 +209,13 @@ seed-realiste-reset:
 # Tests de charge : échelle grande (COPY en masse), sans fichiers audio.
 seed-charge:
 	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier $(SEED_ARGS)
+
+# Musique de démonstration (seed_assets/musique-demo.yaml) : pack décompressé dans seed_assets/, jamais commité.
+musique-demo:
+	docker compose exec django python manage.py prepare_musique_demo
+
+seed-realiste-musique:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias complets --medias-dossier /app/seed_assets/musique-demo --verifier $(SEED_ARGS)
 
 fetch-seed-assets:
 	docker compose exec django python manage.py fetch_seed_assets
