@@ -12,6 +12,8 @@ réseau (étape sautée et signalée). ``parole`` sème seulement l'activité de
 from __future__ import annotations
 
 import datetime
+import json
+import pathlib
 import uuid
 from typing import Any
 
@@ -27,9 +29,30 @@ GOSPELS = ("matthieu", "marc", "luc", "jean")
 
 
 def bible_present() -> bool:
+    """Une Bible est-elle là, même partielle ? Suffit pour semer de l'activité de lecture ; ne suffit PAS
+    pour décider d'importer (voir ``bible_complete``)."""
     from apps.bible.models import Verse
 
     return Verse.objects.exists()
+
+
+def bible_complete(json_path: str | pathlib.Path, source: str) -> bool:
+    """Chaque livre du fichier a-t-il des versets de cette source en base ?
+
+    L'import est atomique PAR LIVRE : une interruption laisse des livres entiers manquants, jamais des
+    versets épars. On compte donc les livres, pas les versets — l'importeur fusionne des entrées du
+    fichier (doublons, noms rapprochés : 35 407 entrées pour 35 283 versets en AELF), un compte de
+    versets se tromperait. Fichier illisible : repli sur ``bible_present`` plutôt que de déclencher un
+    réimport, qui supprime d'abord tous les versets de la source (et les signets qui s'y rattachent).
+    """
+    from apps.bible.models import Book
+
+    try:
+        expected = len(json.loads(pathlib.Path(json_path).read_text(encoding="utf-8-sig"))["books"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return bible_present()
+    found = Book.objects.filter(chapters__verses__source_file=source).distinct().count()
+    return found >= expected
 
 
 @register
@@ -40,7 +63,7 @@ class BibleSeeder(Seeder):
     always = True  # rien n'est créé par le lot : vérifie ou importe à chaque passage
 
     def seed(self, ctx: SeedContext) -> dict[str, Any]:
-        if bible_present():
+        if bible_complete(ctx.bible_json, ctx.bible_source) if ctx.bible_json else bible_present():
             return {"bible": "déjà importée"}
         if not ctx.bible_json:
             ctx.note("Bible absente et --bible-json non fourni : l'activité de lecture est sautée "

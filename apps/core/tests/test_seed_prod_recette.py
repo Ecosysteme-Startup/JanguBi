@@ -23,7 +23,7 @@ def calls(monkeypatch):
 
 @pytest.mark.django_db
 def test_seed_prod_only_loads_real_data_and_skips_an_existing_bible(calls, monkeypatch):
-    monkeypatch.setattr("apps.bible.seeders.bible_present", lambda: True)
+    monkeypatch.setattr("apps.bible.seeders.bible_complete", lambda *a: True)
 
     call_command("seed_prod", hors_ligne=True)
 
@@ -33,7 +33,7 @@ def test_seed_prod_only_loads_real_data_and_skips_an_existing_bible(calls, monke
 
 @pytest.mark.django_db
 def test_seed_prod_imports_the_bible_when_missing(calls, monkeypatch):
-    monkeypatch.setattr("apps.bible.seeders.bible_present", lambda: False)
+    monkeypatch.setattr("apps.bible.seeders.bible_complete", lambda *a: False)
 
     call_command("seed_prod", hors_ligne=True)
 
