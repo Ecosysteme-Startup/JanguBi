@@ -122,6 +122,15 @@ _CELERY_BEAT_SCHEDULE_ALL = {
 CELERY_BEAT_SCHEDULE = filter_beat_schedule(_CELERY_BEAT_SCHEDULE_ALL, active=JANGUBI_MODULES)
 
 EMAIL_FROM_ADDRESS = env.str("EMAIL_FROM_ADDRESS", default="noreply@jangubi.sn")
+# Nom affiché de l'expéditeur (« Jàngu Bi <noreply@…> »).
+EMAIL_FROM_NAME = env.str("EMAIL_FROM_NAME", default="Jàngu Bi")
+# Logo des e-mails : PNG hébergé (les clients mail bloquent le SVG et les images jointes en
+# data:). Fichier servi par l'API : apps/emails/static/emails/logo-email.png. En recette et
+# en production, l'adresse publique de l'API, par exemple
+# https://api-jangubi.ceac.dev/static/emails/logo-email.png. Vide : pas de logo, le nom seul.
+EMAIL_LOGO_URL = env.str("EMAIL_LOGO_URL", default="http://localhost:8000/static/emails/logo-email.png")
+# Pied de page des e-mails.
+EMAIL_DIOCESE_NAME = env.str("EMAIL_DIOCESE_NAME", default="Archidiocèse de Dakar")
 ADMIN_ACCOUNT_EXPIRY_DAYS = env.int("ADMIN_ACCOUNT_EXPIRY_DAYS", default=7)
 
 # Formulaire public « Pour les paroisses » (POST /api/v1/public/contact/) : destinataire

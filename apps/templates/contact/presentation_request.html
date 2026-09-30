@@ -1,13 +1,21 @@
-<p>Nouvelle demande de présentation reçue par le formulaire « Pour les paroisses ».</p>
-<table cellpadding="4" style="border-collapse:collapse">
-  <tr><td><strong>Nom</strong></td><td>{{ request.full_name }}</td></tr>
-  <tr><td><strong>Fonction</strong></td><td>{{ request.get_fonction_display }}</td></tr>
-  <tr><td><strong>Paroisse</strong></td><td>{{ request.paroisse }}</td></tr>
-  <tr><td><strong>Diocèse</strong></td><td>{% if request.diocese_node %}{{ request.diocese_node.name }}{% else %}Non précisé{% endif %}</td></tr>
-  <tr><td><strong>Téléphone</strong></td><td>{{ request.telephone }}</td></tr>
-  <tr><td><strong>E-mail</strong></td><td>{{ request.email }}</td></tr>
-  <tr><td><strong>Curé informé</strong></td><td>{{ request.cure_informe|yesno:"Oui,Non" }}</td></tr>
+{% extends "emails/base.html" %}
+{% block title %}Demande de présentation{% endblock %}
+{% block preheader %}{{ request.full_name }}, {{ request.paroisse }}, souhaite une présentation de Jàngu Bi.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Formulaire «&nbsp;Pour les paroisses&nbsp;»</p>{% endblock %}
+{% block content %}
+<h1>Nouvelle demande de présentation</h1>
+<p>Une paroisse souhaite découvrir Jàngu Bi. Merci de reprendre contact rapidement avec la personne ci-dessous.</p>
+<table role="presentation" class="details" cellpadding="0" cellspacing="0" border="0">
+  <tr><th scope="row">Nom</th><td>{{ request.full_name }}</td></tr>
+  <tr><th scope="row">Fonction</th><td>{{ request.get_fonction_display }}</td></tr>
+  <tr><th scope="row">Paroisse</th><td>{{ request.paroisse }}</td></tr>
+  <tr><th scope="row">Diocèse</th><td>{% if request.diocese_node %}{{ request.diocese_node.name }}{% else %}Non précisé{% endif %}</td></tr>
+  <tr><th scope="row">Téléphone</th><td>{{ request.telephone }}</td></tr>
+  <tr><th scope="row">E-mail</th><td><a href="mailto:{{ request.email }}">{{ request.email }}</a></td></tr>
+  <tr><th scope="row">Curé informé</th><td>{{ request.cure_informe|yesno:"Oui,Non" }}</td></tr>
 </table>
-{% if request.message %}<p><strong>Message :</strong></p>
-<p style="white-space:pre-wrap">{{ request.message }}</p>{% endif %}
-<p style="color:#6b6b6b;font-size:13px">Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}. Demande enregistrée dans l'administration (Demandes de présentation).</p>
+{% if request.message %}<p class="muted">Message :</p>
+<p class="quote">{{ request.message }}</p>{% endif %}
+<p class="muted">Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}. La demande est enregistrée dans l'administration (Demandes de présentation).</p>
+{% endblock %}
+{% block signature %}{% endblock %}

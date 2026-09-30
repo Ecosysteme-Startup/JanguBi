@@ -50,5 +50,10 @@ def _notify_batch(user_ids: list, payload: dict, article) -> int:
         event_type="news.published",
         payload=payload,
         email_template="annonce_publiee",
-        email_context={"title": article.title, "node_name": article.scope_node.name, "article_id": str(article.pk)},
+        email_context={
+            "title": article.title,
+            "node_name": article.scope_node.name,
+            "paroisse": article.scope_node.name,
+            "article_id": str(article.pk),
+        },
     )

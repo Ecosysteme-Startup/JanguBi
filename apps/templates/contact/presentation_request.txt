@@ -1,4 +1,8 @@
-{% autoescape off %}Nouvelle demande de présentation reçue par le formulaire « Pour les paroisses ».
+{% extends "emails/base.txt" %}
+{% block eyebrow %}FORMULAIRE « POUR LES PAROISSES »{% endblock %}
+{% block content %}Nouvelle demande de présentation
+
+Une paroisse souhaite découvrir Jàngu Bi. Merci de reprendre contact rapidement avec la personne ci-dessous.
 
 Nom : {{ request.full_name }}
 Fonction : {{ request.get_fonction_display }}
@@ -11,4 +15,6 @@ Curé informé : {{ request.cure_informe|yesno:"Oui,Non" }}
 Message :
 {{ request.message }}
 {% endif %}
-Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}.{% endautoescape %}
+Consentement donné le {{ request.consented_at|date:"d/m/Y à H:i" }}. La demande est enregistrée dans l'administration (Demandes de présentation).
+{% endblock %}
+{% block signature %}{% endblock %}

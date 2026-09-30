@@ -1,0 +1,1 @@
+Merci pour votre don : reçu n° {{ recu_numero }}

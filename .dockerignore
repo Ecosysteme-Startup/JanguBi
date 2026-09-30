@@ -227,3 +227,6 @@ Thumbs.db
 # Configuration d'identité lue par l'infrastructure (make keycloak-extraire) :
 # les motifs *password* ci-dessus excluraient des pages du thème.
 !deploy/keycloak/**
+
+# Logo des e-mails servi par l'API (EMAIL_LOGO_URL) : le motif **/static/ ci-dessus l'exclurait.
+!apps/emails/static/**

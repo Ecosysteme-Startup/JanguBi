@@ -1,0 +1,11 @@
+{% extends "emails/base.html" %}
+{% block title %}Événement annulé{% endblock %}
+{% block preheader %}«&nbsp;{{ title }}&nbsp;», prévu le {{ start_at|date:"j F" }}, n'aura pas lieu.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Événement annulé</p>{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p>Bonjour,</p>
+<p>Nous sommes au regret de vous annoncer que l'événement <strong>{{ title }}</strong>, prévu le <strong>{{ start_at|date:"l j F Y à H\hi" }}</strong>, a été annulé.</p>
+<p>Votre inscription est donc sans objet ; vous n'avez rien à faire. Veuillez nous excuser pour ce contretemps.</p>
+{% endblock %}
+{% block reason %}Vous recevez ce message parce que vous étiez inscrit(e) à cet événement.{% endblock %}

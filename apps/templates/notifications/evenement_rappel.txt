@@ -1,7 +1,18 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}RAPPEL{% endblock %}
+{% block content %}{{ title }}
+
 Bonjour,
 
-Rappel : vous êtes inscrit(e) à « {{ title }} », {{ start_at|date:"l j F à H\hi" }}{% if location %}, {{ location }}{% endif %}.
+Vous êtes inscrit(e) à cet événement. Nous nous réjouissons de vous y retrouver.
+
+Date : {{ start_at|date:"l j F Y" }}
+Heure : {{ start_at|date:"H\hi" }}{% if location %}
+Lieu : {{ location }}{% endif %}
 
 Détails : {{ frontend_url }}/agenda/{{ event_id }}
 
-Vos préférences de notification : {{ frontend_url }}/profil/notifications
+Un empêchement ? Pensez à vous désinscrire depuis l'application pour libérer votre place.
+{% endblock %}
+{% block reason %}Vous recevez ce rappel parce que vous êtes inscrit(e) à cet événement.
+Gérer mes notifications : {{ frontend_url }}/profil/notifications{% endblock %}

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+<title>{% block title %}Jàngu Bi{% endblock %}</title>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;600&amp;family=Source+Serif+4:opsz,wght@8..60,600&amp;display=swap" rel="stylesheet">
+{# Règles recopiées dans chaque balise par apps.emails.inline.css_inline, puis retirées. #}
+<style data-inline>
+  body { margin: 0; padding: 0; width: 100%; background-color: #F7FAFD; -webkit-text-size-adjust: 100%; }
+  table { border-collapse: collapse; }
+  img { border: 0; outline: none; text-decoration: none; }
+  .page { width: 100%; background-color: #F7FAFD; }
+  .shell { width: 100%; max-width: 600px; }
+  .brand { padding: 32px 24px 20px; text-align: center; }
+  .brand-name { font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; font-size: 24px; line-height: 32px; font-weight: 600; color: #0E1A2B; letter-spacing: -0.01em; text-decoration: none; }
+  .brand-logo { display: inline-block; vertical-align: middle; }
+  .card { background-color: #FFFFFF; border: 1px solid #DDE5EE; border-radius: 16px; }
+  .card-body { padding: 40px 40px 32px; font-family: 'Libre Franklin', Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #0E1A2B; text-align: left; }
+  .eyebrow { margin: 0 0 8px; font-size: 13px; line-height: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #0A6BA3; }
+  h1 { margin: 0 0 16px; font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; font-size: 26px; line-height: 34px; font-weight: 600; color: #0E1A2B; letter-spacing: -0.01em; }
+  p { margin: 0 0 16px; }
+  a { color: #0A6BA3; text-decoration: underline; }
+  strong { font-weight: 600; color: #0E1A2B; }
+  ol, ul { margin: 0 0 16px; padding-left: 22px; }
+  li { margin: 0 0 8px; }
+  .muted { color: #586677; font-size: 14px; line-height: 21px; }
+  .btn-wrap { margin: 8px 0 24px; }
+  .btn-cell { border-radius: 12px; background-color: #0A6BA3; }
+  .btn { display: inline-block; padding: 14px 28px; font-family: 'Libre Franklin', Arial, Helvetica, sans-serif; font-size: 16px; line-height: 20px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 12px; }
+  .fallback { margin: 0 0 16px; font-size: 12px; line-height: 18px; color: #586677; word-break: break-all; }
+  .fallback a { color: #586677; }
+  .panel { width: 100%; margin: 0 0 20px; background-color: #F7FAFD; border: 1px solid #DDE5EE; border-radius: 12px; }
+  .panel-cell { padding: 16px 20px; font-size: 15px; line-height: 22px; color: #0E1A2B; }
+  .note { width: 100%; margin: 0 0 20px; background-color: #EEF6FC; border-radius: 12px; }
+  .note-cell { padding: 14px 18px; font-size: 14px; line-height: 21px; color: #052F49; }
+  .details { width: 100%; margin: 0 0 20px; border-top: 1px solid #DDE5EE; }
+  .details th { padding: 10px 12px 10px 0; border-bottom: 1px solid #DDE5EE; font-size: 14px; line-height: 20px; font-weight: 400; color: #586677; text-align: left; vertical-align: top; width: 40%; }
+  .details td { padding: 10px 0; border-bottom: 1px solid #DDE5EE; font-size: 15px; line-height: 22px; font-weight: 600; color: #0E1A2B; text-align: left; vertical-align: top; }
+  .amount { font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif; font-size: 32px; line-height: 40px; font-weight: 600; color: #0E1A2B; }
+  .quote { margin: 0 0 20px; padding: 4px 0 4px 16px; border-left: 3px solid #7CC3EE; color: #3A4859; white-space: pre-wrap; }
+  .signature { margin: 24px 0 0; color: #3A4859; }
+  .reason { padding: 20px 40px 0; font-family: 'Libre Franklin', Arial, Helvetica, sans-serif; font-size: 13px; line-height: 20px; color: #586677; text-align: center; }
+  .reason a { color: #0A6BA3; }
+  .footer { padding: 24px 32px 40px; font-family: 'Libre Franklin', Arial, Helvetica, sans-serif; font-size: 12px; line-height: 19px; color: #586677; text-align: center; }
+  .footer p { margin: 0 0 6px; }
+  .footer a { color: #586677; text-decoration: underline; }
+  .footer-org { font-weight: 600; color: #3A4859; }
+</style>
+<style>
+  /* Petits écrans (Apple Mail, Gmail app) : marges réduites. */
+  @media only screen and (max-width: 620px) {
+    .card-body { padding: 28px 20px 24px !important; }
+    .reason { padding: 16px 20px 0 !important; }
+    h1 { font-size: 23px !important; line-height: 30px !important; }
+    .btn { display: block !important; text-align: center !important; }
+  }
+  /* Mode sombre (clients qui le respectent) : couleurs du thème sombre de l'application. */
+  @media (prefers-color-scheme: dark) {
+    body, .page { background-color: #0B1118 !important; }
+    .card { background-color: #111A24 !important; border-color: #243142 !important; }
+    .card-body, h1, strong, .brand-name, .details td, .amount, .panel-cell { color: #F2F5F8 !important; }
+    .muted, .fallback, .reason, .footer, .footer a, .details th, .quote, .signature { color: #92A2B4 !important; }
+    .footer-org { color: #BAC6D3 !important; }
+    a, .reason a { color: #7CC3EE !important; }
+    .fallback a { color: #92A2B4 !important; }
+    .btn-cell { background-color: #7CC3EE !important; }
+    .btn { color: #0B1118 !important; }
+    .panel { background-color: #0B1118 !important; border-color: #243142 !important; }
+    .note { background-color: #13304A !important; }
+    .note-cell { color: #D9EBF7 !important; }
+    .details, .details th, .details td { border-color: #243142 !important; }
+    .eyebrow { color: #7CC3EE !important; }
+  }
+</style>
+<!--[if mso]><style>.card-body, .btn, .footer, .reason { font-family: Arial, sans-serif !important; }</style><![endif]-->
+</head>
+<body>
+{# Aperçu affiché par la boîte de réception à côté de l'objet. #}
+<div style="display: none; max-height: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #F7FAFD; opacity: 0;">{% block preheader %}{% endblock %}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+<table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td align="center" style="padding: 0 12px;">
+      <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+      <table role="presentation" class="shell" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="brand">
+            <a href="{{ frontend_url }}/" style="text-decoration: none;">
+              {% if logo_url %}<img class="brand-logo" src="{{ logo_url }}" width="42" height="48" alt="" style="width: 42px; height: 48px;">{% endif %}
+              <span class="brand-name" style="vertical-align: middle; padding-left: 10px;">Jàngu Bi</span>
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td class="card">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="card-body">
+                  {% block eyebrow %}{% endblock %}
+                  {% block content %}{% endblock %}
+                  {% block signature %}<p class="signature">Fraternellement,<br>L'équipe Jàngu Bi</p>{% endblock %}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr><td class="reason">{% block reason %}{% endblock %}</td></tr>
+        <tr>
+          <td class="footer">
+            <p class="footer-org">{% if paroisse %}{{ paroisse }} · {% endif %}{{ diocese_nom }}</p>
+            <p>Jàngu Bi : la Parole, votre paroisse et vos démarches, au même endroit.</p>
+            <p>Message envoyé automatiquement, merci de ne pas y répondre.{% if frontend_url %} Besoin d'aide ? <a href="{{ frontend_url }}/pour-les-paroisses#contact">Écrivez-nous</a>.{% endif %}</p>
+            <p>{% if frontend_url %}<a href="{{ frontend_url }}/confidentialite">Confidentialité</a> · {% endif %}Protection des données personnelles : loi n° 2008-12</p>
+            <p>© {{ annee }} Numerisen, Dakar</p>
+          </td>
+        </tr>
+      </table>
+      <!--[if mso]></td></tr></table><![endif]-->
+    </td>
+  </tr>
+</table>
+</body>
+</html>

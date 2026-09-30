@@ -1,4 +1,15 @@
+{% extends "emails/base.html" %}
+{% block title %}Rappel de votre rendez-vous{% endblock %}
+{% block preheader %}{{ starts_at|date:"l j F" }} à {{ starts_at|date:"H\hi" }}, {{ place }}.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Rappel</p>{% endblock %}
+{% block content %}
+<h1>Votre rendez-vous approche</h1>
 <p>Bonjour,</p>
-<p>Nous vous rappelons votre rendez-vous du <strong>{{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}</strong>, {{ place }}.</p>
-<p>En cas d'empêchement, pensez à l'annuler dans l'application au plus tard une heure avant.</p>
-<p>Jàngu Bi</p>
+<p>Nous vous rappelons votre rendez-vous :</p>
+<table role="presentation" class="details" cellpadding="0" cellspacing="0" border="0">
+  <tr><th scope="row">Date</th><td>{{ starts_at|date:"l j F Y" }}</td></tr>
+  <tr><th scope="row">Heure</th><td>{{ starts_at|date:"H\hi" }}</td></tr>
+  <tr><th scope="row">Lieu</th><td>{{ place }}</td></tr>
+</table>
+<p>En cas d'empêchement, merci de l'annuler dans l'application au plus tard une heure avant : le créneau pourra ainsi profiter à quelqu'un d'autre.</p>
+{% endblock %}

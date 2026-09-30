@@ -1,0 +1,17 @@
+{% autoescape off %}JÀNGU BI
+{% block eyebrow %}{% endblock %}
+{% block content %}{% endblock %}
+{% block signature %}Fraternellement,
+L'équipe Jàngu Bi{% endblock %}
+
+{% block reason %}{% endblock %}
+
+--
+{% if paroisse %}{{ paroisse }} · {% endif %}{{ diocese_nom }}
+Jàngu Bi : la Parole, votre paroisse et vos démarches, au même endroit.
+Message envoyé automatiquement, merci de ne pas y répondre.{% if frontend_url %}
+Besoin d'aide : {{ frontend_url }}/pour-les-paroisses#contact
+Confidentialité : {{ frontend_url }}/confidentialite{% endif %}
+Protection des données personnelles : loi n° 2008-12
+© {{ annee }} Numerisen, Dakar
+{% endautoescape %}

@@ -1,0 +1,12 @@
+{% extends "emails/base.html" %}
+{% block title %}Complément demandé{% endblock %}
+{% block preheader %}La chancellerie a besoin d'une précision. Le détail se trouve dans votre profil.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Votre profil</p>{% endblock %}
+{% block content %}
+<h1>Un complément est demandé</h1>
+<p>Bonjour,</p>
+<p>La chancellerie a examiné votre déclaration et a besoin d'un complément pour la valider.</p>
+<p>Pour préserver votre confidentialité, le détail n'apparaît pas dans cet e-mail : vous le trouverez dans votre profil Jàngu Bi.</p>
+{% if frontend_url %}{% include "emails/_bouton.html" with url=frontend_url|add:"/app/profil" label="Ouvrir mon profil" sans_lien=True %}{% endif %}
+<p class="muted">Merci pour votre patience et votre confiance.</p>
+{% endblock %}

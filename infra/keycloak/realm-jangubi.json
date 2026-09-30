@@ -359,6 +359,7 @@
     "jboss-logging"
   ],
   "loginTheme": "jangubi",
+  "emailTheme": "jangubi",
   "components": {
     "org.keycloak.userprofile.UserProfileProvider": [
       {

@@ -1,0 +1,13 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}VOTRE PROFIL{% endblock %}
+{% block content %}Un complément est demandé
+
+Bonjour,
+
+La chancellerie a examiné votre déclaration et a besoin d'un complément pour la valider.
+
+Pour préserver votre confidentialité, le détail n'apparaît pas dans cet e-mail : vous le trouverez dans votre profil Jàngu Bi.{% if frontend_url %}
+{{ frontend_url }}/app/profil{% endif %}
+
+Merci pour votre patience et votre confiance.
+{% endblock %}

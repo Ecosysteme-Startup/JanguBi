@@ -8,9 +8,7 @@ from typing import Any
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from django.conf import settings
 from django.db import transaction
-from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.messaging.models import Notification, NotificationPreference
@@ -53,21 +51,9 @@ def _ws_push(user_id: Any, event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _email_queue(*, to: str, template: str, context: dict[str, Any], eta: datetime.datetime | None) -> None:
-    from apps.emails.models import Email
-    from apps.emails.tasks import email_send as email_send_task
+    from apps.emails.services import email_queue
 
-    ctx = {"frontend_url": getattr(settings, "FRONTEND_URL", "http://localhost:3000"), **context}
-    email = Email.objects.create(
-        to=to,
-        subject=render_to_string(f"notifications/{template}_subject.txt", ctx).strip(),
-        html=render_to_string(f"notifications/{template}.html", ctx),
-        plain_text=render_to_string(f"notifications/{template}.txt", ctx),
-        status=Email.Status.SENDING,
-    )
-    if eta is None:
-        transaction.on_commit(lambda: email_send_task.delay(email.id))
-    else:
-        transaction.on_commit(lambda: email_send_task.apply_async(args=[email.id], eta=eta))
+    email_queue(to=to, template=f"notifications/{template}", context=context, eta=eta)
 
 
 @transaction.atomic

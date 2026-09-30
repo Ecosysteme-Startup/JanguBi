@@ -289,6 +289,8 @@ services:
       KC_MOBILE_REDIRECT_URI: ${KC_MOBILE_REDIRECT_URI:-sn.numerisen.jangubi://oauth}
       KC_WEB_POST_LOGOUT_URI: ${KC_WEB_POST_LOGOUT_URI:-http://localhost:3000/}
       KC_WEB_ORIGIN: ${KC_WEB_ORIGIN:-http://localhost:3000}
+      # Logo des e-mails Keycloak (PNG public) ; vide : image servie par le thème.
+      JANGUBI_EMAIL_LOGO_URL: ${JANGUBI_EMAIL_LOGO_URL:-}
       # Lu par le thème de connexion (bandeau liturgique).
       JANGUBI_API_URL: ${JANGUBI_API_URL:-http://localhost:8001/api/v1}
       # SMTP du realm (vérification d'e-mail, mot de passe oublié) : Mailpit en dev.
@@ -301,8 +303,8 @@ services:
       KC_SMTP_PASSWORD: ${KC_SMTP_PASSWORD:-}
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
-      # Thème de connexion Jàngu Bi (maquettes PUB-Connexion, PUB-Inscription-Compte).
-      - ./infra/keycloak/themes/jangubi:/opt/keycloak/themes/jangubi:ro
+      # Thèmes Jàngu Bi (connexion et e-mails), les mêmes que ceux livrés en recette (deploy/keycloak).
+      - ./deploy/keycloak/themes/jangubi:/opt/keycloak/themes/jangubi:ro
     ports:
       - "8180:8080"
     depends_on:

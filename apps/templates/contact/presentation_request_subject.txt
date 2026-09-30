@@ -1,1 +1,1 @@
-{% autoescape off %}[Jàngu Bi] Demande de présentation — {{ request.paroisse }}{% endautoescape %}
+{% autoescape off %}Demande de présentation : {{ request.paroisse }}{% endautoescape %}

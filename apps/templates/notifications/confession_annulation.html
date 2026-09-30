@@ -1,5 +1,12 @@
+{% extends "emails/base.html" %}
+{% block title %}Rendez-vous annulé{% endblock %}
+{% block preheader %}Le prêtre a dû annuler votre rendez-vous. Vous pouvez choisir un autre créneau.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Rendez-vous annulé</p>{% endblock %}
+{% block content %}
+<h1>Votre rendez-vous est annulé</h1>
 <p>Bonjour,</p>
-<p>Votre rendez-vous du <strong>{{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}</strong>, {{ place }}, a été annulé par le prêtre.</p>
-{% if message %}<p>Son message : {{ message }}</p>{% endif %}
-<p>Vous pouvez choisir un autre créneau dans l'application.</p>
-<p>Jàngu Bi</p>
+<p>Le prêtre a dû annuler votre rendez-vous du <strong>{{ starts_at|date:"l j F" }} à {{ starts_at|date:"H\hi" }}</strong>, {{ place }}. Veuillez nous excuser pour ce contretemps.</p>
+{% if message %}<p class="muted">Son message :</p>
+<p class="quote">{{ message }}</p>{% endif %}
+<p>Vous pouvez choisir un autre créneau dans l'application, quand vous le souhaitez.</p>
+{% endblock %}

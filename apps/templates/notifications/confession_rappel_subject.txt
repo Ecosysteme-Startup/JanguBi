@@ -1,1 +1,1 @@
-[Jàngu Bi] Rappel de votre rendez-vous
+Rappel de votre rendez-vous du {{ starts_at|date:"d/m" }} à {{ starts_at|date:"H\hi" }}

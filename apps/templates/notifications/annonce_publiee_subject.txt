@@ -1,1 +1,1 @@
-Nouvelle annonce : {{ title }}
+{% autoescape off %}{{ node_name }} : {{ title }}{% endautoescape %}

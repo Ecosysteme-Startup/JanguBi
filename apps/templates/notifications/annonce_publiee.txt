@@ -1,8 +1,11 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}NOUVELLE ANNONCE{% endblock %}
+{% block content %}{{ title }}
+
 Bonjour,
 
-{{ node_name }} a publié une nouvelle annonce : « {{ title }} ».
-
-Lire l'annonce : {{ frontend_url }}/actualites/{{ article_id }}
-
-Vous recevez ce message parce que vous suivez cette paroisse sur Jàngu Bi.
-Vos préférences de notification : {{ frontend_url }}/profil/notifications
+{{ node_name }} vient de publier une nouvelle annonce. Vous pouvez la lire dès maintenant sur Jàngu Bi :
+{{ frontend_url }}/actualites/{{ article_id }}
+{% endblock %}
+{% block reason %}Vous recevez ce message parce que vous suivez {{ node_name }} sur Jàngu Bi.
+Gérer mes notifications : {{ frontend_url }}/profil/notifications{% endblock %}

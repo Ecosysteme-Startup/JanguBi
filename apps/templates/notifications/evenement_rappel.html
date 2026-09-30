@@ -1,4 +1,17 @@
+{% extends "emails/base.html" %}{% load emails_extras %}
+{% block title %}Rappel : {{ title }}{% endblock %}
+{% block preheader %}{{ start_at|date:"l j F à H\hi" }}{% if location %}, {{ location }}{% endif %}. Nous vous attendons.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Rappel</p>{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
 <p>Bonjour,</p>
-<p>Rappel : vous êtes inscrit(e) à « {{ title }} », {{ start_at|date:"l j F à H\hi" }}{% if location %}, {{ location }}{% endif %}.</p>
-<p><a href="{{ frontend_url }}/agenda/{{ event_id }}">Voir l'événement</a></p>
-<p style="color:#6b6b6b;font-size:13px"><a href="{{ frontend_url }}/profil/notifications">Vos préférences de notification</a>.</p>
+<p>Vous êtes inscrit(e) à cet événement. Nous nous réjouissons de vous y retrouver.</p>
+<table role="presentation" class="details" cellpadding="0" cellspacing="0" border="0">
+  <tr><th scope="row">Date</th><td>{{ start_at|date:"l j F Y" }}</td></tr>
+  <tr><th scope="row">Heure</th><td>{{ start_at|date:"H\hi" }}</td></tr>
+  {% if location %}<tr><th scope="row">Lieu</th><td>{{ location }}</td></tr>{% endif %}
+</table>
+{% concat frontend_url "/agenda/" event_id as url %}{% include "emails/_bouton.html" with url=url label="Voir l'événement" sans_lien=True %}
+<p class="muted">Un empêchement ? Pensez à vous désinscrire depuis l'application pour libérer votre place.</p>
+{% endblock %}
+{% block reason %}Vous recevez ce rappel parce que vous êtes inscrit(e) à cet événement. <a href="{{ frontend_url }}/profil/notifications">Gérer mes notifications</a>{% endblock %}

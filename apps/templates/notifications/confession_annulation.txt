@@ -1,9 +1,13 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}RENDEZ-VOUS ANNULÉ{% endblock %}
+{% block content %}Votre rendez-vous est annulé
+
 Bonjour,
 
-Votre rendez-vous du {{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}, {{ place }}, a été annulé par le prêtre.
+Le prêtre a dû annuler votre rendez-vous du {{ starts_at|date:"l j F" }} à {{ starts_at|date:"H\hi" }}, {{ place }}. Veuillez nous excuser pour ce contretemps.
 {% if message %}
-Son message : {{ message }}
+Son message :
+{{ message }}
 {% endif %}
-Vous pouvez choisir un autre créneau dans l'application.
-
-Jàngu Bi
+Vous pouvez choisir un autre créneau dans l'application, quand vous le souhaitez.
+{% endblock %}

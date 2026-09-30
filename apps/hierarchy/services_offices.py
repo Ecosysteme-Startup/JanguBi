@@ -462,25 +462,13 @@ def person_verification_decide(
 def _notify_complement(person: Any) -> None:
     """Notification en application et e-mail vers l'adresse du compte. Ni le motif ni l'état
     de vie ne quittent l'application : la personne les lit dans son profil."""
-    from apps.emails.models import Email
-    from apps.emails.tasks import email_send as email_send_task
+    from apps.emails.services import email_queue
     from apps.messaging.services import notification_send
 
     notification_send(user=person, event_type="personnes.complement", payload={"statut": StatutVerification.COMPLEMENT})
     if not person.email:
         return
-    html = (
-        "<p>Bonjour,</p><p>La chancellerie demande un complément à votre déclaration d'état de vie. "
-        "Le détail se trouve dans votre profil Jàngu Bi.</p>"
-    )
-    email = Email.objects.create(
-        to=person.email,
-        subject="[Jàngu Bi] Complément demandé pour votre déclaration",
-        html=html,
-        plain_text=html,
-        status=Email.Status.SENDING,
-    )
-    transaction.on_commit(partial(email_send_task.delay, email.id))
+    email_queue(to=person.email, template="hierarchy/complement_declaration")
 
 
 @transaction.atomic

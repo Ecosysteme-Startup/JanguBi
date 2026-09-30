@@ -6,7 +6,6 @@ Autorisation : ``evenements.gerer`` sur le nœud de l'événement ; portée glob
 
 import datetime
 import logging
-from functools import partial
 from typing import Any
 
 from django.db import transaction
@@ -131,24 +130,20 @@ def event_update(*, event: Event, actor: Any, data: dict[str, Any]) -> Event:
 
 def _notify_cancellation(*, event: Event) -> None:
     """Chaque inscrit est prévenu par e-mail (modèle Email + tâche, jamais de SMTP direct)."""
-    from apps.emails.models import Email
-    from apps.emails.tasks import email_send as email_send_task
+    from apps.emails.services import email_queue_many
 
-    subject = f"[Jàngu Bi] Événement annulé — {event.title}"
-    html = (
-        f"<p>Bonjour,</p><p>L'événement <strong>{event.title}</strong> prévu le "
-        f"{timezone.localtime(event.start_at):%d/%m/%Y à %H:%M} a été annulé.</p>"
-        "<p>Votre inscription est donc sans objet. Veuillez nous excuser pour ce contretemps.</p>"
+    recipients = [r.user.email for r in event.registrations.select_related("user") if r.user.email]
+    if not recipients:
+        return
+    email_queue_many(
+        recipients=recipients,
+        template="agenda/evenement_annule",
+        context={
+            "title": event.title,
+            "start_at": timezone.localtime(event.start_at),
+            "paroisse": event.scope_node.name if event.scope_node else "",
+        },
     )
-    emails = Email.objects.bulk_create(
-        [
-            Email(to=r.user.email, subject=subject, html=html, plain_text=html, status=Email.Status.SENDING)
-            for r in event.registrations.select_related("user")
-            if r.user.email
-        ]
-    )
-    for email in emails:
-        transaction.on_commit(partial(email_send_task.delay, email.id))
 
 
 @transaction.atomic
@@ -251,6 +246,7 @@ def _event_remind(*, event: Event, now: datetime.datetime) -> None:
             "start_at": timezone.localtime(event.start_at),
             "location": event.location,
             "event_id": event.pk,
+            "paroisse": event.scope_node.name if event.scope_node else "",
         },
         now=now,
     )

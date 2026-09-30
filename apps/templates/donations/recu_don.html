@@ -1,0 +1,23 @@
+{% extends "emails/base.html" %}{% load emails_extras %}
+{% block title %}Reçu de votre don{% endblock %}
+{% block preheader %}Merci pour votre générosité. Voici votre reçu simple.{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Reçu de don</p>{% endblock %}
+{% block content %}
+<h1>Merci pour votre don</h1>
+<p>Bonjour,</p>
+<p>Votre don en faveur de <strong>{{ paroisse }}</strong> a bien été reçu. Merci de tout cœur pour votre générosité : elle soutient la vie de la communauté et sa mission.</p>
+<table role="presentation" class="panel" cellpadding="0" cellspacing="0" border="0"><tr><td class="panel-cell" align="center">
+  <span class="muted" style="display: block;">Montant du don</span>
+  <span class="amount">{{ montant|fcfa }}</span>
+</td></tr></table>
+<table role="presentation" class="details" cellpadding="0" cellspacing="0" border="0">
+  <tr><th scope="row">Reçu n°</th><td>{{ recu_numero }}</td></tr>
+  <tr><th scope="row">Référence</th><td>{{ reference }}</td></tr>
+  <tr><th scope="row">Fonds</th><td>{{ fonds }}</td></tr>
+  <tr><th scope="row">Paroisse</th><td>{{ paroisse }}</td></tr>
+  {% if date %}<tr><th scope="row">Date</th><td>{{ date|date:"j F Y" }}</td></tr>{% endif %}
+</table>
+<p class="muted">Ce reçu simple atteste votre don ; ce n'est pas un reçu fiscal. Conservez ce message : la référence permet à la paroisse de retrouver votre don.</p>
+{% endblock %}
+{% block signature %}<p class="signature">Que le Seigneur vous le rende en bénédictions.<br>L'équipe Jàngu Bi</p>{% endblock %}
+{% block reason %}Vous recevez ce reçu parce que vous avez fait un don en indiquant cette adresse e-mail.{% endblock %}

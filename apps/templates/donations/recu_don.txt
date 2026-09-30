@@ -1,0 +1,20 @@
+{% extends "emails/base.txt" %}{% load emails_extras %}
+{% block eyebrow %}REÇU DE DON{% endblock %}
+{% block content %}Merci pour votre don
+
+Bonjour,
+
+Votre don en faveur de {{ paroisse }} a bien été reçu. Merci de tout cœur pour votre générosité : elle soutient la vie de la communauté et sa mission.
+
+Montant du don : {{ montant|fcfa }}
+Reçu n° : {{ recu_numero }}
+Référence : {{ reference }}
+Fonds : {{ fonds }}
+Paroisse : {{ paroisse }}{% if date %}
+Date : {{ date|date:"j F Y" }}{% endif %}
+
+Ce reçu simple atteste votre don ; ce n'est pas un reçu fiscal. Conservez ce message : la référence permet à la paroisse de retrouver votre don.
+{% endblock %}
+{% block signature %}Que le Seigneur vous le rende en bénédictions.
+L'équipe Jàngu Bi{% endblock %}
+{% block reason %}Vous recevez ce reçu parce que vous avez fait un don en indiquant cette adresse e-mail.{% endblock %}

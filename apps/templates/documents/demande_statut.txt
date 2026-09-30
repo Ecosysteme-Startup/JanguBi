@@ -1,0 +1,17 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}DEMANDE D'ACTE · {{ reference }}{% endblock %}
+{% block content %}{{ titre }}
+
+Bonjour{% if prenoms %} {{ prenoms }}{% endif %},
+
+{{ message }}
+{% if complement %}
+{{ complement }}
+{% endif %}{% if original %}
+{{ original }}
+{% endif %}
+Référence : {{ reference }}
+Paroisse : {{ paroisse }}
+
+Vous pouvez suivre votre demande à tout moment dans l'application, rubrique « Mes demandes ».
+{% endblock %}

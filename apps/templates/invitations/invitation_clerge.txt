@@ -1,6 +1,10 @@
-{% autoescape off %}Bonjour{% if invitation.first_name %} {{ invitation.first_name }}{% endif %},
+{% extends "emails/base.txt" %}
+{% block eyebrow %}INVITATION{% endblock %}
+{% block content %}Vous êtes invité(e) à rejoindre Jàngu Bi
 
-{{ invitation.node.name }} vous invite à rejoindre l'espace du clergé de Jàngu Bi.
+Bonjour{% if invitation.first_name %} {{ invitation.first_name }}{% endif %},
+
+{{ invitation.node.name }} vous invite à rejoindre l'espace du clergé de Jàngu Bi, pour accompagner les fidèles et suivre la vie de la communauté.
 
 1. Créez votre compte (ou connectez-vous) avec cette adresse e-mail :
 {{ register_url }}
@@ -8,6 +12,7 @@
 2. Acceptez l'invitation :
 {{ accept_url }}
 
-Votre compte sera ensuite validé par le diocèse. Ce lien est valable jusqu'au {{ invitation.expires_at|date:"d/m/Y" }}.
+Votre compte sera ensuite validé par le diocèse. Cette invitation est valable jusqu'au {{ invitation.expires_at|date:"j F Y" }}.
 
-Si vous n'attendiez pas cette invitation, ignorez ce message.{% endautoescape %}
+Si vous n'attendiez pas cette invitation, vous pouvez ignorer ce message : aucun compte ne sera créé.
+{% endblock %}

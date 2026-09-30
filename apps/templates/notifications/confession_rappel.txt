@@ -1,7 +1,14 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}RAPPEL{% endblock %}
+{% block content %}Votre rendez-vous approche
+
 Bonjour,
 
-Nous vous rappelons votre rendez-vous du {{ starts_at|date:"d/m/Y" }} à {{ starts_at|date:"H:i" }}, {{ place }}.
+Nous vous rappelons votre rendez-vous :
 
-En cas d'empêchement, pensez à l'annuler dans l'application au plus tard une heure avant.
+Date : {{ starts_at|date:"l j F Y" }}
+Heure : {{ starts_at|date:"H\hi" }}
+Lieu : {{ place }}
 
-Jàngu Bi
+En cas d'empêchement, merci de l'annuler dans l'application au plus tard une heure avant : le créneau pourra ainsi profiter à quelqu'un d'autre.
+{% endblock %}

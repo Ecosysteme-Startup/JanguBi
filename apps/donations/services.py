@@ -618,25 +618,21 @@ def _receipt_email_queue(donation: Donation) -> None:
     """Don sans compte avec adresse : reçu simple par e-mail (le fidèle connecté le trouve dans « Mes dons »)."""
     if donation.donor_id or not donation.donor_email:
         return
-    from apps.emails.models import Email
-    from apps.emails.tasks import email_send as email_send_task
+    from apps.emails.services import email_queue
 
-    amount = f"{donation.amount:,}".replace(",", " ")
-    text = (
-        f"Merci pour votre don.\n\nReçu n° {donation.receipt_number}\nRéférence : {donation.reference}\nFonds : {donation.fund.title}\n"
-        f"Paroisse : {donation.fund.node.name}\nMontant du don : {amount} FCFA\n\n"
-        "Ce reçu simple atteste votre don ; ce n'est pas un reçu fiscal."
-    )
-    html = "<p>" + text.replace("\n\n", "</p><p>").replace("\n", "<br>") + "</p>"
-    email = Email.objects.create(
+    email_queue(
         to=donation.donor_email,
-        subject="[Jàngu Bi] Reçu de votre don",
-        html=html,
-        plain_text=text,
-        status=Email.Status.SENDING,
+        template="donations/recu_don",
+        context={
+            "recu_numero": donation.receipt_number,
+            "reference": donation.reference,
+            "fonds": donation.fund.title,
+            "paroisse": donation.fund.node.name,
+            "montant": donation.amount,
+            "date": timezone.localtime(donation.status_changed_at or timezone.now()),
+        },
     )
     Donation.objects.filter(pk=donation.pk).update(receipt_email_sent_at=timezone.now())
-    transaction.on_commit(partial(email_send_task.delay, email.id))
 
 
 # --- Notifications de l'agrégateur (webhook / IPN) ------------------------------------------

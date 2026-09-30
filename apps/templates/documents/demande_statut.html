@@ -1,0 +1,16 @@
+{% extends "emails/base.html" %}
+{% block title %}Votre demande d'acte {{ reference }}{% endblock %}
+{% block preheader %}{{ message }}{% endblock %}
+{% block eyebrow %}<p class="eyebrow">Demande d'acte · {{ reference }}</p>{% endblock %}
+{% block content %}
+<h1>{{ titre }}</h1>
+<p>Bonjour{% if prenoms %} {{ prenoms }}{% endif %},</p>
+<p>{{ message }}</p>
+{% if complement %}<p class="quote">{{ complement }}</p>{% endif %}
+{% if original %}<table role="presentation" class="note" cellpadding="0" cellspacing="0" border="0"><tr><td class="note-cell">{{ original }}</td></tr></table>{% endif %}
+<table role="presentation" class="details" cellpadding="0" cellspacing="0" border="0">
+  <tr><th scope="row">Référence</th><td>{{ reference }}</td></tr>
+  <tr><th scope="row">Paroisse</th><td>{{ paroisse }}</td></tr>
+</table>
+<p class="muted">Vous pouvez suivre votre demande à tout moment dans l'application, rubrique «&nbsp;Mes demandes&nbsp;».</p>
+{% endblock %}

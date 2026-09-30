@@ -139,6 +139,17 @@ _REQUESTER_MESSAGES: dict[str, str] = {
     S.CANCELLED: "Votre demande {ref} est annulée.",
 }
 
+# Titre de l'e-mail envoyé au demandeur, selon le statut.
+_REQUESTER_TITLES: dict[str, str] = {
+    S.SUBMITTED: "Votre demande est bien transmise",
+    S.UNDER_VERIFICATION: "Votre demande est en cours d'examen",
+    S.INFO_REQUESTED: "Un complément est demandé",
+    S.READY_FOR_PICKUP: "Votre acte est prêt à retirer",
+    S.COLLECTED: "Votre demande est close",
+    S.REJECTED: "Votre demande n'a pas pu aboutir",
+    S.CANCELLED: "Votre demande est annulée",
+}
+
 
 def _notify_requester(request_obj: DocumentRequest, extra: str = "", *, status: str | None = None) -> None:
     """``status`` est figé au moment de la transition : la notification part après commit,
@@ -153,14 +164,25 @@ def _notify_requester(request_obj: DocumentRequest, extra: str = "", *, status: 
         event_type="documents.status",
         payload={"request_id": str(request_obj.pk), "reference": request_obj.reference, "status": status},
     )
-    body = f"<p>Bonjour {request_obj.requester_first_names},</p><p>{message}</p>"
-    if extra:
-        body += f"<p>{extra}</p>"
-    if status == S.READY_FOR_PICKUP:
-        body += f"<p>{ORIGINAL_NOTICE}</p>"
     # Vers l'adresse du COMPTE (vérifiée), jamais vers contact_email saisi librement :
     # sinon n'importe qui ferait écrire à un tiers au sujet d'une démarche religieuse.
-    _email(to=request_obj.requester.email, subject=f"[Jàngu Bi] {message}", html=body)
+    if not request_obj.requester.email:
+        return
+    from apps.emails.services import email_queue
+
+    email_queue(
+        to=request_obj.requester.email,
+        template="documents/demande_statut",
+        context={
+            "titre": _REQUESTER_TITLES[status],
+            "message": message,
+            "complement": extra,
+            "original": ORIGINAL_NOTICE if status == S.READY_FOR_PICKUP else "",
+            "prenoms": request_obj.requester_first_names,
+            "reference": request_obj.reference,
+            "paroisse": parish,
+        },
+    )
 
 
 def _notify_parish(request_obj: DocumentRequest, event: str) -> None:
@@ -184,18 +206,6 @@ def html_to_text(html: str) -> str:
     text = re.sub(r"(?i)</p\s*>", "\n\n", text)
     text = unescape(strip_tags(text))
     return re.sub(r"\n{3,}", "\n\n", text).strip()
-
-
-def _email(*, to: str, subject: str, html: str) -> None:
-    from apps.emails.models import Email
-    from apps.emails.tasks import email_send as email_send_task
-
-    if not to:
-        return
-    email = Email.objects.create(
-        to=to, subject=subject[:255], html=html, plain_text=html_to_text(html), status=Email.Status.SENDING
-    )
-    transaction.on_commit(partial(email_send_task.delay, email.id))
 
 
 # --- Fidèle -------------------------------------------------------------------------------

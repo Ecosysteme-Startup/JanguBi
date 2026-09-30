@@ -1,0 +1,11 @@
+{% extends "emails/base.txt" %}
+{% block eyebrow %}ÉVÉNEMENT ANNULÉ{% endblock %}
+{% block content %}{{ title }}
+
+Bonjour,
+
+Nous sommes au regret de vous annoncer que l'événement « {{ title }} », prévu le {{ start_at|date:"l j F Y à H\hi" }}, a été annulé.
+
+Votre inscription est donc sans objet ; vous n'avez rien à faire. Veuillez nous excuser pour ce contretemps.
+{% endblock %}
+{% block reason %}Vous recevez ce message parce que vous étiez inscrit(e) à cet événement.{% endblock %}

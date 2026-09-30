@@ -350,7 +350,7 @@ def test_send_multi_format_email_creates_email_record_with_sending_status():
     target_email = "user@example.com"
 
     # Act — patch template rendering only (no SMTP patch needed — it is async now)
-    with patch("apps.emails.services.render_to_string") as mock_render:
+    with patch("apps.emails.rendering.render_to_string") as mock_render:
         mock_render.side_effect = [
             "Verify your email",  # subject template
             "<p>Click here</p>",  # html template
@@ -368,7 +368,7 @@ def test_send_multi_format_email_creates_email_record_with_sending_status():
     email = Email.objects.get(to=target_email)
     assert email.subject == "Verify your email"
     assert email.html == "<p>Click here</p>"
-    assert email.plain_text == "Click here"
+    assert email.plain_text == "Click here\n"  # version texte normalisée (fin de ligne finale)
     assert email.status == Email.Status.SENDING
     assert email.sent_at is None  # SMTP has not run yet
 
@@ -377,7 +377,7 @@ def test_send_multi_format_email_creates_email_record_with_sending_status():
 def test_send_multi_format_email_dispatches_task_via_on_commit():
     """The Celery task must be enqueued after commit — not during the transaction."""
     # Arrange
-    with patch("apps.emails.services.render_to_string") as mock_render:
+    with patch("apps.emails.rendering.render_to_string") as mock_render:
         mock_render.side_effect = ["Subject", "<p>Body</p>", "Body"]
 
         # Act — patch the task to capture calls
@@ -397,7 +397,7 @@ def test_send_multi_format_email_dispatches_task_via_on_commit():
 def test_send_multi_format_email_uses_correct_template_paths():
     # Arrange & Act
     with (
-        patch("apps.emails.services.render_to_string") as mock_render,
+        patch("apps.emails.rendering.render_to_string") as mock_render,
         patch("apps.emails.services.email_send_task"),
     ):
         mock_render.side_effect = ["Subject", "<p>HTML</p>", "Plain"]
@@ -420,7 +420,7 @@ def test_send_multi_format_email_uses_correct_template_paths():
 def test_send_multi_format_email_strips_whitespace_from_subject():
     # Arrange — subject template returns value with surrounding whitespace
     with (
-        patch("apps.emails.services.render_to_string") as mock_render,
+        patch("apps.emails.rendering.render_to_string") as mock_render,
         patch("apps.emails.services.email_send_task"),
     ):
         mock_render.side_effect = ["  Hello World  \n", "<p>body</p>", "body"]
@@ -440,7 +440,7 @@ def test_send_multi_format_email_strips_whitespace_from_subject():
 def test_send_multi_format_email_uses_custom_path_prefix():
     # Arrange — path_prefix other than the default "auth"
     with (
-        patch("apps.emails.services.render_to_string") as mock_render,
+        patch("apps.emails.rendering.render_to_string") as mock_render,
         patch("apps.emails.services.email_send_task"),
     ):
         mock_render.side_effect = ["Subject", "<p>Body</p>", "Body"]
@@ -465,7 +465,7 @@ def test_send_multi_format_email_passes_context_to_all_templates():
     ctx = {"name": "Marie", "link": "https://example.com/token"}
 
     with (
-        patch("apps.emails.services.render_to_string") as mock_render,
+        patch("apps.emails.rendering.render_to_string") as mock_render,
         patch("apps.emails.services.email_send_task"),
     ):
         mock_render.side_effect = ["Subject", "<p>Hi Marie</p>", "Hi Marie"]
@@ -479,14 +479,16 @@ def test_send_multi_format_email_passes_context_to_all_templates():
     # Assert — every render_to_string call received the same context dict
     for render_call in mock_render.call_args_list:
         passed_ctx = render_call.args[1] if len(render_call.args) > 1 else render_call.kwargs.get("context")
-        assert passed_ctx == ctx
+        # Le contexte de marque (logo, liens du pied de page) s'ajoute à celui de l'appelant.
+        assert ctx.items() <= passed_ctx.items()
+        assert {"logo_url", "frontend_url", "diocese_nom", "annee"} <= passed_ctx.keys()
 
 
 @pytest.mark.django_db
 def test_send_multi_format_email_rolls_back_email_record_on_render_failure():
     """@transaction.atomic must roll back the Email record if rendering raises."""
     # Arrange — first render_to_string succeeds (subject), then raises
-    with patch("apps.emails.services.render_to_string") as mock_render:
+    with patch("apps.emails.rendering.render_to_string") as mock_render:
         mock_render.side_effect = ["Subject", Exception("Template not found")]
 
         with pytest.raises(Exception, match="Template not found"):
@@ -507,7 +509,7 @@ def test_send_multi_format_email_does_not_dispatch_task_when_transaction_rolls_b
     # This test verifies on_commit semantics: the task is only dispatched
     # when the outermost transaction commits. We simulate a rollback by
     # patching on_commit to be a no-op.
-    with patch("apps.emails.services.render_to_string") as mock_render:
+    with patch("apps.emails.rendering.render_to_string") as mock_render:
         mock_render.side_effect = ["Subject", "<p>Body</p>", "Body"]
         with patch("django.db.transaction.on_commit") as mock_on_commit:
             send_multi_format_email(

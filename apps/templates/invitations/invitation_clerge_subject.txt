@@ -1,1 +1,1 @@
-Invitation à rejoindre Jàngu Bi — {{ invitation.node.name }}
+{% autoescape off %}Invitation à rejoindre l'espace du clergé : {{ invitation.node.name }}{% endautoescape %}

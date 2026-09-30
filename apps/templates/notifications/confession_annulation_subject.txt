@@ -1,1 +1,1 @@
-[Jàngu Bi] Rendez-vous annulé
+Votre rendez-vous du {{ starts_at|date:"d/m" }} est annulé
