@@ -30,6 +30,8 @@ from django.conf import settings
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".m4a", ".aac"}
 SEED_BUCKET = "seed-assets"
+# Musique de démonstration préparée (prepare_musique_demo --publier) : recette seulement, jamais en production.
+DEMO_PREFIX = "musique-demo"
 
 
 def manifest_path() -> pathlib.Path:
@@ -97,6 +99,10 @@ class LocalStore:
         path = self.root / name
         return path if path.exists() else None
 
+    def list(self, prefix: str) -> list[str]:
+        folder = self.root / prefix
+        return sorted(f"{prefix}/{p.name}" for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
+
 
 class MinioStore:
     """Bucket ``seed-assets`` du MinIO de recette (partagé ; téléchargé une seule fois)."""
@@ -127,6 +133,10 @@ class MinioStore:
     def put(self, name: str, local: pathlib.Path) -> None:
         self.client.upload_file(str(local), SEED_BUCKET, name)
 
+    def list(self, prefix: str) -> list[str]:
+        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=SEED_BUCKET, Prefix=f"{prefix}/")
+        return sorted(obj["Key"] for page in pages for obj in page.get("Contents", []))
+
     def get(self, name: str) -> pathlib.Path | None:
         cached = self.local.get(name)
         if cached is not None:
@@ -134,6 +144,7 @@ class MinioStore:
         if not self.has(name):
             return None
         target = self.local.root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
         self.client.download_file(SEED_BUCKET, name, str(target))
         return target
 
@@ -142,6 +153,27 @@ def store_for(profil: str) -> LocalStore | MinioStore:
     if profil == "recette" and bool(getattr(settings, "AWS_S3_ACCESS_KEY_ID", None)):
         return MinioStore()
     return LocalStore()
+
+
+def publish_folder(store: Any, folder: pathlib.Path, prefix: str = DEMO_PREFIX) -> int:
+    """Range les fichiers de ``folder`` sous ``<prefix>/`` dans ``store`` ; renvoie leur nombre."""
+    files = sorted(p for p in folder.iterdir() if p.is_file())
+    for path in files:
+        store.put(f"{prefix}/{path.name}", path)
+    return len(files)
+
+
+def restore_folder(store: Any, target: pathlib.Path, prefix: str = DEMO_PREFIX) -> pathlib.Path | None:
+    """Recopie ``<prefix>/`` de ``store`` dans ``target`` ; ``None`` si rien n'y est publié."""
+    names = store.list(prefix)
+    if not names:
+        return None
+    target.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        source = store.get(name)
+        if source is not None and source.resolve() != (target / pathlib.Path(name).name).resolve():
+            shutil.copyfile(source, target / pathlib.Path(name).name)
+    return target
 
 
 def fetch(asset: Asset, store: Any, *, timeout: int = 60) -> tuple[str, str]:
