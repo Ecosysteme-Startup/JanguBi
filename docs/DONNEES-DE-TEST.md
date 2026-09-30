@@ -6,22 +6,30 @@ recalcul des recommandations. Reproductible (graine), réversible (`--reset`), *
 
 Plan de référence : `JanguBIMobileApp/docs/PLAN-DONNEES-DE-TEST.md` (décisions de l'utilisateur ci-dessous).
 
-## Démarrer
+## Démarrer : deux seeds
+
+| Seed | Contenu | Où |
+|---|---|---|
+| `seed_prod` | données **réelles** : référentiel territorial, Bible (si absente), Rosaire, liturgie AELF des 7 prochains jours rattachée aux versets. Idempotent. | production **et** recette |
+| `seed_recette` | `seed_prod` + personnes de démonstration (`seed_demo`) + médias libres du manifeste + monde de test (`seed_realiste`, vérifié) + musique de démo si publiée. | recette et local, **jamais en production** |
 
 ```bash
-make seed-realiste                 # local : échelle petite, médias légers, vérification (< 1 min)
-make seed-realiste-reset           # retire exactement le lot (graine 2026 par défaut)
-make seed-charge                   # échelle grande (COPY en masse), sans fichiers audio
-make seed-realiste APP=jangubi ENV=staging          # (serveur, dépôt Infrastructure) médias puis échelle moyenne
-make seed-realiste APP=jangubi ENV=staging RESET=1   # (serveur, dépôt Infrastructure) remise à zéro MANUELLE
-make seed-realiste APP=jangubi ENV=staging TRAFIC=10min  # (serveur) dons et écoutes simulés en continu
+make seed-prod                     # local : données réelles
+make seed-recette                  # local : recette complète, échelle petite
+make seed-recette SEED_ARGS="--echelle moyenne --sans-musique --hors-ligne"
+make seed-recette-reset            # retire données de test et de démonstration (les réelles restent)
+make seed-charge                   # tests de charge : échelle grande, sans fichiers audio
 ```
 
-Hors Docker :
+Sur le serveur (conteneur de l'API) :
 
 ```bash
-SEED_ALLOWED=true python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier
+python manage.py seed_prod                                  # production et recette
+SEED_ALLOWED=true python manage.py seed_recette             # recette : échelle moyenne
+SEED_ALLOWED=true python manage.py seed_recette --reset     # remise à zéro MANUELLE
 ```
+
+`seed_realiste` reste disponible seul pour les réglages fins (graine, modules, `--simuler-trafic 10min`).
 
 Options (`--help`) :
 
@@ -52,7 +60,7 @@ crédits) est versionnée dans `seed_assets/musique-demo.yaml` ; le pack reste s
 # 1. Décompresser Polyphonic.Elements6.rar dans seed_assets/ (ignoré par Git) :
 #    seed_assets/The Polyphonic Elements Vol.6/...
 make musique-demo              # → seed_assets/musique-demo/ : 10 FLAC + credits.yaml
-make seed-realiste-musique     # sonothèque de démo avec cette musique (--medias complets)
+make seed-recette              # la prend automatiquement (--medias complets)
 ```
 
 Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --sortie <dossier>`, puis
@@ -60,8 +68,7 @@ Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --
 
 **En recette, une seule fois** : `prepare_musique_demo --publier` copie les 10 FLAC et `credits.yaml` dans le
 bucket MinIO `seed-assets/musique-demo/` du serveur (bucket privé, jamais servi au public). Ensuite, même après
-une remise à zéro de la base, `seed_realiste --profil recette --medias complets --musique-demo` reprend la
-musique dans ce bucket : plus besoin du pack. `--musique-demo` lit d'abord `seed_assets/musique-demo/` s'il
+une remise à zéro de la base, `seed_recette` reprend la musique dans ce bucket : plus besoin du pack. `--musique-demo` lit d'abord `seed_assets/musique-demo/` s'il
 existe, sinon le bucket. Si le bucket `seed-assets` est vidé, repartir du RAR (copie de référence hors Git). En `--medias legers`, seules les 4 premières pistes servent (extraits
 de 30 s) ; en `--medias complets`, les 10.
 
@@ -198,10 +205,10 @@ quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) c
 
 ## Local, recette, clients
 
-- **Local** : `make seed-realiste` ; web `NEXT_PUBLIC_API_MOCKING=false` ; mobile `USE_MOCKS=false` avec
+- **Local** : `make seed-recette` ; web `NEXT_PUBLIC_API_MOCKING=false` ; mobile `USE_MOCKS=false` avec
   `API_URL=http://10.0.2.2:8000/api` (émulateur Android) ou l'IP du poste.
-- **Recette** : `make seed-realiste APP=jangubi ENV=staging` sur le serveur (voir `docs/RECETTE.md`). Remise à zéro **manuelle uniquement**
-  (`RESET=1`, puis `SEED_ARGS="--graine 2027"` pour une nouvelle graine) ;
+- **Recette** : `SEED_ALLOWED=true python manage.py seed_recette` sur le serveur (voir `docs/RECETTE.md`).
+  Remise à zéro **manuelle uniquement** (`seed_recette --reset`, puis `--graine 2027` pour une nouvelle graine) ;
   aucune tâche planifiée.
 - Les écoutes semées tombent dans les partitions mensuelles ; celles de plus de 13 mois sont purgées par
   la tâche mensuelle, comme en production.
