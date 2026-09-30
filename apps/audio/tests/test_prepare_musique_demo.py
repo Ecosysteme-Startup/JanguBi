@@ -49,7 +49,7 @@ def test_prepare_refuses_a_missing_pack(tmp_path):
 
 
 class _MemoryStore:
-    """Double du bucket « seed-assets » : clés → fichiers, comme MinioStore."""
+    """Double du dossier « seed-assets/ » du bucket : clés → fichiers, comme MinioStore."""
 
     kind = "bucket de test"
 
@@ -124,3 +124,64 @@ def test_seed_explains_how_to_publish_when_the_demo_music_is_missing(tmp_path, m
 
     with pytest.raises(CommandError, match="--publier"):
         SeedCommand()._musique_demo("recette")
+
+
+class _FakeS3:
+    """Double du client boto3 : enregistre les appels et refuse toute action de niveau bucket,
+    comme la clé MinIO de la recette (elle n'ouvre que le bucket de l'application)."""
+
+    def __init__(self):
+        self.objects = {}
+        self.calls = []
+
+    def head_bucket(self, **kwargs):
+        raise AssertionError("aucune action de niveau bucket : la clé de recette ne l'autorise pas")
+
+    create_bucket = head_bucket
+
+    def upload_file(self, filename, bucket, key):
+        self.calls.append(("put", bucket, key))
+        self.objects[(bucket, key)] = open(filename, "rb").read()
+
+    def head_object(self, Bucket, Key):
+        if (Bucket, Key) not in self.objects:
+            raise KeyError(Key)
+
+    def download_file(self, bucket, key, filename):
+        self.calls.append(("get", bucket, key))
+        with open(filename, "wb") as fh:
+            fh.write(self.objects[(bucket, key)])
+
+    def get_paginator(self, _name):
+        store = self
+
+        class _Pages:
+            def paginate(self, Bucket, Prefix):
+                return [{"Contents": [{"Key": k} for (b, k) in store.objects if b == Bucket and k.startswith(Prefix)]}]
+
+        return _Pages()
+
+
+def test_recette_store_lives_under_seed_assets_in_the_app_bucket(tmp_path, monkeypatch, settings):
+    fake = _FakeS3()
+    monkeypatch.setattr("boto3.client", lambda *a, **k: fake)
+    monkeypatch.setenv("JANGUBI_SEED_CACHE", str(tmp_path / "cache"))
+    settings.AWS_STORAGE_BUCKET_NAME = "jangubi-staging"
+    settings.AWS_S3_ACCESS_KEY_ID = "cle-de-test"
+    settings.AWS_S3_SECRET_ACCESS_KEY = "secret-de-test"
+    folder = tmp_path / "musique-demo"
+    folder.mkdir()
+    (folder / "01-piano.flac").write_bytes(b"flac")
+    (folder / "credits.yaml").write_text("album: {}\n", encoding="utf-8")
+
+    store = seed_medias.store_for("recette")
+    count = publish_folder(store, folder)
+
+    assert count == 2
+    assert {key for (_, bucket, key) in fake.calls if bucket == "jangubi-staging"} == {
+        "seed-assets/musique-demo/01-piano.flac",
+        "seed-assets/musique-demo/credits.yaml",
+    }
+    assert store.list("musique-demo") == ["musique-demo/01-piano.flac", "musique-demo/credits.yaml"]
+    assert store.has("musique-demo/credits.yaml")
+    assert store.get("musique-demo/01-piano.flac").read_bytes() == b"flac"

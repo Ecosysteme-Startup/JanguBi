@@ -167,7 +167,7 @@ init-data:
 # seed-prod    : données RÉELLES (référentiel territorial, Bible, Rosaire, liturgie AELF
 #                rattachée aux versets). Production et recette. Idempotent.
 # seed-recette : seed-prod + personnes de démonstration + données de test réalistes +
-#                musique de démo (seed_assets/musique-demo/ ou bucket « seed-assets »).
+#                musique de démo (seed_assets/musique-demo/ ou dossier seed-assets/ du bucket de l'app).
 #                JAMAIS en production. Défaut local : échelle petite (serveur : moyenne).
 # Options : make seed-recette SEED_ARGS="--echelle moyenne --sans-musique --hors-ligne"
 # Sur le serveur : python manage.py seed_prod / SEED_ALLOWED=true python manage.py seed_recette
@@ -184,7 +184,7 @@ seed-recette-reset:
 	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_recette --reset
 
 # Musique de démo (une fois) : pack décompressé dans seed_assets/, jamais commité.
-# En recette : ajouter --publier pour la garder dans le bucket « seed-assets ».
+# En recette : ajouter --publier pour la garder sous seed-assets/ dans le bucket de l'app.
 musique-demo:
 	docker compose exec django python manage.py prepare_musique_demo $(MUSIQUE_ARGS)
 
