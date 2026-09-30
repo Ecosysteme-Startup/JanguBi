@@ -68,7 +68,7 @@ jobs:
           POSTGRES_PASSWORD: postgres
         options: >-
           --memory=512m --memory-swap=512m --cpus=1 --oom-score-adj=800
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         options: >-
