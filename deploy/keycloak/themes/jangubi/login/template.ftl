@@ -9,7 +9,9 @@
 <#macro registrationLayout bodyClass="" displayInfo=false displayMessage=true displayRequiredFields=false layout="card" subtitle="">
 <#assign jbYear = .now?string("yyyy")>
 <!DOCTYPE html>
-<html class="${properties.kcHtmlClass!}" lang="${lang}">
+<#-- `lang` n'existe pas dans le contexte des gabarits de Keycloak 26.0 : ${lang} levait une erreur
+     FreeMarker sur TOUTES les pages (connexion, inscription, erreur) → « Internal Server Error ». -->
+<html class="${properties.kcHtmlClass!}" lang="${(locale.currentLanguageTag)!'fr'}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -42,14 +44,10 @@
         import { startSessionPolling } from "${url.resourcesPath}/js/authChecker.js";
         startSessionPolling("${url.ssoLoginInOtherTabsUrl?no_esc}");
     </script>
-    <#if authenticationSession??>
-        <script type="module">
-            import { checkAuthSession } from "${url.resourcesPath}/js/authChecker.js";
-            checkAuthSession("${authenticationSession.authSessionIdHash}");
-        </script>
-    </#if>
+    <#-- Pas de checkAuthSession(authSessionIdHash) : apparu après Keycloak 26.0 (absent du thème de base
+         26.0.8), il cassait la page de connexion. startSessionPolling ci-dessus suffit en 26.0. -->
 </head>
-<body class="${properties.kcBodyClass!} <#if layout == 'wide'>jb-wide</#if> ${bodyClass}" data-page-id="login-${pageId}">
+<body class="${properties.kcBodyClass!} <#if layout == 'wide'>jb-wide</#if> ${bodyClass}" data-page-id="login-${pageId!''}">
 <a class="jb-skip" href="#jb-main">${msg("skipToForm")}</a>
 
 <#if layout == "wide">
