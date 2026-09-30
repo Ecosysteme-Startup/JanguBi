@@ -164,7 +164,7 @@ class DayMassOutputSerializer(serializers.Serializer):
     place_id = serializers.IntegerField()
     place_name = serializers.CharField()
     start_time = serializers.TimeField()
-    label = serializers.CharField()
+    label = serializers.CharField()  # type: ignore[assignment]  # champ d'API « label », masque Field.label
     language = serializers.CharField()
     note = serializers.CharField()
     intentions_count = serializers.IntegerField()

@@ -248,10 +248,17 @@ def test_migration_0008_roundtrip_gives_existing_cure_assignments_the_cure_quali
     OfficeType.objects.filter(code="cure").update(qualities=[])
 
     executor = MigrationExecutor(connection)
-    executor.migrate(before)
-    executor.loader.build_graph()
-    executor.migrate(after)
+    # Revenir à 0007 défait aussi toutes les migrations qui en dépendent (hierarchy 0009+,
+    # users 0004…) : sans restauration du schéma complet, les tests suivants tournent sur une
+    # base amputée (ex. colonne users_baseuser.admin_node_id absente).
+    try:
+        executor.migrate(before)
+        executor.loader.build_graph()
+        executor.migrate(after)
 
-    assert OfficeType.objects.get(code="cure").quality_codes == ["cure", "administrateur"]
-    assert OfficeAssignment.objects.get(person=cure).quality == "cure"
-    assert OfficeType.objects.get(code="vicaire_paroissial").qualities == []
+        assert OfficeType.objects.get(code="cure").quality_codes == ["cure", "administrateur"]
+        assert OfficeAssignment.objects.get(person=cure).quality == "cure"
+        assert OfficeType.objects.get(code="vicaire_paroissial").qualities == []
+    finally:
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
