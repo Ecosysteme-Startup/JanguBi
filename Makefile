@@ -5,7 +5,7 @@ export
 .PHONY: up down restart build logs shell dbshell makemigrations migrate check test \
        init-data init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
-       flush-redis flush-db check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
+       flush-redis flush-db link-verses check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
        seed seed-hierarchy seed-demo seed-reset \
        seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
@@ -83,6 +83,7 @@ createsuperuser:
 
 import-aelf:
 	docker compose exec django python manage.py import_aelf --start "$$(date +%Y-%m-%d)" --end "$$(python3 -c 'from datetime import datetime, timedelta; print((datetime.now() + timedelta(days=(6 - datetime.now().weekday()))).date())')"
+	docker compose exec django python manage.py liturgy_link_verses
 
 clear-cache:
 	docker compose exec django python manage.py shell -c "from django.core.cache import cache; cache.clear()"
@@ -102,6 +103,10 @@ check-embeddings:
 # Génère les embeddings MANQUANTS (synchrone). Prérequis : EMBEDDING_PROVIDER=local
 # + PGVECTOR_ENABLED=True dans .env, puis `make restart`. 1er usage : télécharge
 # le modèle local (~1 Go) dans FASTEMBED_CACHE_DIR.
+# Rattache les lectures du jour aux versets de la Bible locale (après un import de la Bible).
+link-verses:
+	docker compose exec django python manage.py liturgy_link_verses
+
 seed-embeddings:
 	docker compose exec django python manage.py seed_embeddings
 
@@ -115,17 +120,20 @@ seed-embeddings-async:
 
 import-bible-aelf:
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source AELF
+	docker compose exec django python manage.py liturgy_link_verses
 
 reinit-bible:
 	docker compose exec django python manage.py shell -c "from apps.bible.models import Verse, Chapter, Book, DailyText; Verse.objects.all().delete(); Chapter.objects.all().delete(); Book.objects.all().delete(); DailyText.objects.all().delete(); print('Bible data cleared.')"
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source bible_fr
 	docker compose exec django python manage.py import_aelf --start "$$(date +%Y-%m-%d)" --end "$$(python3 -c 'from datetime import datetime, timedelta; print((datetime.now() + timedelta(days=(6 - datetime.now().weekday()))).date())')"
+	docker compose exec django python manage.py liturgy_link_verses
 	docker compose exec django python manage.py shell -c "from django.core.cache import cache; cache.clear(); print('Cache cleared.')"
 
 reinit-bible-aelf:
 	docker compose exec django python manage.py shell -c "from apps.bible.models import Verse, Chapter, Book, DailyText; Verse.objects.all().delete(); Chapter.objects.all().delete(); Book.objects.all().delete(); DailyText.objects.all().delete(); print('Bible data cleared.')"
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source AELF
 	docker compose exec django python manage.py import_aelf --start "$$(date +%Y-%m-%d)" --end "$$(python3 -c 'from datetime import datetime, timedelta; print((datetime.now() + timedelta(days=(6 - datetime.now().weekday()))).date())')"
+	docker compose exec django python manage.py liturgy_link_verses
 	docker compose exec django python manage.py shell -c "from django.core.cache import cache; cache.clear(); print('Cache cleared.')"
 
 # ==============================================================================
@@ -162,6 +170,7 @@ init-data:
 	docker compose exec django python manage.py seed_rosary
 	@echo "6. Importation de la liturgie du jour (AELF)..."
 	docker compose exec django python manage.py import_aelf --start "$$(date +%Y-%m-%d)" --end "$$(python3 -c 'from datetime import datetime, timedelta; print((datetime.now() + timedelta(days=(6 - datetime.now().weekday()))).date())')"
+	docker compose exec django python manage.py liturgy_link_verses
 	@echo "==========================================================="
 	@echo "   Importation et Indexation terminees !"
 	@echo "==========================================================="

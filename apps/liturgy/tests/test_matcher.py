@@ -60,3 +60,47 @@ def test_matcher_single_verse(setup_bible_data):
     verses = CitationMatcher.match("Luc 6, 37")
     assert len(verses) == 1
     assert verses[0].number == 37
+
+
+@pytest.fixture
+def job_9(db):
+    t = Testament.objects.create(name="Ancien Testament", slug="ancien", order=1)
+    job = Book.objects.create(testament=t, name="Job", slug="job", order=18, alt_names=["Jb"])
+    chapter = Chapter.objects.create(book=job, number=9)
+    for n in range(1, 18):
+        Verse.objects.create(chapter=chapter, number=n, text=f"Job 9,{n}")
+    return chapter
+
+
+@pytest.mark.django_db
+def test_matcher_keeps_gaps_between_ranges(job_9):
+    numbers = [v.number for v in CitationMatcher.match("Jb 9, 1-12.14-16")]
+    assert numbers == [*range(1, 13), 14, 15, 16]
+
+
+@pytest.mark.django_db
+def test_an_empty_book_list_is_not_cached(job_9):
+    CitationMatcher._books_cache = []
+    assert len(CitationMatcher.match("Jb 9, 1-3")) == 3
+
+
+@pytest.mark.django_db
+def test_readings_are_served_and_relinked_after_a_bible_reimport(job_9, client):
+    import datetime
+
+    from apps.liturgy.models import LiturgicalDate, Reading
+    from apps.liturgy.selectors import liturgy_day
+    from apps.liturgy.services import readings_link_verses
+
+    day = datetime.date(2026, 9, 30)
+    ld = LiturgicalDate.objects.create(date=day, zone="afrique")
+    reading = Reading.objects.create(liturgical_date=ld, type="lecture_1", citation="Jb 9, 1-12.14-16", text="")
+    assert reading.matched_verses.count() == 0  # Bible importée après les lectures
+
+    served = liturgy_day(day=day)
+    first = next(r for r in served["readings"] if r["citation"] == "Jb 9, 1-12.14-16")
+    assert len(first["verses"]) == 15
+
+    assert readings_link_verses() == 1
+    assert reading.matched_verses.count() == 15
+    assert readings_link_verses() == 0
