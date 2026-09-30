@@ -4,7 +4,7 @@
     python manage.py seed_prod --jours 30      # liturgie sur 30 jours
     python manage.py seed_prod --hors-ligne    # sans appel à AELF (liturgie sautée)
 
-Rien de fictif ici : référentiel territorial (profil ``senegal``), Bible (importée seulement si absente),
+Rien de fictif ici : référentiel territorial (profil ``senegal``), Bible (importée si absente ou incomplète),
 mystères du Rosaire, lectures du jour AELF rattachées aux versets. Les données de démonstration et de test
 sont dans ``seed_recette``.
 """
@@ -37,11 +37,13 @@ class Command(BaseCommand):
         call_command("seed_hierarchy_profile", o["territoire"], stdout=self.stdout)
 
         self._step("Bible")
-        from apps.bible.seeders import bible_present
+        from apps.bible.seeders import bible_complete, bible_present
 
-        if bible_present():
+        if bible_complete(o["bible_json"], o["bible_source"]):
             self.stdout.write("  déjà importée")
         else:
+            if bible_present():
+                self.stdout.write(self.style.WARNING("  import incomplet (livres manquants) : réimport"))
             call_command("import_bible", o["bible_json"], source=o["bible_source"], stdout=self.stdout)
 
         self._step("Rosaire")
