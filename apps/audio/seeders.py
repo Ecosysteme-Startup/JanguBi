@@ -538,12 +538,19 @@ def ensure_past_partitions(start: datetime.date, today: datetime.date) -> list[s
     return created
 
 
+# Pistes auxquelles on sème des écoutes : prêtes, ou dont l'encodage est en cours (jamais en échec).
+LISTENABLE = ("pret", "en_file", "encodage")
+
+
 @register
 class EcoutesSeeder(Seeder):
     name = "ecoutes"
     module = "audio"
     phase = Phase.ACTIVITE
     depends = ("sonotheque",)
+
+    def produced(self, result: dict[str, Any]) -> bool:
+        return bool(result.get("evenements"))
 
     def seed(self, ctx: SeedContext) -> dict[str, Any]:
         from apps.audio.models import (
@@ -563,7 +570,9 @@ class EcoutesSeeder(Seeder):
         start = max(ctx.start, _month_start(ctx.today, -12))
         created_parts = ensure_past_partitions(start, ctx.today)
         tracks = list(
-            Track.objects.filter(source__in=ctx.tracked(AudioSource), status="pret", published_at__isnull=False,
+            # « en_file » et « encodage » comptent : en médias complets l'encodage est asynchrone et n'est pas
+            # fini au passage des écoutes (recette du 30/09/2026 : 0 écoute) ; ces pistes deviennent « pret ».
+            Track.objects.filter(source__in=ctx.tracked(AudioSource), status__in=LISTENABLE, published_at__isnull=False,
                                  hidden_at__isnull=True).select_related("source").order_by("album_id", "position")
         )  # fmt: skip
         if not tracks:
