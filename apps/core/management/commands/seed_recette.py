@@ -5,7 +5,7 @@
     SEED_ALLOWED=true python manage.py seed_recette --echelle petite   # plus rapide (local)
     SEED_ALLOWED=true python manage.py seed_recette --reset            # retire les données de test (MANUEL)
 
-La musique de démo vient de ``seed_assets/musique-demo/`` ou du bucket ``seed-assets`` (publiée une fois par
+La musique de démo vient de ``seed_assets/musique-demo/`` ou de ``seed-assets/`` dans le bucket de l'app (publiée une fois par
 ``prepare_musique_demo --publier``) ; absente, le seed continue avec les médias légers du manifeste.
 """
 

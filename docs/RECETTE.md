@@ -51,7 +51,7 @@ SEED_ALLOWED=true python manage.py seed_recette --reset  # retire les données d
 `seed_recette` = `seed_prod` + personnes de démonstration + monde de test réaliste (12 paroisses,
 5 000 fidèles, dons sur douze mois, sonothèque encodée par le vrai pipeline) + musique de démo.
 Musique de démo, **une seule fois** : RAR décompressé dans `seed_assets/`, puis
-`python manage.py prepare_musique_demo --publier` (bucket privé `seed-assets/musique-demo/`) ; les
+`python manage.py prepare_musique_demo --publier` (dossier privé `seed-assets/musique-demo/` du bucket de l'app) ; les
 `seed_recette` suivants la reprennent seuls. Détails : `docs/DONNEES-DE-TEST.md`.
 
 Les comptes Keycloak se gèrent depuis l'administration de l'app (synchronisés avec le realm) :

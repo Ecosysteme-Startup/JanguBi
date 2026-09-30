@@ -48,7 +48,7 @@ class Command(BaseCommand):
         parser.add_argument("--medias-dossier", dest="medias_dossier", default=None,
                             help="Album libre fourni (jamais commité) ; credits.yaml optionnel dans ce dossier.")  # fmt: skip
         parser.add_argument("--musique-demo", dest="musique_demo", action="store_true",
-                            help="Album = musique de démo : seed_assets/musique-demo/, sinon le bucket « seed-assets ».")  # fmt: skip
+                            help="Album = musique de démo : seed_assets/musique-demo/, sinon seed-assets/ du bucket de l'app.")  # fmt: skip
         parser.add_argument("--bible-json", dest="bible_json", default=None,
                             help="JSON de la Bible (AELF) à importer par import_bible si la Bible est absente.")  # fmt: skip
         parser.add_argument("--bible-source", dest="bible_source", default="AELF")

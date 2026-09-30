@@ -2,11 +2,11 @@
 
     python manage.py prepare_musique_demo
     python manage.py prepare_musique_demo --pack "/chemin/The Polyphonic Elements Vol.6" --sortie /tmp/musique
-    python manage.py prepare_musique_demo --publier   # recette : copie aussi dans le bucket « seed-assets »
+    python manage.py prepare_musique_demo --publier   # recette : copie aussi sous seed-assets/ dans le bucket de l'app
 
 Convertit les pistes retenues en FLAC et écrit ``credits.yaml`` (lu par ``seed_realiste --medias-dossier``).
 Rien n'entre dans Git (``seed_assets/`` est ignoré). ``--publier`` copie le dossier dans le bucket MinIO
-``seed-assets/musique-demo/`` du serveur de recette : ``seed_realiste --musique-demo`` l'y reprend après un
+``seed-assets/musique-demo/`` du bucket MinIO de l'app, en recette : ``seed_realiste --musique-demo`` l'y reprend après un
 reset, sans le pack. Jamais en production (licence du pack : démonstration interne).
 """
 
@@ -33,7 +33,7 @@ class Command(BaseCommand):
         parser.add_argument("--pack", default=None, help="Dossier du pack décompressé (défaut : seed_assets/<pack>).")
         parser.add_argument("--sortie", default=str(ROOT / "musique-demo"), help="Dossier produit.")
         parser.add_argument("--publier", action="store_true",
-                            help="Copie aussi le dossier dans le bucket MinIO « seed-assets » (recette).")  # fmt: skip
+                            help="Copie aussi le dossier sous seed-assets/ dans le bucket MinIO de l'app (recette).")  # fmt: skip
 
     def handle(self, *args: Any, pack: str | None, sortie: str, publier: bool = False, **options: Any) -> None:
         selection = yaml.safe_load(SELECTION.read_text(encoding="utf-8"))
