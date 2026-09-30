@@ -18,7 +18,7 @@ Règles non négociables :
 - TDD : tests d'abord (agent django-tdd-assistant), puis code, puis revue (django-reviewer ; database-reviewer si migration).
 - Migrations expand/contract, réversibles, testées aller-retour.
 - Aucun push vers develop/stage/main sans `make act` vert. Tu travailles sur une branche feat/v1-lX-… et tu ouvres une PR ; tu ne merges pas toi-même.
-- Tu ne lances jamais les jobs build-docker ni trigger-deploy via act.
+- Tu ne lances jamais livraison-recette.yml via act.
 - Tu mets à jour docs/v1 et CLAUDE.md si une décision change, et tu proposes un ADR plutôt que de trancher seul.
 
 Résume en 10 lignes ce que tu as compris du lot <LX>, liste les fichiers que tu vas toucher, puis attends mon « go ».

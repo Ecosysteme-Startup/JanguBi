@@ -9,7 +9,7 @@ export
        seed seed-hierarchy seed-demo seed-reset \
        seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
-	ci-list ci act hooks ci-docker ci-docker-act kc-up kc-down kc-export kc-test \
+	ci-list ci act hooks ci-docker kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
 
 # ==============================================================================
@@ -271,15 +271,10 @@ hooks:
 	git config core.hooksPath scripts/git-hooks
 	@echo "Hook pre-push installé (scripts/git-hooks/pre-push)."
 
-# Valide EN LOCAL le build de l'image de production (ce que construit le job
-# build-docker). NE POUSSE PAS — pour débugger le Dockerfile avant un tag/push.
+# Valide EN LOCAL le build de l'image de production (ce que construit
+# livraison-recette.yml). NE POUSSE PAS — pour débugger le Dockerfile avant un tag/push.
 ci-docker:
 	docker build -f docker/production.Dockerfile -t jangubi-backend:local .
-
-# Lance le job build-docker via act (build + push DockerHub). Nécessite un fichier
-# `.secrets` avec DOCKERHUB_USERNAME / DOCKERHUB_TOKEN. ⚠️ pousse réellement l'image.
-ci-docker-act:
-	act push -P $(ACT_RUNNER) --rm --job build-docker --secret-file .secrets
 
 # ==============================================================================
 # RUN LOCAL DE L'IMAGE DE PRODUCTION (compose override)

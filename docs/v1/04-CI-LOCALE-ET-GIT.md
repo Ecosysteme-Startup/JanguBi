@@ -1,7 +1,7 @@
 # Jàngu Bi — Git flow et CI locale (`act`)
 
 > **Règle d'or : aucun push vers `develop`, `stage` ou `main`, ni aucune PR vers ces branches, sans `make act` vert en local.**
-> Chaque push sur ces branches consomme des minutes GitHub Actions et, s'il est vert, **déclenche automatiquement un déploiement** (job `trigger-deploy` → repo `infrastructure`). Un push cassé coûte donc des minutes, et un push vert mais non testé en profondeur part en production.
+> Chaque push sur ces branches consomme des minutes GitHub Actions. Un push sur `stage` **livre en recette** (`livraison-recette.yml` → `Ecosysteme-Startup/Infrastructure`) : un push vert mais non testé en profondeur part chez les testeurs.
 
 ---
 
@@ -9,9 +9,9 @@
 
 | Branche | Rôle | Qui y pousse | Déploie |
 |---|---|---|---|
-| `main` | Production | PR depuis `stage` après recette, tag `vX.Y.Z` | Oui (prod) |
-| `stage` | Recette / pilote | PR depuis `develop` en fin de lot (L3, L6a, L9) | Oui (staging) |
-| `develop` | Intégration | PR depuis les branches `feat/`, `fix/`, `chore/` | Oui (env. develop) |
+| `main` | Production | PR depuis `stage` après recette, tag `vX.Y.Z` | Non : la production se promeut dans l'Infrastructure |
+| `stage` | Recette / pilote | PR depuis `develop` en fin de lot (L3, L6a, L9) | Oui (recette, `livraison-recette.yml`) |
+| `develop` | Intégration | PR depuis les branches `feat/`, `fix/`, `chore/` | Non (CI qualité seule) |
 | `feat/v1-lX-<sujet>` | Travail d'un lot | Le développeur ou Claude Code | Non (CI non déclenchée par le push) |
 | `hotfix/<sujet>` | Correctif de production | Depuis `main`, PR vers `main` **et** `develop` | — |
 
@@ -25,13 +25,13 @@
 
 ## 2. La CI GitHub (rappel)
 
-`.github/workflows/django.yml` se déclenche sur push et PR vers `main`, `develop` et `stage` :
+`.github/workflows/django.yml` (qualité seule) se déclenche sur push vers `main` et `develop` et sur PR vers `main`, `develop` et `stage` :
 
 | Job | Contenu | Se lance avec `act` ? |
 |---|---|---|
 | `build` | Installation, `ruff check apps/`, `mypy apps/`, `pytest apps/` avec Postgres (pgvector) et Redis en services | **Oui, toujours** : c'est le gate |
-| `build-docker` | Build et **push** de l'image sur DockerHub | **Non.** Utiliser `make ci-docker` (build local sans push) |
-| `trigger-deploy` | Dispatch vers le repo `infrastructure` → déploiement | **Jamais** |
+
+La livraison en recette (`.github/workflows/livraison-recette.yml`, push `stage` et tags `v*`, runner `ceac`) construit l'image et notifie `Ecosysteme-Startup/Infrastructure`. **Jamais via `act`** ; pour tester le Dockerfile : `make ci-docker` (build local sans push). L'ancien déploiement par `trigger-deploy` vers `Kamal-Fils/infrastructure` est supprimé (30/09/2026).
 
 ---
 
