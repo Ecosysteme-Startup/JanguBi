@@ -138,7 +138,9 @@ def period_parse(kind: str, code: str | None = None) -> Period:
     try:
         if kind == "mois" and re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", code):
             year, month = int(code[:4]), int(code[5:])
-            return Period(kind, code, datetime.date(year, month, 1), _month_end(year, month), f"{MONTHS[month - 1]} {year}")
+            return Period(
+                kind, code, datetime.date(year, month, 1), _month_end(year, month), f"{MONTHS[month - 1]} {year}"
+            )
         if kind == "trimestre" and re.fullmatch(r"\d{4}-T[1-4]", code):
             year, quarter = int(code[:4]), int(code[-1])
             first = 3 * (quarter - 1) + 1
@@ -154,9 +156,7 @@ def period_parse(kind: str, code: str | None = None) -> Period:
             return Period(kind, code, start, end, label)
     except ValueError:
         pass
-    raise ApplicationError(
-        "Période invalide.", {"periode": kind, "date": code}, code="invalid_period"
-    )
+    raise ApplicationError("Période invalide.", {"periode": kind, "date": code}, code="invalid_period")
 
 
 def _sub_periods(period: Period, today: datetime.date) -> tuple[str, list[tuple[datetime.date, datetime.date, str]]]:
@@ -174,7 +174,11 @@ def _sub_periods(period: Period, today: datetime.date) -> tuple[str, list[tuple[
         while start <= period.end:
             sunday = start + datetime.timedelta(days=7 - start.isoweekday())
             end = min(sunday, period.end)
-            label = f"au dim. {sunday.day}" if sunday.month == period.start.month else f"au {end.day} {MONTHS[end.month - 1]}"
+            label = (
+                f"au dim. {sunday.day}"
+                if sunday.month == period.start.month
+                else f"au {end.day} {MONTHS[end.month - 1]}"
+            )
             buckets.append((start, end, label))
             start = end + datetime.timedelta(days=1)
     else:
@@ -337,7 +341,9 @@ def _synthese(scope: Q, period: Period, level: str, node: Node, r: _Rounder) -> 
             slot = by_place.setdefault(row["place_id"], {"en_ligne": 0, "especes": 0, "nombre": 0})
             slot[side(row)] += row["s"]
             slot["nombre"] += row["n"]
-        places = PlaceOfWorship.objects.filter(node=node).filter(Q(is_active=True) | Q(pk__in=[k for k in by_place if k]))
+        places = PlaceOfWorship.objects.filter(node=node).filter(
+            Q(is_active=True) | Q(pk__in=[k for k in by_place if k])
+        )
         par_lieu = []
         for place in places.order_by("-is_main", "name"):
             v = by_place.get(place.pk, {"en_ligne": 0, "especes": 0, "nombre": 0})
@@ -442,9 +448,9 @@ def _a_traiter_paroisse(node: Node, today: datetime.date) -> list[dict[str, Any]
             due = fund.remit_by or fund.starts_on or today
             items.append(_todo("remise_curie", due, f"{fund.title} : espèces à remettre à la curie",
                                montant=row["reste"], objet_id=str(fund.pk)))  # fmt: skip
-    for incident in PaymentIncident.objects.filter(donation__fund__node=node, status=IncidentStatus.OUVERT).select_related(
-        "donation"
-    ):
+    for incident in PaymentIncident.objects.filter(
+        donation__fund__node=node, status=IncidentStatus.OUVERT
+    ).select_related("donation"):
         due = timezone.localtime(incident.created_at).date() + datetime.timedelta(days=settings.DONATIONS_INCIDENT_DAYS)
         label = "Paiement tardif à régulariser" if incident.kind == "late_payment" else "Montant incohérent à vérifier"
         items.append(_todo("paiement_tardif", due, f"{label} (réf. {incident.donation.reference})",
@@ -466,7 +472,9 @@ def _a_traiter_paroisse(node: Node, today: datetime.date) -> list[dict[str, Any]
 def _a_traiter_diocese(node: Node, today: datetime.date) -> list[dict[str, Any]]:
     items = []
     parishes = Q(node__path__startswith=node.path)
-    for rem in CuriaRemittance.objects.filter(parishes, status=RemittanceStatus.DECLAREE).select_related("node", "fund"):
+    for rem in CuriaRemittance.objects.filter(parishes, status=RemittanceStatus.DECLAREE).select_related(
+        "node", "fund"
+    ):
         due = rem.remitted_on + datetime.timedelta(days=settings.DONATIONS_REMITTANCE_CONFIRM_DAYS)
         items.append(_todo("remise_a_confirmer", due, f"Remise de {rem.node.name} à confirmer ({rem.fund.title})",
                            montant=rem.amount, depuis=rem.created_at, paroisse=_brief(rem.node),
@@ -651,16 +659,18 @@ def _campagnes(node: Node, period: Period, today: datetime.date) -> list[dict[st
 
 def _notes(scope: Q, period: Period, level: str) -> list[str]:
     notes = []
-    first_cash = Donation.objects.filter(scope, channel=DonationChannel.ESPECES, status=DonationStatus.CONFIRME).aggregate(
-        d=Min("value_date")
-    )["d"]
+    first_cash = Donation.objects.filter(
+        scope, channel=DonationChannel.ESPECES, status=DonationStatus.CONFIRME
+    ).aggregate(d=Min("value_date"))["d"]
     if first_cash and period.start < first_cash <= period.end:
         notes.append(f"Les quêtes en espèces sont saisies sur Jàngu Bi depuis le {first_cash.day} "
                      f"{MONTHS[first_cash.month - 1]}.")  # fmt: skip
     first = Donation.objects.filter(scope, status=DonationStatus.CONFIRME).aggregate(d=Min("value_date"))["d"]
     if first is None or first > period.start - datetime.timedelta(days=365):
         since = (first or period.start).replace(day=1)
-        notes.append(f"Comparaison avec l'an dernier disponible à partir de {MONTHS[since.month - 1]} {since.year + 1}.")
+        notes.append(
+            f"Comparaison avec l'an dernier disponible à partir de {MONTHS[since.month - 1]} {since.year + 1}."
+        )
     if level != "paroisse":
         notes.append("Montants arrondis au millier : la somme des lignes peut différer du total.")
     notes.append("Montants en FCFA. Aucun nom de donateur dans cette vue.")
@@ -686,11 +696,20 @@ def donations_analysis(*, node: Node, level: str, period: Period) -> dict[str, A
     return {
         "niveau": level,
         "noeud": {"id": node.pk, "nom": node.name, "type": node.type.code},
-        "periode": {"type": period.kind, "code": period.code, "debut": period.start, "fin": period.end,
-                    "libelle": period.label},  # fmt: skip
+        "periode": {
+            "type": period.kind,
+            "code": period.code,
+            "debut": period.start,
+            "fin": period.end,
+            "libelle": period.label,
+        },  # fmt: skip
         "genere_le": timezone.now(),
-        "confidentialite": {"arrondi": unit, "noms_donateurs": False, "ordre_paroisses": "alphabetique",
-                            "tri_par_montant": False},  # fmt: skip
+        "confidentialite": {
+            "arrondi": unit,
+            "noms_donateurs": False,
+            "ordre_paroisses": "alphabetique",
+            "tri_par_montant": False,
+        },  # fmt: skip
         "synthese": _synthese(scope, period, level, node, r),
         "tendance": _tendance(scope, period, r, today),
         "a_traiter": _sort_todo(todo),
@@ -764,7 +783,9 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
 
     by_day = {
         row["day"]: row
-        for row in launched.annotate(day=TruncDate("created_at")).values("day").annotate(
+        for row in launched.annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(
             n=Count("id"),
             ok=Count("id", filter=Q(status__in=[DonationStatus.CONFIRME, DonationStatus.REMBOURSE])),
             wait=Count("id", filter=Q(status__in=PENDING)),
@@ -826,9 +847,7 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
         })  # fmt: skip
     par_paroisse.sort(key=lambda row: alpha_key(str(row["nom"])))
 
-    events = PaymentWebhookEvent.objects.filter(
-        received_at__date__gte=period.start, received_at__date__lte=period.end
-    )
+    events = PaymentWebhookEvent.objects.filter(received_at__date__gte=period.start, received_at__date__lte=period.end)
     ev = events.aggregate(
         recues=Count("id"),
         traitees=Count("id", filter=Q(status=WebhookStatus.TRAITE)),
@@ -848,8 +867,13 @@ def platform_activity(*, period: Period) -> dict[str, Any]:
     ]
 
     return {
-        "periode": {"type": period.kind, "code": period.code, "debut": period.start, "fin": period.end,
-                    "libelle": period.label},  # fmt: skip
+        "periode": {
+            "type": period.kind,
+            "code": period.code,
+            "debut": period.start,
+            "fin": period.end,
+            "libelle": period.label,
+        },  # fmt: skip
         "genere_le": now,
         "paiements": paiements,
         "delais": delais,

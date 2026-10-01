@@ -42,7 +42,12 @@ def test_registry_orders_by_phase_and_resolves_dependencies():
     assert names[-1] == "dons"
     assert names.index("hierarchie") < names.index("personnes") < names.index("appartenances") < names.index("dons")
     everything = [s.name for s in registry.ordered(None)]
-    assert everything.index("dons") < everything.index("sonotheque") < everything.index("ecoutes") < everything.index("audio_reco")
+    assert (
+        everything.index("dons")
+        < everything.index("sonotheque")
+        < everything.index("ecoutes")
+        < everything.index("audio_reco")
+    )
     with pytest.raises(ValueError, match="inconnu"):
         registry.ordered({"module-inexistant"})
 

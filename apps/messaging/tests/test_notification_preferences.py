@@ -14,7 +14,9 @@ def test_preferences_default_then_update():
     client.force_authenticate(user=user)
 
     default = client.get("/api/v1/me/notification-preferences/")
-    updated = client.put("/api/v1/me/notification-preferences/", {"email": False, "quiet_start": "21:00:00"}, format="json")
+    updated = client.put(
+        "/api/v1/me/notification-preferences/", {"email": False, "quiet_start": "21:00:00"}, format="json"
+    )
 
     assert default.data["in_app"] is True and default.data["quiet_start"] == "22:00:00"
     assert updated.data["email"] is False and updated.data["quiet_start"] == "21:00:00"

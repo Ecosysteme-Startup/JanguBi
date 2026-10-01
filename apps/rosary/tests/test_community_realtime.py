@@ -79,18 +79,14 @@ def fidele(db):
 
 @pytest.fixture
 def rosary(pretre):
-    return CommunityRosary.objects.create(
-        initiator=pretre, status=CommunityRosary.Status.ACTIVE
-    )
+    return CommunityRosary.objects.create(initiator=pretre, status=CommunityRosary.Status.ACTIVE)
 
 
 # ── Diffusion depuis les services ──────────────────────────────────────────
 
 
 @pytest.mark.django_db
-def test_submit_intention_broadcasts_frame(
-    layer, rosary, fidele, django_capture_on_commit_callbacks
-):
+def test_submit_intention_broadcasts_frame(layer, rosary, fidele, django_capture_on_commit_callbacks):
     # Act
     with django_capture_on_commit_callbacks(execute=True):
         community_rosary_submit_intention(rosary=rosary, user=fidele, text="Pour les malades")
@@ -106,9 +102,7 @@ def test_submit_intention_broadcasts_frame(
 
 
 @pytest.mark.django_db
-def test_end_broadcasts_rosary_ended(
-    layer, rosary, pretre, django_capture_on_commit_callbacks
-):
+def test_end_broadcasts_rosary_ended(layer, rosary, pretre, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
         community_rosary_end(rosary=rosary, user=pretre)
 
@@ -118,9 +112,7 @@ def test_end_broadcasts_rosary_ended(
 
 
 @pytest.mark.django_db
-def test_advance_broadcasts_decade_advanced(
-    layer, rosary, pretre, django_capture_on_commit_callbacks
-):
+def test_advance_broadcasts_decade_advanced(layer, rosary, pretre, django_capture_on_commit_callbacks):
     with django_capture_on_commit_callbacks(execute=True):
         community_rosary_advance_decade(rosary=rosary, user=pretre)
 
@@ -168,9 +160,7 @@ def test_no_broadcast_when_transaction_rolls_back(layer, rosary, fidele):
 
 
 @pytest.mark.django_db
-def test_rest_end_broadcasts_to_participants(
-    layer, rosary, pretre, django_capture_on_commit_callbacks
-):
+def test_rest_end_broadcasts_to_participants(layer, rosary, pretre, django_capture_on_commit_callbacks):
     """Clôture REST (socket de l'initiateur coupé) → les autres sont prévenus."""
     client = APIClient()
     client.force_authenticate(user=pretre)
@@ -184,9 +174,7 @@ def test_rest_end_broadcasts_to_participants(
 
 
 @pytest.mark.django_db
-def test_rest_intention_broadcasts_to_participants(
-    layer, rosary, fidele, django_capture_on_commit_callbacks
-):
+def test_rest_intention_broadcasts_to_participants(layer, rosary, fidele, django_capture_on_commit_callbacks):
     client = APIClient()
     client.force_authenticate(user=fidele)
     url = reverse("api:rosary:community-intentions", kwargs={"rosary_id": rosary.pk})
@@ -195,9 +183,7 @@ def test_rest_intention_broadcasts_to_participants(
         resp = client.post(url, {"text": "Pour la paix"}, format="json")
 
     assert resp.status_code == status.HTTP_201_CREATED
-    assert layer.frames() == [
-        {"type": "intention_submitted", "text": "Pour la paix", "submitted_by": fidele.email}
-    ]
+    assert layer.frames() == [{"type": "intention_submitted", "text": "Pour la paix", "submitted_by": fidele.email}]
 
 
 # ── GET intentions ─────────────────────────────────────────────────────────

@@ -38,7 +38,10 @@ def world(tree):
 SETTINGS = {
     "phone": "+221 33 825 40 18",
     "email": "secretariat@saint-dominique.sn",
-    "office_hours": [{"days": "Lun. – ven.", "hours": "9 h-12 h · 15 h 30-18 h"}, {"days": "Dimanche", "hours": "Fermé"}],
+    "office_hours": [
+        {"days": "Lun. – ven.", "hours": "9 h-12 h · 15 h 30-18 h"},
+        {"days": "Dimanche", "hours": "Fermé"},
+    ],
     "secretariat_public": True,
     "acts_delay_days": 3,
     "acts_welcome_message": "Munissez-vous d'une pièce d'identité.",

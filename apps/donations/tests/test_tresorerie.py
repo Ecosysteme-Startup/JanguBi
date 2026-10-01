@@ -71,7 +71,9 @@ def test_deposit_rules(world, fund):
         services_tresorerie.cash_deposit_declare(actor=world.secretaire, collection_ids=[done.pk], **kwargs)
     with pytest.raises(ApplicationError) as exc:
         services_tresorerie.cash_deposit_declare(
-            actor=world.econome, collection_ids=[done.pk], **{**kwargs, "deposited_on": SUNDAY - datetime.timedelta(days=1)}
+            actor=world.econome,
+            collection_ids=[done.pk],
+            **{**kwargs, "deposited_on": SUNDAY - datetime.timedelta(days=1)},
         )
     assert exc.value.code == "deposit_before_mass"
 

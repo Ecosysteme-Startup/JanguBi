@@ -15,6 +15,7 @@ from apps.users.enums import Title
 # Manager
 # ---------------------------------------------------------------------------
 
+
 class BaseUserManager(DjangoBaseUserManager):
     def create_user(
         self,
@@ -33,14 +34,17 @@ class BaseUserManager(DjangoBaseUserManager):
 
         # cast : django-stubs type self.model() en "_T" générique dans BaseUserManager,
         # ce qui masque les méthodes AbstractBaseUser (set_password, etc.).
-        user = cast("BaseUser", self.model(
-            email=normalized_email,
-            phone_number=phone_number,
-            is_staff=is_staff,
-            is_active=is_active,
-            is_verified=is_verified,
-            **extra_fields,
-        ))
+        user = cast(
+            "BaseUser",
+            self.model(
+                email=normalized_email,
+                phone_number=phone_number,
+                is_staff=is_staff,
+                is_active=is_active,
+                is_verified=is_verified,
+                **extra_fields,
+            ),
+        )
 
         if password is not None:
             user.set_password(password)
@@ -76,6 +80,7 @@ class BaseUserManager(DjangoBaseUserManager):
 # Modèle utilisateur principal
 # ---------------------------------------------------------------------------
 
+
 class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(
@@ -108,9 +113,7 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
         help_text=_("Accès à l'interface d'administration Django."),
     )
     # --- Personne V1 (SRS §5.2, ADR-003) : état de vie, vérification, paroisse suivie ---
-    keycloak_sub = models.CharField(
-        _("identifiant Keycloak"), max_length=64, unique=True, null=True, blank=True
-    )
+    keycloak_sub = models.CharField(_("identifiant Keycloak"), max_length=64, unique=True, null=True, blank=True)
     etat_de_vie = models.CharField(
         _("état de vie"),
         max_length=10,
@@ -242,6 +245,7 @@ class BaseUser(BaseModel, AbstractBaseUser, PermissionsMixin):
 # ---------------------------------------------------------------------------
 # Profil utilisateur
 # ---------------------------------------------------------------------------
+
 
 class Profile(BaseModel):
     user = models.OneToOneField(

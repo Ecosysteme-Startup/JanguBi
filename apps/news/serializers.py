@@ -47,7 +47,9 @@ class ArticleOutputSerializer(serializers.ModelSerializer):
     scope = serializers.SerializerMethodField()
     cover_image_url = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
-    is_pinned = serializers.BooleanField(read_only=True, default=False, help_text="Épinglé en tête (date de fin non dépassée)")
+    is_pinned = serializers.BooleanField(
+        read_only=True, default=False, help_text="Épinglé en tête (date de fin non dépassée)"
+    )
 
     class Meta:
         model = Article

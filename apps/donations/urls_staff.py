@@ -21,8 +21,12 @@ urlpatterns = [
     path("compteurs/<int:counter_id>/", apis_compteurs.CounterDetailApi.as_view(), name="counter-detail"),
     path("depots/", apis.CashDepositListCreateApi.as_view(), name="deposits"),
     path("remises-curie/", apis.RemittanceListCreateApi.as_view(), name="remittances"),
-    path("remises-curie/<int:remittance_id>/confirmer/", apis.RemittanceConfirmApi.as_view(), name="remittance-confirm"),
-    path("remises-curie/<int:remittance_id>/contester/", apis.RemittanceContestApi.as_view(), name="remittance-contest"),
+    path(
+        "remises-curie/<int:remittance_id>/confirmer/", apis.RemittanceConfirmApi.as_view(), name="remittance-confirm"
+    ),
+    path(
+        "remises-curie/<int:remittance_id>/contester/", apis.RemittanceContestApi.as_view(), name="remittance-contest"
+    ),
     path("clotures/", apis.MonthClosingApi.as_view(), name="closings"),
     path("ajustements/", apis.AdjustmentApi.as_view(), name="adjustments"),
     path("incidents/", apis.IncidentListApi.as_view(), name="incidents"),

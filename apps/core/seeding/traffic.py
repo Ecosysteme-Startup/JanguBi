@@ -43,7 +43,9 @@ def simulate(ctx: SeedContext, *, seconds: int) -> None:
     can_donate = settings.DONATIONS_PROVIDER == "fake" and funds
     if not can_donate:
         ctx.note("Trafic : dons non simulés (agrégateur non factice ou aucun fonds du lot).")
-    ctx.log(f"trafic simulé pendant {seconds} s : dons {'oui' if can_donate else 'non'}, écoutes {'oui' if tracks else 'non'}")
+    ctx.log(
+        f"trafic simulé pendant {seconds} s : dons {'oui' if can_donate else 'non'}, écoutes {'oui' if tracks else 'non'}"
+    )
     deadline = time.monotonic() + seconds
     counts = {"dons": 0, "ecoutes": 0}
     last_report = time.monotonic()

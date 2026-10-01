@@ -33,10 +33,10 @@ class CitationMatcher:
         """
         if not citation:
             return []
-            
+
         # Clean citation
         citation = citation.strip()
-        
+
         # 1. Very basic heuristic: extract the book abbreviation and chapters/verses.
         # This regex matches patterns like: "Lc 9, 51-62" or "Ps 15 (16), 1-2a.5"
         # Group 1: Book name/abbr (e.g. "Lc", "1 R", "Ps")
@@ -44,15 +44,15 @@ class CitationMatcher:
         match = re.search(r"^([1-4]?\s*[A-Za-zÉéÀà]+)\s+(.+)$", citation)
         if not match:
             return []
-            
+
         book_part = match.group(1).strip()
         numbers_part = match.group(2).strip()
-        
+
         # 2. Find the book
         # AELF uses abbreviations. We'll do an exact or fuzzy search on `slug` or `alt_names`
         # We lowercase and remove spaces for easier matching
         clean_book_part = book_part.lower().replace(" ", "")
-        
+
         # Try to find a matching book locally
         books = cls._get_books()
         matched_book = None
@@ -67,7 +67,7 @@ class CitationMatcher:
                     break
             if matched_book:
                 break
-                
+
         if not matched_book:
             return []
 
@@ -78,17 +78,17 @@ class CitationMatcher:
         # Let's clean out the parenthesis first for Psalms by taking the first number
         parts = numbers_part.split(",", 1)  # Only split on the FIRST comma
         if len(parts) < 2:
-            return [] # Too complex to parse without chapter/verse separator
-            
+            return []  # Too complex to parse without chapter/verse separator
+
         chapter_str = parts[0].strip()
         verses_str = parts[1].strip()
-        
+
         # Extract the integer chapter (ignoring parentheses like in Psalms)
         chapter_match = re.search(r"(\d+)", chapter_str)
         if not chapter_match:
             return []
         chapter_num = int(chapter_match.group(1))
-        
+
         # 4. Plages de versets : « 1-12.14-16 », « 10bc-11, 12-13, 14-15 », « 5a.8 ». Chaque segment
         # (séparé par « . » ou « , ») est une plage ou un verset seul ; les lettres (demi-versets)
         # sont ignorées. On garde les trous (Jb 9, 1-12.14-16 n'inclut pas le verset 13).

@@ -138,7 +138,10 @@ class StaffEventListCreateApi(_StaffApi):
         )
 
     @extend_schema(
-        tags=TAG, summary="Créer un événement", request=EventCreateInputSerializer, responses={201: EventOutputSerializer}
+        tags=TAG,
+        summary="Créer un événement",
+        request=EventCreateInputSerializer,
+        responses={201: EventOutputSerializer},
     )
     def post(self, request: Request) -> Response:
         serializer = EventCreateInputSerializer(data=request.data)
@@ -159,7 +162,9 @@ class StaffEventDetailApi(_StaffApi):
     def get(self, request: Request, event_id: int) -> Response:
         return Response(EventOutputSerializer(selectors.event_get_for_staff(user=request.user, event_id=event_id)).data)
 
-    @extend_schema(tags=TAG, summary="Modifier un événement", request=EventUpdateInputSerializer, responses=EventOutputSerializer)
+    @extend_schema(
+        tags=TAG, summary="Modifier un événement", request=EventUpdateInputSerializer, responses=EventOutputSerializer
+    )
     def patch(self, request: Request, event_id: int) -> Response:
         event = selectors.event_get_for_staff(user=request.user, event_id=event_id)
         serializer = EventUpdateInputSerializer(data=request.data, partial=True)
@@ -169,7 +174,9 @@ class StaffEventDetailApi(_StaffApi):
 
     @extend_schema(tags=TAG, summary="Annuler un événement (les inscrits sont prévenus)", responses={204: None})
     def delete(self, request: Request, event_id: int) -> Response:
-        services.event_cancel(event=selectors.event_get_for_staff(user=request.user, event_id=event_id), actor=request.user)
+        services.event_cancel(
+            event=selectors.event_get_for_staff(user=request.user, event_id=event_id), actor=request.user
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

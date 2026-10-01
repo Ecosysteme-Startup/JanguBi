@@ -102,7 +102,9 @@ def test_cover_image_is_attached_and_exposed(world):
     assert created.status_code == 201
     assert created.data["cover_image_id"] == cover.pk and "parvis" in created.data["cover_image_url"]
     assert public.data["cover_image_url"].split("?")[0] == created.data["cover_image_url"].split("?")[0]
-    assert created.data["cover_image_alt"] == public.data["cover_image_alt"] == "Le parvis de l'église un dimanche matin"
+    assert (
+        created.data["cover_image_alt"] == public.data["cover_image_alt"] == "Le parvis de l'église un dimanche matin"
+    )
     assert public.data["cover_image_decorative"] is False
 
 

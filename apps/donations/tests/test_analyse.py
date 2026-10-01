@@ -41,13 +41,22 @@ def test_parish_synthesis_matches_the_reference_dataset(world, sept):
     ]
     online, cash = s["par_canal"]
     assert (online["canal"], online["total"], online["part"], cash["total"], cash["part"]) == (
-        "en_ligne", 356_330, 29, 858_500, 71
+        "en_ligne",
+        356_330,
+        29,
+        858_500,
+        71,
     )
     assert [(x["source"], x["total"], x["nombre"]) for x in online["sources"]] == [
-        ("app_ios", 61_500, 8), ("app_android", 199_000, 26), ("web", 95_830, 13)
+        ("app_ios", 61_500, 8),
+        ("app_android", 199_000, 26),
+        ("web", 95_830, 13),
     ]
     assert [(m["moyen"], m["total"], m["nombre"]) for m in s["par_moyen"]] == [
-        ("wave", 208_450, 29), ("orange_money", 106_380, 14), ("free_money", 0, 0), ("carte", 41_500, 4)
+        ("wave", 208_450, 29),
+        ("orange_money", 106_380, 14),
+        ("free_money", 0, 0),
+        ("carte", 41_500, 4),
     ]
     assert [(p["nom"], p["total"], p["nombre"]) for p in s["par_lieu"]] == [
         ("Église Saint-Dominique", 775_000, 7),
@@ -65,10 +74,16 @@ def test_weekly_trend_uses_the_value_date(world, sept):
     trend = body["tendance"]
     assert trend["grain"] == "semaine"
     assert [(p["libelle"], p["total"]) for p in trend["points"]] == [
-        ("au dim. 6", 71_500), ("au dim. 13", 84_250), ("au dim. 20", 297_805), ("au dim. 27", 761_275)
+        ("au dim. 6", 71_500),
+        ("au dim. 13", 84_250),
+        ("au dim. 20", 297_805),
+        ("au dim. 27", 761_275),
     ]
     assert trend["points"][3]["par_type_fonds"] == {
-        "quete_dominicale": 38_500, "quete_imperee": 674_525, "campagne": 40_250, "contribution_annuelle": 8_000
+        "quete_dominicale": 38_500,
+        "quete_imperee": 674_525,
+        "campagne": 40_250,
+        "contribution_annuelle": 8_000,
     }
     assert any("depuis le 20 septembre" in note for note in body["notes"])
     assert any("an dernier disponible à partir de juin 2027" in note for note in body["notes"])  # campagne dès juin
@@ -95,7 +110,10 @@ def test_treasury_payments_and_campaign(world, sept):
                                  "taux_confirmation": 81}  # fmt: skip
     (campaign,) = body["campagnes"]
     assert (campaign["reuni"], campaign["objectif"], campaign["part"], campaign["nombre"]) == (
-        1_186_400, 4_500_000, 26, 57
+        1_186_400,
+        4_500_000,
+        26,
+        57,
     )
     assert campaign["periode"] == 236_400 and campaign["rythme_hebdo"] == 59_100
     assert body["paroisses"] is None
@@ -129,7 +147,11 @@ def test_diocese_view_is_rounded_alphabetical_and_aggregated(world, sept):
     ]  # fmt: skip
     sd = paroisses["lignes"][2]
     assert (sd["statut_collecte"], sd["collecte"], sd["part_en_ligne"], sd["quetes_a_valider"], sd["evolution"]) == (
-        "ouverte", 1_215_000, 29, 1, None
+        "ouverte",
+        1_215_000,
+        29,
+        1,
+        None,
     )
     assert paroisses["lignes"][0]["collecte"] is None
     (imperee,) = body["quetes_imperees"]
@@ -139,7 +161,8 @@ def test_diocese_view_is_rounded_alphabetical_and_aggregated(world, sept):
         "remis": 0, "remise_declaree": 0, "reste_a_remettre": 646_000, "part_remise": 0,
     }]  # fmt: skip
     assert [(t["type"], t["echeance"]) for t in body["a_traiter"]] == [
-        ("quete_a_confirmer", "2026-09-29"), ("remise_curie", "2026-10-04")
+        ("quete_a_confirmer", "2026-09-29"),
+        ("remise_curie", "2026-10-04"),
     ]
     assert [p["total"] for p in body["tendance"]["points"]] == [72_000, 84_000, 298_000, 761_000]
     assert body["tresorerie"] is None and body["paiements"] is None and body["campagnes"] is None
@@ -199,7 +222,9 @@ def test_period_parse(kind, code, start, end):
     assert period.shifted(-1).end < period.start
 
 
-@pytest.mark.parametrize("kind, code", [("mois", "2026-9"), ("trimestre", "2026-T5"), ("semaine", "2026-W60"), ("x", "")])
+@pytest.mark.parametrize(
+    "kind, code", [("mois", "2026-9"), ("trimestre", "2026-T5"), ("semaine", "2026-W60"), ("x", "")]
+)
 def test_period_parse_errors(kind, code):
     with pytest.raises(ApplicationError):
         selectors_analyse.period_parse(kind, code)

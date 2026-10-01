@@ -203,6 +203,14 @@ globale du catalogue (`audio:catalog:version`), ce qui invalide toutes les entr�
   1 h 10) crée le mois courant et les deux suivants, déplace les lignes tombées dans `DEFAULT`, et
   supprime les partitions de plus de 13 mois.
 
+## 7 bis. Encodages interrompus
+
+Un worker média tué en plein encodage (redéploiement, manque de mémoire) laissait la piste « encodage »
+pour toujours (recette du 30/09/2026). `audio_transcode_stalled_task` (toutes les 15 min) relance les
+pistes « encodage » ou « en_file » sans nouvelles depuis `AUDIO_TRANSCODE_STALL_SECONDS` (45 min, plus que
+le verrou de 30 min : jamais deux encodages à la fois) ; au-delà de 4 tentatives, la piste passe en échec
+et l'uploader est prévenu.
+
 ## 8. Recommandations (`audio_reco_recompute_task`, file `reco`, 3 h 05)
 
 1. Voisins **co-écoute** : cosinus binaire utilisateur × piste sur 90 jours (écoutes complètes,

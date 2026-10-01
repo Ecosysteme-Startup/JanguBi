@@ -56,7 +56,9 @@ class ConfessionsSeeder(Seeder):
                                 if past:
                                     status = rng.choices(["honoree", "absent", "annulee_fidele"], [80, 10, 10])[0]
                                 else:
-                                    status = rng.choices(["reservee", "annulee_fidele", "annulee_pretre"], [85, 10, 5])[0]
+                                    status = rng.choices(["reservee", "annulee_fidele", "annulee_pretre"], [85, 10, 5])[
+                                        0
+                                    ]
                                 cancelled = status.startswith("annulee")
                                 bookings.append(ConfessionBooking(
                                     slot=slot, person_id=person, status=status,
@@ -64,7 +66,9 @@ class ConfessionsSeeder(Seeder):
                                     cancel_message="Empêchement, je réserverai un autre créneau." if status == "annulee_fidele" else
                                     ("Absence imprévue du prêtre. Merci de choisir un autre créneau." if status == "annulee_pretre" else ""),
                                 ))  # fmt: skip
-                                slot.status = {"reservee": "reserve", "annulee_pretre": "bloque"}.get(status, "reserve" if not cancelled else "libre")
+                                slot.status = {"reservee": "reserve", "annulee_pretre": "bloque"}.get(
+                                    status, "reserve" if not cancelled else "libre"
+                                )
                     day += datetime.timedelta(days=1)
         with transaction.atomic():
             ConfessionSlotRule.objects.bulk_create(rules)

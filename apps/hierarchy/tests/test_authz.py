@@ -197,8 +197,12 @@ def test_second_active_cure_is_rejected_but_in_solidum_is_allowed(world):
         assignment_create(actor=world.eveque, person=priest(), office_type=office("cure"), node=world.saint_dominique)
     assert exc.value.code == "cardinality_exceeded"
 
-    assignment_create(actor=world.eveque, person=priest(), office_type=office("cure_in_solidum"), node=world.saint_dominique)
-    assignment_create(actor=world.eveque, person=priest(), office_type=office("cure_in_solidum"), node=world.saint_dominique)
+    assignment_create(
+        actor=world.eveque, person=priest(), office_type=office("cure_in_solidum"), node=world.saint_dominique
+    )
+    assignment_create(
+        actor=world.eveque, person=priest(), office_type=office("cure_in_solidum"), node=world.saint_dominique
+    )
 
 
 def test_successor_can_be_appointed_after_the_end_of_the_mandate(world):
@@ -219,14 +223,19 @@ def test_successor_can_be_appointed_after_the_end_of_the_mandate(world):
 
 def test_order_condition(world):
     with pytest.raises(ApplicationError) as exc:
-        assignment_create(actor=world.eveque, person=person(), office_type=office("vicaire_paroissial"), node=world.saint_dominique)
+        assignment_create(
+            actor=world.eveque, person=person(), office_type=office("vicaire_paroissial"), node=world.saint_dominique
+        )
     assert exc.value.code == "order_required"
 
 
 def test_unverified_priest_cannot_be_appointed(world):
     with pytest.raises(ApplicationError) as exc:
         assignment_create(
-            actor=world.eveque, person=priest(verified=False), office_type=office("vicaire_paroissial"), node=world.saint_dominique
+            actor=world.eveque,
+            person=priest(verified=False),
+            office_type=office("vicaire_paroissial"),
+            node=world.saint_dominique,
         )
     assert exc.value.code == "clerical_status_not_verified"
 
@@ -234,16 +243,24 @@ def test_unverified_priest_cannot_be_appointed(world):
 def test_office_must_match_the_node_type(world):
     with pytest.raises(ApplicationError) as exc:
         assignment_create(
-            actor=SuperAdminFactory.create(), person=person(), office_type=office("secretaire_paroissial"), node=world.doyenne
+            actor=SuperAdminFactory.create(),
+            person=person(),
+            office_type=office("secretaire_paroissial"),
+            node=world.doyenne,
         )
     assert exc.value.code == "office_node_type_mismatch"
 
 
 def test_bishop_is_appointed_by_the_platform_only(world):
     with pytest.raises(PermissionDeniedError):
-        assignment_create(actor=world.eveque, person=person(ordre="eveque"), office_type=office("eveque_auxiliaire"), node=world.dakar)
+        assignment_create(
+            actor=world.eveque, person=person(ordre="eveque"), office_type=office("eveque_auxiliaire"), node=world.dakar
+        )
     assignment_create(
-        actor=SuperAdminFactory.create(), person=person(ordre="eveque"), office_type=office("eveque_auxiliaire"), node=world.dakar
+        actor=SuperAdminFactory.create(),
+        person=person(ordre="eveque"),
+        office_type=office("eveque_auxiliaire"),
+        node=world.dakar,
     )
 
 
@@ -325,7 +342,12 @@ def test_audit_is_insert_only(world):
 def test_nobody_appoints_themselves(world):
     """Sinon un évêque se ferait vicaire pour obtenir messagerie.recevoir_fideles."""
     with pytest.raises(PermissionDeniedError) as exc:
-        assignment_create(actor=world.eveque, person=world.eveque, office_type=office("vicaire_paroissial"), node=world.saint_dominique)
+        assignment_create(
+            actor=world.eveque,
+            person=world.eveque,
+            office_type=office("vicaire_paroissial"),
+            node=world.saint_dominique,
+        )
     assert exc.value.code == "self_appointment"
 
 

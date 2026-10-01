@@ -106,9 +106,7 @@ class RosaryConsumer(AsyncWebsocketConsumer):
             await self._reject(action, exc.message)
 
     async def _reject(self, action: str, reason: str) -> None:
-        await self.send(
-            text_data=json.dumps(action_rejected_frame(action=action, reason=reason))
-        )
+        await self.send(text_data=json.dumps(action_rejected_frame(action=action, reason=reason)))
 
     # ── Bridges service (la diffusion est faite par le service) ─────────────
 
@@ -119,9 +117,7 @@ class RosaryConsumer(AsyncWebsocketConsumer):
             community_rosary_get,
         )
 
-        community_rosary_advance_decade(
-            rosary=community_rosary_get(rosary_id=self.rosary_id), user=self.user
-        )
+        community_rosary_advance_decade(rosary=community_rosary_get(rosary_id=self.rosary_id), user=self.user)
 
     @database_sync_to_async
     def _submit_intention(self, text: str) -> None:
@@ -140,9 +136,7 @@ class RosaryConsumer(AsyncWebsocketConsumer):
     def _end(self) -> None:
         from apps.rosary.community_services import community_rosary_end, community_rosary_get
 
-        community_rosary_end(
-            rosary=community_rosary_get(rosary_id=self.rosary_id), user=self.user
-        )
+        community_rosary_end(rosary=community_rosary_get(rosary_id=self.rosary_id), user=self.user)
 
     # ── Broadcast handler (appelé par le channel layer) ────────────────────
 

@@ -62,14 +62,20 @@ class ActesSeeder(Seeder):
         ]  # fmt: skip
         ctx.track(File, [f.pk for f in specimens])
         profiles = {p.user_id: p for p in Profile.objects.filter(user__in=ctx.fideles_qs()).order_by("user_id")}
-        requesters = [(uid, p) for uid, p in profiles.items() if p.date_of_birth is not None and p.date_of_birth.year < ctx.today.year - 17]
+        requesters = [
+            (uid, p)
+            for uid, p in profiles.items()
+            if p.date_of_birth is not None and p.date_of_birth.year < ctx.today.year - 17
+        ]
         requests, logs, attachments, notes = [], [], [], []
         for i in range(ctx.scale.demandes_actes if requesters else 0):
             uid, profile = rng.choice(requesters)
             parish = rng.choice(parishes)
             status = rng.choices([s for s, _ in STATUSES], [w for _, w in STATUSES])[0]
             doc_type, reason, _ = rng.choices(TYPES, [w for *_, w in TYPES])[0]
-            created = ctx.now - datetime.timedelta(days=rng.randint(1 if status == "submitted" else 5, 150), hours=rng.randint(0, 9))
+            created = ctx.now - datetime.timedelta(
+                days=rng.randint(1 if status == "submitted" else 5, 150), hours=rng.randint(0, 9)
+            )
             closed = status in ("collected", "rejected", "cancelled")
             r = DocumentRequest(
                 reference=f"DOC-{created:%Y%m%d}-{rng.getrandbits(24):06X}", requester_id=uid, document_type=doc_type,
@@ -90,7 +96,11 @@ class ActesSeeder(Seeder):
             )  # fmt: skip
             requests.append(r)
             prev, at = "submitted", created
-            logs.append(DocumentRequestStatusLog(request=r, from_status="", to_status="submitted", changed_by_id=uid, created_at=created))
+            logs.append(
+                DocumentRequestStatusLog(
+                    request=r, from_status="", to_status="submitted", changed_by_id=uid, created_at=created
+                )
+            )
             for step in PATHS[status]:
                 at = at + datetime.timedelta(days=rng.randint(1, 5))
                 by_id = uid if step == "cancelled" else getattr(staff[parish.pk], "pk", None)
@@ -103,7 +113,11 @@ class ActesSeeder(Seeder):
                 attachments.append(DocumentRequestAttachment(request=r, file=f, uploaded_by_id=uid, attachment_type="user_supporting",
                                                               label="Justificatif (spécimen)"))  # fmt: skip
             if status in ("under_verification", "info_requested") and rng.random() < 0.4:
-                notes.append(InternalNote(request=r, author=staff[parish.pk], content="Registre consulté, acte à vérifier avec le curé."))
+                notes.append(
+                    InternalNote(
+                        request=r, author=staff[parish.pk], content="Registre consulté, acte à vérifier avec le curé."
+                    )
+                )
         with transaction.atomic():
             DocumentRequest.objects.bulk_create(requests)
             DocumentRequestStatusLog.objects.bulk_create(logs)

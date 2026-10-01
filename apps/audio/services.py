@@ -22,7 +22,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db import connection, transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.utils import timezone
 
 from apps.audio import access, storage, transcode
@@ -409,9 +409,7 @@ def upload_start(
         uploaded_by=actor,
     )
     track_search_index(track_ids=[track.pk])
-    audit_log(
-        actor=actor, action="audio.piste.televerser", target=track, node=source.node, metadata={"droits": True}
-    )
+    audit_log(actor=actor, action="audio.piste.televerser", target=track, node=source.node, metadata={"droits": True})
 
     if storage.is_s3():
         presigned = storage.presigned_post(
@@ -566,7 +564,11 @@ def _mark_retrying(*, track_id: Any, version: int, reason: str) -> None:
         transaction.on_commit(
             partial(
                 realtime_audio.upload_progress_publish,
-                track_id=track_id, version=version, status=TrackStatus.EN_FILE, step="", percent=0,
+                track_id=track_id,
+                version=version,
+                status=TrackStatus.EN_FILE,
+                step="",
+                percent=0,
                 failure_reason=reason[:1000],
             )  # fmt: skip
         )
@@ -593,8 +595,14 @@ def _mark_ready(*, track_id: Any, version: int, result: transcode.TranscodeResul
     ]
     renditions.append(
         TrackRendition(
-            track=track, version=version, kind="mp3", codec="MP3", bitrate_kbps=128, channels=2,
-            path=f"{prefix}/{result.mp3}", size_bytes=result.mp3_size,
+            track=track,
+            version=version,
+            kind="mp3",
+            codec="MP3",
+            bitrate_kbps=128,
+            channels=2,
+            path=f"{prefix}/{result.mp3}",
+            size_bytes=result.mp3_size,
         )  # fmt: skip
     )
     TrackRendition.objects.bulk_create(renditions)
@@ -715,6 +723,50 @@ def transcode_track(*, track_id: Any, version: int, final_attempt: bool = True) 
     finally:
         if cache.get(lock) == token:
             cache.delete(lock)
+
+
+# --- Reprise des encodages interrompus -------------------------------------------------------
+
+
+def tracks_stalled_requeue(*, now: datetime.datetime | None = None) -> dict[str, int]:
+    """Remet en file les encodages interrompus ; passe en échec ceux qui échouent à répétition.
+
+    Un worker média tué en plein encodage (redéploiement, manque de mémoire) laisse la piste
+    « encodage » pour toujours : la tâche n'est pas reprise (recette du 30/09/2026, « Homélie : le
+    bon Samaritain » bloquée à 90 %). Une piste « en_file » dont la tâche a été perdue reste de même.
+    Au-delà de ``AUDIO_TRANSCODE_STALL_SECONDS`` (plus que le verrou, donc aucun worker ne l'encode
+    encore), on relance l'encodage ; après ``AUDIO_TRANSCODE_MAX_RETRIES`` + 1 tentatives, la piste
+    passe en échec (un fichier qui tue le worker à chaque fois ne tourne pas en boucle).
+    """
+    now = now or timezone.now()
+    since = now - datetime.timedelta(seconds=settings.AUDIO_TRANSCODE_STALL_SECONDS)
+    stalled = Track.objects.filter(
+        Q(status=TrackStatus.ENCODAGE, encoding_started_at__lt=since)
+        | Q(status=TrackStatus.EN_FILE, updated_at__lt=since)
+    ).values_list("pk", flat=True)
+    requeued = failed = 0
+    for track_id in stalled:
+        if cache.get(_lock_key(track_id)) is not None:
+            continue  # un worker l'encode encore
+        with transaction.atomic():
+            track = Track.objects.select_for_update().filter(pk=track_id).first()
+            if track is None or track.status not in (TrackStatus.ENCODAGE, TrackStatus.EN_FILE):
+                continue
+            if track.encode_attempts > settings.AUDIO_TRANSCODE_MAX_RETRIES:
+                _mark_failed(
+                    track_id=track.pk,
+                    version=track.version,
+                    reason="Encodage interrompu à répétition : fichier à vérifier, puis à renvoyer.",
+                )
+                failed += 1
+                continue
+            track.status, track.encoding_step, track.encoding_percent = TrackStatus.EN_FILE, "", 0
+            track.save(update_fields=["status", "encoding_step", "encoding_percent", "updated_at"])
+            _enqueue_transcode(track)
+            requeued += 1
+    if requeued or failed:
+        logger.warning("audio.transcode.reprise", extra={"relancees": requeued, "echecs": failed})
+    return {"relancees": requeued, "echecs": failed}
 
 
 # --- Métadonnées et publication d'une piste ----------------------------------------------------
@@ -871,9 +923,7 @@ def _require_playlist_editor(actor: Any, playlist: Playlist) -> None:
 
 
 @transaction.atomic
-def playlist_create(
-    *, actor: Any, title: str, source: AudioSource | None = None, **fields: Any
-) -> Playlist:
+def playlist_create(*, actor: Any, title: str, source: AudioSource | None = None, **fields: Any) -> Playlist:
     """Playlist du fidèle, ou éditoriale si ``source`` est donnée (``audio.publier`` requis)."""
     data = {k: v for k, v in fields.items() if k in PLAYLIST_FIELDS}
     if source is not None:
@@ -973,7 +1023,9 @@ RETURNING track_id, kind
 
 
 @transaction.atomic
-def play_events_ingest(*, user: Any, events: list[dict[str, Any]], now: datetime.datetime | None = None) -> dict[str, int]:
+def play_events_ingest(
+    *, user: Any, events: list[dict[str, Any]], now: datetime.datetime | None = None
+) -> dict[str, int]:
     """Enregistre un lot d'événements. Idempotent par ``client_event_id`` (+ ``occurred_at``, que le
     client renvoie à l'identique) : une reprise réseau ne compte pas deux fois.
 
@@ -999,8 +1051,14 @@ def play_events_ingest(*, user: Any, events: list[dict[str, Any]], now: datetime
         seen.add(key)
         rows.append(
             (
-                e["occurred_at"], now, str(e["client_event_id"]), user_id, str(e["track_id"]),
-                e["kind"], float(e.get("position_seconds") or 0), (e.get("device_id") or "")[:100],
+                e["occurred_at"],
+                now,
+                str(e["client_event_id"]),
+                user_id,
+                str(e["track_id"]),
+                e["kind"],
+                float(e.get("position_seconds") or 0),
+                (e.get("device_id") or "")[:100],
             )  # fmt: skip
         )
     inserted: list[tuple[Any, str]] = []
@@ -1145,4 +1203,3 @@ def report_handle(*, actor: Any, report: TrackReport, decision: str) -> TrackRep
     )  # fmt: skip
     report.refresh_from_db()
     return report
-

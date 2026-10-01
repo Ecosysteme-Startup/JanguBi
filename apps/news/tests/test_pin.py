@@ -75,7 +75,9 @@ def test_unpin_and_unpublish_clear_the_pin(world):
 def test_invalid_end_dates(world, days, code):
     article = published(world, "Kermesse")
     until = (timezone.now() + datetime.timedelta(days=days)).isoformat()
-    response = client_for(world.secretaire).post(f"/api/v1/staff/news/{article.pk}/pin/", {"until": until}, format="json")
+    response = client_for(world.secretaire).post(
+        f"/api/v1/staff/news/{article.pk}/pin/", {"until": until}, format="json"
+    )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == code
 

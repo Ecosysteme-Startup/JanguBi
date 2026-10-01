@@ -47,7 +47,9 @@ def test_declaration_stays_declared_and_grants_nothing(world):
 
 def test_chancellor_verifies_a_priest_incardinated_in_his_diocese(world):
     candidate = person(verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar)
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar
+    )
 
     person_verification_decide(actor=world.chancelier, person=candidate, decision="verifie")
 
@@ -60,14 +62,18 @@ def test_chancellor_verifies_a_priest_incardinated_in_his_diocese(world):
 def test_peers_cannot_verify(world):
     """Un curé ne vérifie pas un diacre : seule la chancellerie (personnes.verifier)."""
     candidate = person(verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="diacre_permanent", incardination_node=world.dakar)
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="diacre_permanent", incardination_node=world.dakar
+    )
     with pytest.raises(PermissionDeniedError):
         person_verification_decide(actor=world.cure, person=candidate, decision="verifie")
 
 
 def test_chancellor_of_dakar_cannot_verify_a_thies_priest(world):
     candidate = person(verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.thies)
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.thies
+    )
     with pytest.raises(PermissionDeniedError):
         person_verification_decide(actor=world.chancelier, person=candidate, decision="verifie")
 
@@ -80,7 +86,9 @@ def test_no_self_verification(world):
 
 def test_changing_a_verified_declaration_resets_it(world):
     verified = priest(incardination_node=world.dakar)
-    person_declaration_submit(person=verified, etat_de_vie="clerc", degre_ordre="eveque", incardination_node=world.dakar)
+    person_declaration_submit(
+        person=verified, etat_de_vie="clerc", degre_ordre="eveque", incardination_node=world.dakar
+    )
     verified.refresh_from_db()
     assert verified.statut_verification == StatutVerification.DECLARE
 
@@ -89,7 +97,9 @@ def test_inconsistent_declaration_is_rejected(world):
     with pytest.raises(ApplicationError):
         person_declaration_submit(person=person(), etat_de_vie="laic", degre_ordre="pretre")
     with pytest.raises(ApplicationError):
-        person_declaration_submit(person=person(), etat_de_vie="clerc", incardination_node=world.saint_dominique, degre_ordre="pretre")
+        person_declaration_submit(
+            person=person(), etat_de_vie="clerc", incardination_node=world.saint_dominique, degre_ordre="pretre"
+        )
 
 
 # --- Mouvement annuel (EF-PER-07) --------------------------------------------------------
@@ -99,9 +109,7 @@ def test_annual_movement_simulation_then_atomic_application(world):
     new_cure = priest("nouveau@sd.sn")
     secretary = person("sec@st.sn")
     content = (
-        "action,email,office,node_code\n"
-        "nommer,nouveau@sd.sn,cure,T-SD\n"
-        "nommer,sec@st.sn,secretaire_paroissial,T-ST\n"
+        "action,email,office,node_code\nnommer,nouveau@sd.sn,cure,T-SD\nnommer,sec@st.sn,secretaire_paroissial,T-ST\n"
     )
 
     dry = assignments_import_csv(actor=world.chancelier, content=content, effective_date=date(2026, 10, 1))
@@ -111,7 +119,10 @@ def test_annual_movement_simulation_then_atomic_application(world):
     assert not OfficeAssignment.objects.filter(person=new_cure).exists()
 
     ok = assignments_import_csv(
-        actor=world.chancelier, content=content.rsplit("\n", 2)[0] + "\n", effective_date=date(2026, 10, 1), dry_run=False
+        actor=world.chancelier,
+        content=content.rsplit("\n", 2)[0] + "\n",
+        effective_date=date(2026, 10, 1),
+        dry_run=False,
     )
     assert ok.applied
     old = OfficeAssignment.objects.get(person=world.cure)
@@ -128,7 +139,9 @@ def test_annual_movement_errors(world):
         "nommer,inconnu@y.sn,cure,T-SD\n"
         "terminer,cure@sd.sn,vicaire_paroissial,T-SD\n"
     )
-    report = assignments_import_csv(actor=world.chancelier, content=content, effective_date=date(2026, 10, 1), dry_run=False)
+    report = assignments_import_csv(
+        actor=world.chancelier, content=content, effective_date=date(2026, 10, 1), dry_run=False
+    )
 
     assert report.errors == 3 and not report.applied
     assert "Action inconnue" in report.lines[0].message
@@ -143,7 +156,15 @@ def test_me_capacites_api(world):
     response = client_for(world.cure).get("/api/v1/me/capacites/")
 
     assert response.status_code == 200
-    assert {"capacite": "actes.traiter", "node_id": str(world.saint_dominique.pk), "node_name": "Saint-Dominique", "herite": True, "office": "cure", "office_label": "Curé", "node_type": "paroisse"} in response.data
+    assert {
+        "capacite": "actes.traiter",
+        "node_id": str(world.saint_dominique.pk),
+        "node_name": "Saint-Dominique",
+        "herite": True,
+        "office": "cure",
+        "office_label": "Curé",
+        "node_type": "paroisse",
+    } in response.data
 
 
 def test_me_capacites_requires_authentication(db):
@@ -196,11 +217,15 @@ def test_assignment_import_api(world):
 
 def test_verification_api(world):
     candidate = person(verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar)
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar
+    )
     client = client_for(world.chancelier)
 
     queue = client.get("/api/v1/hierarchy/verifications/")
-    decided = client.post(f"/api/v1/hierarchy/verifications/{candidate.pk}/decision/", {"decision": "verifie"}, format="json")
+    decided = client.post(
+        f"/api/v1/hierarchy/verifications/{candidate.pk}/decision/", {"decision": "verifie"}, format="json"
+    )
 
     assert [p["email"] for p in queue.data["results"]] == [candidate.email]
     assert decided.data["statut_verification"] == "verifie"
@@ -209,7 +234,9 @@ def test_verification_api(world):
 
 def test_out_of_scope_verification_is_a_404(world):
     candidate = person(verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.thies)
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.thies
+    )
 
     response = client_for(world.chancelier).post(
         f"/api/v1/hierarchy/verifications/{candidate.pk}/decision/", {"decision": "verifie"}, format="json"
@@ -301,9 +328,14 @@ def test_audit_api_requires_authentication(world):
 
 def test_capability_override_api_is_platform_only(world):
     payload = {"diocese_node_id": str(world.thies.pk), "office": "cure", "capability": "actes.traiter"}
-    assert client_for(world.chancelier).post("/api/v1/hierarchy/capability-overrides/", payload, format="json").status_code == 403
+    assert (
+        client_for(world.chancelier).post("/api/v1/hierarchy/capability-overrides/", payload, format="json").status_code
+        == 403
+    )
 
-    created = client_for(SuperAdminFactory.create()).post("/api/v1/hierarchy/capability-overrides/", payload, format="json")
+    created = client_for(SuperAdminFactory.create()).post(
+        "/api/v1/hierarchy/capability-overrides/", payload, format="json"
+    )
     assert created.status_code == 201
 
 
@@ -312,8 +344,14 @@ def test_capability_override_api_is_platform_only(world):
 
 def test_chancellor_creates_a_deanery_in_his_diocese_only(world):
     client = client_for(world.chancelier)
-    ok = client.post("/api/v1/hierarchy/nodes/", {"type": "doyenne", "name": "Niayes", "parent_id": str(world.dakar.pk)}, format="json")
-    ko = client.post("/api/v1/hierarchy/nodes/", {"type": "doyenne", "name": "X", "parent_id": str(world.thies.pk)}, format="json")
+    ok = client.post(
+        "/api/v1/hierarchy/nodes/",
+        {"type": "doyenne", "name": "Niayes", "parent_id": str(world.dakar.pk)},
+        format="json",
+    )
+    ko = client.post(
+        "/api/v1/hierarchy/nodes/", {"type": "doyenne", "name": "X", "parent_id": str(world.thies.pk)}, format="json"
+    )
 
     assert ok.status_code == 201
     assert ko.status_code == 403
@@ -326,11 +364,15 @@ def test_cure_manages_schedules_but_not_structure(world):
     client = client_for(world.cure)
 
     schedule = client.put(
-        f"/api/v1/hierarchy/places/{place.pk}/schedule/", {"items": [{"weekday": 6, "start_time": "09:30"}]}, format="json"
+        f"/api/v1/hierarchy/places/{place.pk}/schedule/",
+        {"items": [{"weekday": 6, "start_time": "09:30"}]},
+        format="json",
     )
     structure = client.patch(f"/api/v1/hierarchy/places/{place.pk}/", {"name": "Autre"}, format="json")
     ceb = client.post(
-        "/api/v1/hierarchy/nodes/", {"type": "ceb", "name": "CEB", "parent_id": str(world.saint_dominique.pk)}, format="json"
+        "/api/v1/hierarchy/nodes/",
+        {"type": "ceb", "name": "CEB", "parent_id": str(world.saint_dominique.pk)},
+        format="json",
     )
 
     assert schedule.status_code == 200

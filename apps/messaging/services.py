@@ -68,9 +68,7 @@ def _check_rate_limit(sender: BaseUser, conversation: Conversation) -> None:
     key = f"msg_rate:{conversation.id}:{sender.id}:{date.today()}"
     count = cache.get_or_set(key, 0, timeout=86400)
     if count >= settings.MESSAGING_RATE_LIMIT_PER_DAY:
-        raise ApplicationError(
-            f"Limite de {settings.MESSAGING_RATE_LIMIT_PER_DAY} messages par jour atteinte."
-        )
+        raise ApplicationError(f"Limite de {settings.MESSAGING_RATE_LIMIT_PER_DAY} messages par jour atteinte.")
     cache.incr(key)
 
 
@@ -140,9 +138,7 @@ def reachable_check(*, priest: BaseUser) -> None:
 
 
 @transaction.atomic
-def conversation_get_or_create(
-    *, fidele: BaseUser, priest: BaseUser
-) -> tuple[Conversation, bool]:
+def conversation_get_or_create(*, fidele: BaseUser, priest: BaseUser) -> tuple[Conversation, bool]:
     existing = Conversation.objects.filter(
         participant_a=min(fidele, priest, key=lambda u: str(u.id)),
         participant_b=max(fidele, priest, key=lambda u: str(u.id)),
@@ -261,11 +257,7 @@ def message_send(
     client_message_id: Optional[str] = None,
     reply_to: Optional[Message] = None,
 ) -> Message:
-    receiver = (
-        conversation.participant_b
-        if sender.id == conversation.participant_a_id
-        else conversation.participant_a
-    )
+    receiver = conversation.participant_b if sender.id == conversation.participant_a_id else conversation.participant_a
 
     _check_not_blocked(sender, receiver)
     _check_cgu(conversation, sender)
@@ -420,9 +412,7 @@ def unblock_user(*, blocker: BaseUser, blocked: BaseUser) -> None:
 
 
 @transaction.atomic
-def conversation_export_request(
-    *, conversation: Conversation, user: BaseUser
-) -> ConversationExport:
+def conversation_export_request(*, conversation: Conversation, user: BaseUser) -> ConversationExport:
     export = ConversationExport.objects.create(
         conversation=conversation,
         requested_by=user,
@@ -443,9 +433,7 @@ def conversation_export_request(
 
 
 @transaction.atomic
-def notification_send(
-    *, user: BaseUser, event_type: str, payload: dict
-) -> Notification:
+def notification_send(*, user: BaseUser, event_type: str, payload: dict) -> Notification:
     from apps.messaging.services_push import push_for_notification
 
     notification = Notification.objects.create(
@@ -456,9 +444,7 @@ def notification_send(
 
     transaction.on_commit(lambda: _fanout_notification(user, event_type, payload))
     # Push hors de l'app (préférence « push » et plage de silence respectées).
-    push_for_notification(
-        user_id=user.pk, event_type=event_type, payload=payload, notification_id=notification.pk
-    )
+    push_for_notification(user_id=user.pk, event_type=event_type, payload=payload, notification_id=notification.pk)
 
     return notification
 
@@ -466,9 +452,7 @@ def notification_send(
 @transaction.atomic
 def notification_mark_all_read(*, user: BaseUser) -> int:
     """Marque toutes les notifications non lues de l'utilisateur comme lues."""
-    return Notification.objects.filter(user=user, is_read=False).update(
-        is_read=True, read_at=timezone.now()
-    )
+    return Notification.objects.filter(user=user, is_read=False).update(is_read=True, read_at=timezone.now())
 
 
 @transaction.atomic

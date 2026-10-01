@@ -61,6 +61,8 @@ def members_of(*, node: Node, include_removed: bool = False, q: str = "") -> Que
         qs = qs.filter(removed_by_parish_at__isnull=True)
     if q := q.strip():
         qs = qs.filter(
-            Q(user__email__icontains=q) | Q(user__profile__first_name__icontains=q) | Q(user__profile__last_name__icontains=q)
+            Q(user__email__icontains=q)
+            | Q(user__profile__first_name__icontains=q)
+            | Q(user__profile__last_name__icontains=q)
         )
     return qs.order_by("-joined_at")

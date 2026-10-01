@@ -158,10 +158,12 @@ class ConversationConsumer(PresenceMixin, AsyncJsonWebsocketConsumer):
     # Channel layer event handlers (invoked by group_send from services)
 
     async def conv_message(self, event: dict):
-        await self.send_json({
-            "type": "message.received",
-            "message": event.get("message"),
-        })
+        await self.send_json(
+            {
+                "type": "message.received",
+                "message": event.get("message"),
+            }
+        )
 
     # `event["type"]` est la clé de dispatch Channels (« conv_typing ») : elle ne doit pas
     # écraser le type de la trame envoyée au client.

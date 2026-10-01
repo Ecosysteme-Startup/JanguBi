@@ -110,6 +110,10 @@ _CELERY_BEAT_SCHEDULE_ALL = {
         "task": "apps.audio.tasks.audio_reco_recompute_task",
         "schedule": crontab(hour=3, minute=5),
     },
+    "audio_transcode_stalled": {
+        "task": "apps.audio.tasks.audio_transcode_stalled_task",
+        "schedule": crontab(minute="*/15"),
+    },
     "audio_play_event_partitions": {
         "task": "apps.audio.tasks.audio_play_event_partitions_task",
         "schedule": crontab(day_of_month=1, hour=1, minute=10),

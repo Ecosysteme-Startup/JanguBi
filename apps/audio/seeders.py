@@ -84,7 +84,9 @@ class MediaFactory:
         out: list[dict[str, Any]] = []
         album = self.m.user_album(self.ctx.medias_dossier)
         if self.ctx.medias_dossier and not album:
-            self.ctx.note(f"--medias-dossier {self.ctx.medias_dossier} : aucun fichier audio lu, repli sur les autres sources.")
+            self.ctx.note(
+                f"--medias-dossier {self.ctx.medias_dossier} : aucun fichier audio lu, repli sur les autres sources."
+            )
         limit = 4 if self.ctx.medias == "legers" else 40
         for i, t in enumerate(album[:limit]):
             dst = self.tmp / f"album-{i}.flac"
@@ -129,7 +131,9 @@ class MediaFactory:
         for i, h in enumerate(texts[: 3 if self.ctx.medias == "legers" else 6]):
             dst = self.tmp / f"voix-{i}.flac"
             seconds = self.seconds or float(rng.randint(8, 25) * 60)
-            engine = self.m.speech(h["texte"], dst, seconds=seconds, voice=self.ctx.piper_voix, seed=self.ctx.graine + i)
+            engine = self.m.speech(
+                h["texte"], dst, seconds=seconds, voice=self.ctx.piper_voix, seed=self.ctx.graine + i
+            )
             credit = (
                 "Voix de synthèse Piper (voix sous licence libre) lisant un texte rédigé pour le projet."
                 if engine == "piper"
@@ -139,7 +143,9 @@ class MediaFactory:
                         "credit": credit, "moteur": engine})  # fmt: skip
             self.engines[f"voix {engine}"] += 1
         if out and out[0]["moteur"] == "ffmpeg":
-            self.ctx.note("Piper indisponible (binaire ou voix absents) : voix de repli ffmpeg. Voir docs/DONNEES-DE-TEST.md.")
+            self.ctx.note(
+                "Piper indisponible (binaire ou voix absents) : voix de repli ffmpeg. Voir docs/DONNEES-DE-TEST.md."
+            )
         self._voice = out
         return out
 
@@ -290,7 +296,11 @@ class SonothequeSeeder(Seeder):
             for a_index, item in enumerate(plan):
                 source = item["source"]
                 season = _season(item["recorded"])
-                published = None if item["visibility"] == "prive" else ctx.aware(item["recorded"] + datetime.timedelta(days=2), 10)
+                published = (
+                    None
+                    if item["visibility"] == "prive"
+                    else ctx.aware(item["recorded"] + datetime.timedelta(days=2), 10)
+                )
                 with transaction.atomic():
                     album = Album.objects.create(
                         source=source, kind=item["kind"], title=item["title"], visibility=item["visibility"],
@@ -394,7 +404,9 @@ class SonothequeSeeder(Seeder):
         except Exception:  # noqa: BLE001 - pas de courtier : encodage direct, même service
             for tr in tracks:
                 transcode_track(track_id=tr.pk, version=tr.version)
-            ctx.note(f"Aucun courtier Celery joignable : {len(tracks)} piste(s) encodée(s) en direct par transcode_track.")
+            ctx.note(
+                f"Aucun courtier Celery joignable : {len(tracks)} piste(s) encodée(s) en direct par transcode_track."
+            )
         return len(tracks)
 
     def reset(self, ctx: SeedContext) -> dict[str, Any]:
@@ -446,7 +458,9 @@ class SonothequeSeeder(Seeder):
             first = tracks.filter(status="pret").first()
             sample = first.renditions.filter(kind="hls_moyen").first() if first else None
             present = sample is not None and storage.head(key=sample.path) is not None
-            checks.append(Check("Fichiers HLS présents dans le stockage", present, sample.path if sample else "aucun rendu"))
+            checks.append(
+                Check("Fichiers HLS présents dans le stockage", present, sample.path if sample else "aucun rendu")
+            )
         return checks
 
     @staticmethod
@@ -455,7 +469,9 @@ class SonothequeSeeder(Seeder):
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            pending = Track.objects.filter(source__in=ctx.tracked(AudioSource), status__in=["en_file", "encodage"]).count()
+            pending = Track.objects.filter(
+                source__in=ctx.tracked(AudioSource), status__in=["en_file", "encodage"]
+            ).count()
             if not pending:
                 return
             ctx.log(f"encodage en cours : {pending} piste(s) restantes…")
@@ -487,7 +503,16 @@ PROFILES = {
 class _EventBuffer(list):  # type: ignore[type-arg]
     """Événements d'écoute écrits par ``COPY`` au fil de l'eau (5 M à l'échelle grande : pas tout en mémoire)."""
 
-    COLUMNS = ["occurred_at", "received_at", "client_event_id", "user_id", "track_id", "kind", "position_seconds", "device_id"]
+    COLUMNS = [
+        "occurred_at",
+        "received_at",
+        "client_event_id",
+        "user_id",
+        "track_id",
+        "kind",
+        "position_seconds",
+        "device_id",
+    ]
     LIMIT = 200_000
 
     def __init__(self) -> None:
@@ -589,7 +614,9 @@ class EcoutesSeeder(Seeder):
         for tr in tracks:
             by_source[tr.source_id].append(tr)
         memberships: dict[Any, set[Any]] = defaultdict(set)
-        for uid, nid in ParishMembership.objects.filter(removed_by_parish_at__isnull=True).values_list("user_id", "node_id"):
+        for uid, nid in ParishMembership.objects.filter(removed_by_parish_at__isnull=True).values_list(
+            "user_id", "node_id"
+        ):
             memberships[uid].add(nid)
         fideles = list(ctx.fideles_qs().filter(last_seen_at__isnull=False).order_by("pk").values_list("pk", flat=True))
         listeners = [u for u in fideles if rng.random() < 0.6]
@@ -617,7 +644,9 @@ class EcoutesSeeder(Seeder):
             profile = rng.choice(list(PROFILES))
             hours, sunday_share = PROFILES[profile]
             favs = {tr.source_id for tr in rng.sample(allowed, k=min(len(allowed), rng.randint(1, 3)))}
-            fav_tracks = [tr for sid in sorted(favs, key=str) for tr in by_source[sid] if tr.pk in allowed_ids] or allowed
+            fav_tracks = [
+                tr for sid in sorted(favs, key=str) for tr in by_source[sid] if tr.pk in allowed_ids
+            ] or allowed
             target = int(per_listener * rng.paretovariate(2.5) / 1.6) + 2
             produced = 0
             while produced < target and len(events) < budget:
@@ -630,12 +659,25 @@ class EcoutesSeeder(Seeder):
                 at = ctx.aware(day, rng.choice(hours), rng.randint(0, 59), rng.randint(0, 59))
                 if at >= ctx.now:
                     at = ctx.now - datetime.timedelta(minutes=rng.randint(10, 3000))
-                current = rng.choice(fav_tracks) if rng.random() < 0.75 else rng.choices(allowed, cum_weights=cum_weights)[0]
+                current = (
+                    rng.choice(fav_tracks) if rng.random() < 0.75 else rng.choices(allowed, cum_weights=cum_weights)[0]
+                )
                 for _ in range(rng.choices([1, 2, 3, 4, 6], [30, 25, 20, 15, 10])[0]):
                     duration = current.duration_seconds or 180.0
                     speed = 1.25 if profile == "homelies" and "homélie" in current.tags else 1.0
                     ev = str(uuid.UUID(int=rng.getrandbits(128), version=4))
-                    events.append((at, at + datetime.timedelta(seconds=rng.randint(1, 30)), ev, uid, current.pk, "start", 0.0, DEVICE_ID))
+                    events.append(
+                        (
+                            at,
+                            at + datetime.timedelta(seconds=rng.randint(1, 30)),
+                            ev,
+                            uid,
+                            current.pk,
+                            "start",
+                            0.0,
+                            DEVICE_ID,
+                        )
+                    )
                     r = rng.random()
                     if r < 0.22:  # passée avant 30 s
                         pos = float(rng.randint(3, 28))
@@ -707,7 +749,10 @@ class EcoutesSeeder(Seeder):
                     p = Playlist(source=source, title=f"Sélection de {source.name}"[:200], visibility="public",
                                  published_at=ctx.now - datetime.timedelta(days=20), description="Choisis par l'équipe.")  # fmt: skip
                     playlists.append(p)
-                    items += [PlaylistItem(playlist=p, track_id=tr.pk, position=i + 1) for i, tr in enumerate(rng.sample(mine, k=min(8, len(mine))))]
+                    items += [
+                        PlaylistItem(playlist=p, track_id=tr.pk, position=i + 1)
+                        for i, tr in enumerate(rng.sample(mine, k=min(8, len(mine))))
+                    ]
             Playlist.objects.bulk_create(playlists)
             PlaylistItem.objects.bulk_create(items, ignore_conflicts=True)
             ctx.track(Playlist, [p.pk for p in playlists if p.owner_id])
@@ -717,13 +762,17 @@ class EcoutesSeeder(Seeder):
             positions = [PlaybackPosition(user_id=u, track_id=t_, position_seconds=pos, device_id=DEVICE_ID, client_updated_at=at)
                          for u, (t_, pos, at) in last_play.items()]  # fmt: skip
             PlaybackPosition.objects.bulk_create(positions, batch_size=5000, ignore_conflicts=True)
-            opted = [ListenerSettings(user_id=u, recommendations_enabled=False) for u in listeners[:: 37] if u]
+            opted = [ListenerSettings(user_id=u, recommendations_enabled=False) for u in listeners[::37] if u]
             ListenerSettings.objects.bulk_create(opted, ignore_conflicts=True)
             reports = []
             if len(tracks) >= 3 and listeners:
                 for reason, comment in [("qualite", "Le son sature au début de la piste."), ("droits", "Enregistrement d'une autre chorale ?"),
                                         ("autre", "Titre incorrect.")]:  # fmt: skip
-                    reports.append(TrackReport(track=rng.choice(tracks), reporter_id=rng.choice(listeners), reason=reason, comment=comment))
+                    reports.append(
+                        TrackReport(
+                            track=rng.choice(tracks), reporter_id=rng.choice(listeners), reason=reason, comment=comment
+                        )
+                    )
                 reports[-1].status, reports[-1].handled_at = "rejete", ctx.now - datetime.timedelta(days=2)
                 TrackReport.objects.bulk_create(reports)
         return {"evenements": n_events, "auditeurs": len(listeners), "likes": len(likes), "playlists": len(playlists),
@@ -740,7 +789,10 @@ class EcoutesSeeder(Seeder):
 
     def verify(self, ctx: SeedContext) -> list[Check]:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT count(*), min(occurred_at), max(occurred_at) FROM audio_play_event WHERE device_id = %s", [DEVICE_ID])
+            cursor.execute(
+                "SELECT count(*), min(occurred_at), max(occurred_at) FROM audio_play_event WHERE device_id = %s",
+                [DEVICE_ID],
+            )
             n, first, last = cursor.fetchone()
             cursor.execute("SELECT count(*) FROM audio_play_event_default WHERE device_id = %s", [DEVICE_ID])
             default = cursor.fetchone()[0]

@@ -69,20 +69,20 @@ def bulk_import_task(start_date_str: str, end_date_str: str, zones: list[str] | 
     except ValueError:
         logger.error("Invalid date format. Use YYYY-MM-DD.")
         return
-        
+
     if not zones:
         zones = ["romain", "afrique"]
 
     logger.info(f"Starting bulk AELF sync from {start_date_str} to {end_date_str}")
-    
+
     delta = timedelta(days=1)
     current_dt = start_dt
-    
+
     while current_dt <= end_dt:
         dt_str = current_dt.isoformat()
         logger.info(f"Enqueuing daily sync for {dt_str}")
-        
+
         # Dispatch to queue to avoid a single massive blocking task
         daily_sync_task.delay(dt_str, zones)
-        
+
         current_dt += delta

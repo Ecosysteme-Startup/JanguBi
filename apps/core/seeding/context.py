@@ -95,9 +95,7 @@ class SeedContext:
         from apps.core.models import SeedRecord
 
         label = model if isinstance(model, str) else model._meta.label_lower
-        rows = [
-            SeedRecord(batch=self.batch, seeder=self.current_seeder, model=label, object_id=str(i)) for i in ids
-        ]
+        rows = [SeedRecord(batch=self.batch, seeder=self.current_seeder, model=label, object_id=str(i)) for i in ids]
         SeedRecord.objects.bulk_create(rows, batch_size=5000, ignore_conflicts=True)
         return len(rows)
 

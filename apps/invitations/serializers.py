@@ -41,8 +41,13 @@ class AcceptInputSerializer(TokenInputSerializer):
     )
 
 
-_ROLES = [("diacre_transitoire", "Diacre (transitoire)"), ("diacre_permanent", "Diacre permanent"),
-          ("pretre", "Prêtre"), ("eveque", "Évêque"), ("consacre", "Consacré")]
+_ROLES = [
+    ("diacre_transitoire", "Diacre (transitoire)"),
+    ("diacre_permanent", "Diacre permanent"),
+    ("pretre", "Prêtre"),
+    ("eveque", "Évêque"),
+    ("consacre", "Consacré"),
+]
 
 
 class PendingFilterSerializer(serializers.Serializer):

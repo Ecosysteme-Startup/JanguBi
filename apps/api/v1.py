@@ -37,9 +37,7 @@ def error_body(*, code: str, message: str, details: Any = None) -> dict[str, Any
 
 def v1_exception_handler(exc: Exception, ctx: dict[str, Any]) -> Response | None:
     if isinstance(exc, ApplicationError):
-        return Response(
-            error_body(code=exc.code, message=exc.message, details=exc.extra), status=exc.status_code
-        )
+        return Response(error_body(code=exc.code, message=exc.message, details=exc.extra), status=exc.status_code)
     if isinstance(exc, DjangoValidationError):
         exc = exceptions.ValidationError(as_serializer_error(exc))
     elif isinstance(exc, Http404):
@@ -68,4 +66,3 @@ class V1ApiMixin:
 
     def get_exception_handler(self):  # noqa: D102 - API DRF
         return v1_exception_handler
-
