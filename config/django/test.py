@@ -30,13 +30,6 @@ CACHES = {
     }
 }
 
-# Recherche sémantique : on n'embarque JAMAIS un modèle ML en CI/tests.
-# Embeddings = stub (vecteurs zéro déterministes) ; chemin pgvector activé pour
-# exercer le code vectoriel sans téléchargement de modèle.
-EMBEDDING_PROVIDER = "stub"
-PGVECTOR_ENABLED = True
-RAG_GENERATION_ENABLED = False
-
 # Throttling désactivé par défaut dans la suite (évite des 429 parasites entre
 # tests via le cache locmem partagé). Les tests de throttling ré-activent un
 # rate explicite via @override_settings.

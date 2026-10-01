@@ -188,9 +188,9 @@ données fictives ».
 Rien n'est généré. La Bible vient de `import_bible` (`--bible-json`, ex. `init/bibles/format/json/bible-fr-aelf.json`,
 source `AELF` par défaut, `--bible-source` pour changer) ; les lectures viennent de la synchronisation AELF
 réelle. Sans réseau (ou `--hors-ligne`), l'étape est sautée et signalée ; la « lecture du jour » des profils
-quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare des embeddings : avec
-`EMBEDDING_PROVIDER=stub` (tests, poste local par défaut), il reste vide et le rapport le dit ; en recette,
-`EMBEDDING_PROVIDER=local`, `seed_embeddings`, puis `seed_realiste --modules parole`.
+quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare les mots des versets
+(plein texte PostgreSQL, sans modèle, ADR-018) : il est calculé partout, poste local compris, dès que la
+Bible est importée.
 
 ## Vérification (`--verifier`)
 
@@ -200,7 +200,7 @@ quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) c
 - une paroisse principale par fidèle, `paroisse_suivie` à jour, curé et économe dans chaque paroisse ;
 - pistes `pret` avec leurs 3 débits HLS (et fichiers présents dans le stockage hors `aucun`) ;
 - événements d'écoute dans les partitions mensuelles (aucun dans la partition par défaut) ;
-- recommandations audio calculées ; « Pour vous » (Parole) calculé quand les embeddings le permettent ;
+- recommandations audio calculées ; « Pour vous » (Parole) calculé (au moins un fidèle) quand la Bible est là ;
 - adresses en `@demo.jangubi.sn`, messagerie sans mineur.
 
 ## Local, recette, clients

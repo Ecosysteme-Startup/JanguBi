@@ -287,7 +287,7 @@ Feel free to use this as the basis of your file upload needs.
 This project includes a comprehensive `bible` app offering:
 1. Ingestion of Bible JSONs (nested structures or flat list) tracking Testaments, Books, Chapters, and Verses.
 2. Robust full-text searching leveraging PostgreSQL's native `tsvector` with `GIN` indices.
-3. Stub implementations for machine learning embeddings using `pgvector` and `HNSW` indexes (activated via `PGVECTOR_ENABLED`).
+3. Accent-insensitive search (`fr_unaccent`) with a typo-tolerant `pg_trgm` fallback. No AI and no embedding model (ADR-018).
 4. Daily Catholic readings fetched asynchronously via `AELF` (Association Épiscopale Liturgique pour les pays Francophones) through a scheduled Celery Beat task.
 
 To initialize the database locally and populate it after spinning up your docker-compose containers, you can use the built-in instantiation script:

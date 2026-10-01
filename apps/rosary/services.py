@@ -14,9 +14,7 @@ class RosaryService:
     @staticmethod
     def get_group_with_mysteries(group_id_or_slug):
         """Returns a group with its mysteries, but not necessarily all prayers."""
-        qs = MysteryGroup.objects.prefetch_related(
-            Prefetch("mysteries", queryset=Mystery.objects.order_by("order"))
-        )
+        qs = MysteryGroup.objects.prefetch_related(Prefetch("mysteries", queryset=Mystery.objects.order_by("order")))
         if isinstance(group_id_or_slug, int) or str(group_id_or_slug).isdigit():
             return qs.get(id=int(group_id_or_slug))
         return qs.get(slug=group_id_or_slug)
@@ -29,17 +27,19 @@ class RosaryService:
         """
         if day_of_week is None:
             day_of_week = timezone.now().weekday()
-        
+
         # We need the day, group, mysteries, and their prayers (for the today endpoint)
         prefetch_prayers = Prefetch(
-            "group__mysteries__prayers",
-            queryset=MysteryPrayer.objects.select_related("prayer").order_by("order")
+            "group__mysteries__prayers", queryset=MysteryPrayer.objects.select_related("prayer").order_by("order")
         )
-        
-        return RosaryDay.objects.select_related("group").prefetch_related(
-            Prefetch("group__mysteries", queryset=Mystery.objects.order_by("order")),
-            prefetch_prayers
-        ).get(weekday=day_of_week)
+
+        return (
+            RosaryDay.objects.select_related("group")
+            .prefetch_related(
+                Prefetch("group__mysteries", queryset=Mystery.objects.order_by("order")), prefetch_prayers
+            )
+            .get(weekday=day_of_week)
+        )
 
     @staticmethod
     def get_today_rosary():
@@ -67,18 +67,13 @@ class RosaryService:
 
         vector = SearchVector("text", config="french")
         search_query = SearchQuery(query, config="french")
-        return (
-            Prayer.objects.annotate(rank=SearchRank(vector, search_query))
-            .filter(rank__gt=0)
-            .order_by("-rank")
-        )
+        return Prayer.objects.annotate(rank=SearchRank(vector, search_query)).filter(rank__gt=0).order_by("-rank")
 
     @staticmethod
-    def vector_search(query: str, embedding: list | None = None):
-        """Recherche « sémantique » des prières.
+    def vector_search(query: str):
+        """Ancienne route « vectorielle » (conservée pour les clients existants) : plein texte.
 
-        Le rosaire ne porte pas d'embeddings (corpus minuscule) : on délègue à la
-        recherche plein-texte française, fonctionnelle et suffisante ici, plutôt
-        que de renvoyer un QuerySet vide (l'ancien stub).
+        Il n'y a pas de recherche vectorielle dans la plateforme (ADR-018) ; la recherche plein
+        texte française suffit au corpus des prières.
         """
         return RosaryService.search_text(query)

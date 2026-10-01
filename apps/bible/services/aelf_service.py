@@ -32,7 +32,7 @@ class AELFService:
 
         date_str = target_date.strftime("%Y-%m-%d")
         url = f"{self.base_url}/{date_str}/france"
-        
+
         data = await self._fetch_with_retries(url)
         if not data:
             return []
@@ -52,7 +52,7 @@ class AELFService:
                 except httpx.HTTPError as e:
                     logger.warning(f"AELF fetch failed (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        await asyncio.sleep(base_delay * (2 ** attempt))
+                        await asyncio.sleep(base_delay * (2**attempt))
                     else:
                         logger.error(f"AELF fetch completely failed after {max_retries} attempts.")
                         return None
@@ -75,19 +75,19 @@ class AELFService:
             # NOT NULL → IntegrityError (BUG-B2). On coalesce vers "".
             title = lecture.get("titre") or ""
             raw_content = lecture.get("contenu") or ""
-            
+
             # Clean HTML and formatting
             clean_content = CleaningService.clean_text(raw_content)
-            
+
             # Use the search service to find local cross-references if possible
             # We use a very basic title match or skip for now if it's too broad
             local_matches = []
             if title:
                 # E.g. "Lecture du livre de la Genèse (Gn 1, 1-19)"
-                # We could run hybrid search on a snippet
+                # Recherche plein texte sur un extrait (ADR-018 : pas de recherche vectorielle)
                 snippet = clean_content[:150]
                 try:
-                    results = self.search_service.search(query=snippet, limit=5, use_hybrid=True)
+                    results = self.search_service.search(query=snippet, limit=5)
                     if results and results[0]["matches"]:
                         best_match = results[0]["matches"][0]
                         if best_match["score"] > 0.4:  # reasonable confidence
@@ -104,7 +104,7 @@ class AELFService:
                     "content": clean_content,
                     "local_matches": local_matches,
                     "source_url": "https://aelf.org",
-                }
+                },
             )
             created_records.append(dt)
 

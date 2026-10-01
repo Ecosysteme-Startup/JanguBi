@@ -1,43 +1,54 @@
+"""Recherche dans les versets, sans IA ni modèle (ADR-018) : plein texte PostgreSQL et pg_trgm.
+
+1. Plein texte : ``tsv`` (configuration ``fr_unaccent`` : français, sans accents, racinisé) et
+   ``websearch_to_tsquery`` (« expression entre guillemets », ``-mot`` pour exclure, ``or``).
+   Score = 0,6 × ``ts_rank`` + 0,4 × similarité trigramme du texte.
+2. Repli trigramme quand le plein texte ne trouve rien (faute de frappe, mot tronqué) :
+   opérateur ``%`` sur l'index GIN ``idx_verse_trgm``, seuil ``TRIGRAM_THRESHOLD``.
+"""
+
 import logging
 from typing import Any, Dict, List, Optional
 
 from django.conf import settings
-from django.db import connection
+from django.db import connection, transaction
 
 from apps.bible.services.cleaning import CleaningService
-from apps.bible.services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
+# Seuil de similarité trigramme du repli (0 à 1) : fixé pour la transaction (SET LOCAL), l'opérateur
+# « % » peut alors utiliser l'index GIN, là où « similarity() > seuil » parcourt toute la table.
+TRIGRAM_THRESHOLD = 0.15
+
 
 class SearchService:
-    """Service handling lexical and hybrid search across verses."""
+    """Recherche plein texte + trigrammes dans les versets."""
 
     def __init__(self):
-        self.embedding_service = EmbeddingService()
-        self.pgvector_enabled = getattr(settings, "PGVECTOR_ENABLED", False)
-        self.ts_config = getattr(settings, "PG_TS_CONFIG", "french")
+        self.ts_config = getattr(settings, "PG_TS_CONFIG", "fr_unaccent")
 
     def search(
-        self, query: str, testament_slug: Optional[str] = None,
-        book_slug: Optional[str] = None, chapter_number: Optional[int] = None,
-        limit: int = 100, use_hybrid: bool = False, source_file: Optional[str] = None
+        self,
+        query: str,
+        testament_slug: Optional[str] = None,
+        book_slug: Optional[str] = None,
+        chapter_number: Optional[int] = None,
+        limit: int = 100,
+        use_hybrid: bool = False,
+        source_file: Optional[str] = None,
     ) -> List[Dict]:
-        """
-        Main entrypoint for search.
-        Routes to hybrid or lexical based on request and settings.
-        Sorts results by book/chapter/verse in the grouped output.
+        """Point d'entrée : résultats groupés par livre.
+
+        ``use_hybrid`` est accepté pour compatibilité (anciens clients) et ignoré : il n'y a plus de
+        recherche vectorielle (ADR-018).
         """
         clean_query = CleaningService.clean_text(query)
         if not clean_query:
             return []
-
-        # Force lexical if pgvector is off
-        if use_hybrid and self.pgvector_enabled:
-            raw_results = self._hybrid_search(clean_query, testament_slug, book_slug, chapter_number, limit, source_file=source_file)
-        else:
-            raw_results = self._lexical_search(clean_query, testament_slug, book_slug, chapter_number, limit, source_file=source_file)
-
+        raw_results = self._lexical_search(
+            clean_query, testament_slug, book_slug, chapter_number, limit, source_file=source_file
+        )
         return self._group_results_by_book(raw_results)
 
     def verses(self, query: str, *, limit: int, source_file: Optional[str] = None) -> List[Dict]:
@@ -48,10 +59,15 @@ class SearchService:
         return self._lexical_search(clean_query, None, None, None, limit, source_file=source_file)
 
     def _lexical_search(
-        self, query: str, testament_slug: Optional[str],
-        book_slug: Optional[str], chapter_number: Optional[int], limit: int, source_file: Optional[str] = "bible_fr"
+        self,
+        query: str,
+        testament_slug: Optional[str],
+        book_slug: Optional[str],
+        chapter_number: Optional[int],
+        limit: int,
+        source_file: Optional[str] = "bible_fr",
     ) -> List[Dict]:
-        """Full-text TSV search blended with pg_trgm trigram similarity (no external API required)."""
+        """Plein texte (``tsv``) mêlé à la similarité trigramme du texte."""
         # ts_config passé en PARAMÈTRE (%s::regconfig) — plus d'interpolation
         # f-string dans le SQL.
         sql = """
@@ -60,13 +76,13 @@ class SearchService:
                 c.number as chapter_number,
                 b.id as book_id, b.name as book_name, b.slug as book_slug, b.order as book_order,
                 t.slug as testament_slug,
-                (0.6 * ts_rank(v.tsv, plainto_tsquery(%s::regconfig, %s))
+                (0.6 * ts_rank(v.tsv, websearch_to_tsquery(%s::regconfig, %s))
                  + 0.4 * similarity(v.text, %s)) as score
             FROM bible_verse v
             JOIN bible_chapter c ON v.chapter_id = c.id
             JOIN bible_book b ON c.book_id = b.id
             JOIN bible_testament t ON b.testament_id = t.id
-            WHERE v.tsv @@ plainto_tsquery(%s::regconfig, %s)
+            WHERE v.tsv @@ websearch_to_tsquery(%s::regconfig, %s)
         """
         params = [self.ts_config, query, query, self.ts_config, query]
 
@@ -84,10 +100,15 @@ class SearchService:
         return results
 
     def _trigram_fallback(
-        self, query: str, testament_slug: Optional[str],
-        book_slug: Optional[str], chapter_number: Optional[int], limit: int, source_file: Optional[str] = "bible_fr"
+        self,
+        query: str,
+        testament_slug: Optional[str],
+        book_slug: Optional[str],
+        chapter_number: Optional[int],
+        limit: int,
+        source_file: Optional[str] = "bible_fr",
     ) -> List[Dict]:
-        """Pure pg_trgm similarity search used when TSV yields no results."""
+        """Repli trigramme (fautes de frappe) quand le plein texte ne trouve rien, sur l'index GIN."""
         sql = """
             SELECT
                 v.id, v.chapter_id, v.number as verse_number, v.text,
@@ -99,7 +120,7 @@ class SearchService:
             JOIN bible_chapter c ON v.chapter_id = c.id
             JOIN bible_book b ON c.book_id = b.id
             JOIN bible_testament t ON b.testament_id = t.id
-            WHERE similarity(v.text, %s) > 0.15
+            WHERE v.text %% %s
         """
         params = [query, query]
 
@@ -108,95 +129,32 @@ class SearchService:
         sql += " ORDER BY score DESC, b.order, c.number, v.number LIMIT %s"
         params.append(limit)
 
-        return self._execute_search_query(sql, params)
+        # Seuil local à la transaction... mais sous ATOMIC_REQUESTS, atomic() n'ouvre qu'un savepoint et
+        # un SET LOCAL survit à son RELEASE : on remet donc l'ancienne valeur, sinon les recherches
+        # trigrammes suivantes de la même requête HTTP (audio, recherche globale) hériteraient de 0,15.
+        with transaction.atomic():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT current_setting('pg_trgm.similarity_threshold'), "
+                    "set_config('pg_trgm.similarity_threshold', %s, true)",
+                    [str(TRIGRAM_THRESHOLD)],
+                )
+                previous = cursor.fetchone()[0]
+            try:
+                return self._execute_search_query(sql, params)
+            finally:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT set_config('pg_trgm.similarity_threshold', %s, true)", [previous])
 
-    def _vector_search(
-        self, query: str, testament_slug: Optional[str],
-        book_slug: Optional[str], chapter_number: Optional[int], limit: int, source_file: Optional[str] = "bible_fr"
-    ) -> List[Dict]:
-        """Recherche sémantique pure : top-k cosine via l'index HNSW (<=>).
-
-        `1 - (embedding <=> qv)` = similarité cosine ∈ [-1, 1]. On filtre les
-        embeddings NULL (sinon score NULL + l'index ne sert pas) et on ordonne
-        par distance cosine pour bénéficier de l'index ANN.
-
-        NB perf : en présence de filtres WHERE (source_file/testament/...), le
-        planner PostgreSQL peut ne pas utiliser l'index HNSW et faire un scan.
-        Acceptable au volume actuel (~petit corpus) ; pour un très grand corpus,
-        envisager un index partiel par source ou un post-filtrage des candidats.
-        """
-        query_vector = self.embedding_service.compute_query_embedding(query)
-        if not query_vector:
-            return []
-
-        vector_str = "[" + ",".join(str(f) for f in query_vector) + "]"
-
-        sql = """
-            SELECT
-                v.id, v.chapter_id, v.number as verse_number, v.text,
-                c.number as chapter_number,
-                b.id as book_id, b.name as book_name, b.slug as book_slug, b.order as book_order,
-                t.slug as testament_slug,
-                (1.0 - (v.embedding <=> %s::vector)) as score
-            FROM bible_verse v
-            JOIN bible_chapter c ON v.chapter_id = c.id
-            JOIN bible_book b ON c.book_id = b.id
-            JOIN bible_testament t ON b.testament_id = t.id
-            WHERE v.embedding IS NOT NULL
-        """
-        params = [vector_str]
-        sql, params = self._apply_filters(sql, params, testament_slug, book_slug, chapter_number, source_file)
-        sql += " ORDER BY v.embedding <=> %s::vector LIMIT %s"
-        params.extend([vector_str, limit])
-
-        return self._execute_search_query(sql, params)
-
-    def _hybrid_search(
-        self, query: str, testament_slug: Optional[str],
-        book_slug: Optional[str], chapter_number: Optional[int], limit: int, alpha: float = 0.6, source_file: Optional[str] = "bible_fr"
-    ) -> List[Dict]:
-        """Fusionne la recherche vectorielle (cosine/HNSW) et le lexical (TSV+trgm).
-
-        Score combiné = alpha * cosine + (1-alpha) * score_lexical. Robuste : si
-        l'embedding de requête échoue (modèle indispo, etc.), on retombe sur le
-        lexical seul (pas de 500).
-        """
-        candidate_k = limit * 3  # sur-échantillonnage avant fusion/rang final
-        try:
-            vector_rows = self._vector_search(
-                query, testament_slug, book_slug, chapter_number, candidate_k, source_file=source_file
-            )
-        except Exception as e:  # provider/DB vectoriel KO -> dégradation gracieuse
-            logger.warning("Vector search failed, falling back to lexical only: %s", e)
-            vector_rows = []
-
-        lexical_rows = self._lexical_search(
-            query, testament_slug, book_slug, chapter_number, candidate_k, source_file=source_file
-        )
-
-        if not vector_rows:
-            return lexical_rows[:limit]
-
-        merged: Dict[int, Dict] = {}
-        for row in lexical_rows:
-            merged[row["id"]] = {**row, "_lex": row["score"], "_vec": 0.0}
-        for row in vector_rows:
-            if row["id"] in merged:
-                merged[row["id"]]["_vec"] = row["score"]
-            else:
-                merged[row["id"]] = {**row, "_lex": 0.0, "_vec": row["score"]}
-
-        rows = list(merged.values())
-        for row in rows:
-            row["score"] = alpha * row["_vec"] + (1.0 - alpha) * row["_lex"]
-            row["no_internal_source"] = row["score"] < 0.15
-            row.pop("_lex", None)
-            row.pop("_vec", None)
-
-        rows.sort(key=lambda r: (-r["score"], r["book_order"], r["chapter_number"], r["verse_number"]))
-        return rows[:limit]
-
-    def _apply_filters(self, sql: str, params: list, testament_slug: Optional[str], book_slug: Optional[str], chapter_number: Optional[int], source_file: Optional[str] = "bible_fr"):
+    def _apply_filters(
+        self,
+        sql: str,
+        params: list,
+        testament_slug: Optional[str],
+        book_slug: Optional[str],
+        chapter_number: Optional[int],
+        source_file: Optional[str] = "bible_fr",
+    ):
         """Évite d'écrire la même logique d'ajout de paramètres WHERE pour chaque méthode de recherche."""
         if source_file:
             sql += " AND v.source_file = %s"
@@ -220,13 +178,12 @@ class SearchService:
             columns = [col[0] for col in cursor.description]
             for row in cursor.fetchall():
                 row_dict = dict(zip(columns, row))
-                
-                # Handle NULL scores caused by uncomputed embeddings
+
                 score = row_dict.get("score")
                 if score is None:
                     score = 0.0
                     row_dict["score"] = score
-                    
+
                 row_dict["no_internal_source"] = score < 0.15
                 results.append(row_dict)
         return results
@@ -244,29 +201,31 @@ class SearchService:
                         "slug": row["book_slug"],
                         "order": row["book_order"],
                         "testament": row["testament_slug"],
-                        "verse_count": 0, # not needed in search output, usually omitted
+                        "verse_count": 0,  # not needed in search output, usually omitted
                     },
-                    "matches": []
+                    "matches": [],
                 }
 
-            grouped[book_id]["matches"].append({
-                "verse": {
-                    "id": row["id"],
-                    "number": row["verse_number"],
-                    "chapter": {"number": row["chapter_number"]},
-                    "text": row["text"],
-                },
-                "score": round(row["score"], 4),
-                "no_internal_source": row["no_internal_source"],
-                "book_order": row["book_order"],
-                "chapter_number": row["chapter_number"],
-                "verse_number": row["verse_number"]
-            })
+            grouped[book_id]["matches"].append(
+                {
+                    "verse": {
+                        "id": row["id"],
+                        "number": row["verse_number"],
+                        "chapter": {"number": row["chapter_number"]},
+                        "text": row["text"],
+                    },
+                    "score": round(row["score"], 4),
+                    "no_internal_source": row["no_internal_source"],
+                    "book_order": row["book_order"],
+                    "chapter_number": row["chapter_number"],
+                    "verse_number": row["verse_number"],
+                }
+            )
 
         # Convert to list and sort by book order
         result_list = list(grouped.values())
         result_list.sort(key=lambda x: x["book"]["order"])
-        
+
         # Sort verses within each book
         for group in result_list:
             group["matches"].sort(key=lambda x: (x["chapter_number"], x["verse_number"]))

@@ -268,22 +268,29 @@ réécrite si la tâche est livrée deux fois. Elle purge les lignes de plus de 
 
 1. **Fidèles concernés** : comptes actifs avec un signal ou un signet depuis 30 jours, sauf
    personnalisation désactivée.
-2. **Vecteur d'intérêt** : moyenne pondérée des embeddings normalisés (768 dimensions, déjà
-   calculés pour la recherche) des versets lus et marqués sur les 90 derniers jours.
+Proximité **lexicale**, sans IA ni modèle (ADR-018), calculée dans PostgreSQL à partir de la
+colonne `tsv` des versets (plein texte `fr_unaccent`, index GIN).
+
+2. **Profil de mots** : mots des versets lus et marqués sur les 90 derniers jours, chacun pondéré
+   par sa **rareté** dans toute la Bible (`log((N + 1) / (df + 1))` : « croix » pèse, « dire »
+   presque pas) ; on garde les 12 mots les plus lourds.
    - Poids : lu et recherche 1 ; signet et lectio 2 ; surlignage 2,5.
    - Décroissance : le poids d'un signal diminue de moitié tous les 30 jours.
    - Un chapitre lu compte pour un signal, réparti sur ses versets.
-3. **Voisins HNSW** (cosinus) : 200 candidats, plus les versets des lectures du jour.
+3. **Candidats** : les 200 versets qui partagent le plus ces mots (somme des poids des mots
+   communs, rapportée à la longueur du verset), plus les versets des lectures du jour.
 4. **Filtre** : pas de verset lu, ni de chapitre lu, depuis 60 jours ; pas de verset déjà marqué.
 5. **Bonus** :
-   - +0,15 × proximité avec les lectures du jour (vecteur de l'évangile s'il est là) ;
+   - +0,15 × proximité avec les lectures du jour (mots marquants de l'évangile s'il est là) ;
    - +0,10 si le verset fait partie des lectures du jour ;
    - +0,05 pour un livre de saison (Isaïe en Avent, Actes au temps pascal…).
 6. **Diversité** : au plus un verset par livre parmi les trois proposés.
-7. **Livre suggéré** : livre jamais ouvert dont le centre (moyenne de ses versets) est le plus
-   proche du vecteur d'intérêt.
-8. **Plan suggéré** : plan publié non suivi, le plus proche. Désactivé tant que `bible.avance`
-   est gelé.
+7. **Livre suggéré** : livre jamais ouvert qui rassemble le plus de candidats proches (ses trois
+   meilleurs versets).
+8. **Plan suggéré** : plan publié non suivi dont les passages couvrent le plus les livres lus.
+   Désactivé tant que `bible.avance` est gelé.
+
+Les proximités sont ramenées entre 0 et 1 (1 = le verset le plus proche) avant les bonus.
 
 Réglages (`config/settings/parole.py`, surchargeables par variable d'environnement) :
 `PAROLE_RECO_HALF_LIFE_DAYS` (30), `PAROLE_RECO_HISTORY_DAYS` (90),
@@ -295,8 +302,10 @@ Réglages (`config/settings/parole.py`, surchargeables par variable d'environnem
 Exploitation :
 - Un worker doit consommer la file `reco` (`celery -A apps.tasks worker -Q celery,reco`, ou un
   worker dédié).
-- En test et en CI, le fournisseur d'embeddings est `stub` (vecteurs nuls, ignorés par le
-  calcul) : un fidèle n'a alors pas de recommandation personnalisée et reçoit le repli.
+- Aucun modèle à télécharger ni à charger en mémoire : le calcul est une suite de requêtes SQL
+  (quelques secondes pour toute la Bible), identique en test, en CI et en production.
+- Un fidèle dont les lectures n'ont aucun mot exploitable n'a pas de recommandation
+  personnalisée et reçoit le repli.
 
 ## 7. Confidentialité (loi 2008-12)
 

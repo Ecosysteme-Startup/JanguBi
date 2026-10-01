@@ -3,8 +3,9 @@
 1. **Item → item par co-écoute** : cosinus sur la matrice binaire utilisateur × piste des
    90 derniers jours (écoutes complètes, likes, ajouts en playlist), calculé en SQL ; 50 voisins
    par piste au plus, avec au moins ``AUDIO_RECO_MIN_CO_LISTENERS`` auditeurs communs.
-2. **Contenu** : embedding des métadonnées (même fournisseur que les versets, 768 dimensions,
-   pgvector) ; sert aux pistes neuves sans historique.
+2. **Contenu** : proximité des métadonnées structurées, en SQL (même album, temps liturgique,
+   mots-clés et interprètes communs, source, compositeur, titres proches par trigrammes) ; sert
+   aux pistes neuves sans historique. Sans IA ni modèle (ADR-018).
 3. **Utilisateur → pistes** : voisins de ses écoutes et likes récents (pondérés par la récence),
    nouveautés de sa paroisse, temps liturgique ; on retire ce qu'il a déjà écouté ou passé ; 100
    au plus, en table et en cache Redis, chacune avec une explication lisible.
@@ -14,21 +15,18 @@ Garde-fous : aucune donnée sensible (dons, confessions, messagerie) ; interrupt
 """
 
 import datetime
-import hashlib
 import logging
 from collections import defaultdict
 from typing import Any
 
-import numpy as np
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
-from pgvector.django import CosineDistance
 
 from apps.audio import access
-from apps.audio.enums import LiturgicalSeason, NeighborMethod, TrackStatus
+from apps.audio.enums import LiturgicalSeason, NeighborMethod
 from apps.audio.models import (
     AudioSource,
     ListenerSettings,
@@ -44,19 +42,16 @@ PARISH_BONUS = 0.3
 SEASON_BONUS = 0.2
 RECENCY_HALF_LIFE_DAYS = 30
 NEW_DAYS = 60
-EMBED_BATCH = 64
+# Seuil de voisinage « contenu » : la même source seule (0,10) suffit, pour qu'une piste neuve sans album
+# se rattache au moins aux autres chants de sa chorale ; un simple titre proche ne suffit pas.
+CONTENT_MIN_SCORE = 0.1
+# Pistes comparées par critère partagé (les plus récentes) : borne le coût du calcul (voir _CONTENT_SQL).
+CONTENT_POOL = 100
 USER_RECO_CACHE_SECONDS = 26 * 3600
 
 
 def user_reco_cache_key(user_id: Any) -> str:
     return f"audio:reco:v1:{user_id}"
-
-
-def embedding_provider() -> Any:
-    """Même fournisseur que les versets (apps/bible) : ``EMBEDDING_PROVIDER`` (stub en test)."""
-    from apps.bible.services.embedding_service import _build_provider
-
-    return _build_provider(getattr(settings, "EMBEDDING_PROVIDER", "stub"))
 
 
 def current_season(day: datetime.date | None = None) -> str:
@@ -124,63 +119,91 @@ def colisten_neighbors_compute(*, now: datetime.datetime | None = None) -> int:
 
 # --- 2. Contenu ------------------------------------------------------------------------------
 
-
-def embedding_text(track: Track) -> str:
-    parts = [
-        track.title,
-        track.source.name,
-        track.album.title if track.album else "",
-        ", ".join(track.performers),
-        track.composer,
-        LiturgicalSeason(track.liturgical_season).label if track.liturgical_season else "",
-        " ".join(track.tags),
-        track.description[:1000],
-    ]
-    return ". ".join(p for p in parts if p)
-
-
-def track_embeddings_refresh(*, provider: Any = None) -> int:
-    """Calcule l'embedding des pistes prêtes dont les métadonnées ont changé (empreinte du texte)."""
-    provider = provider or embedding_provider()
-    tracks = list(Track.objects.filter(status=TrackStatus.PRET).select_related("source", "album"))
-    todo: list[tuple[Track, str, str]] = []
-    for track in tracks:
-        text = embedding_text(track)
-        digest = hashlib.sha256(text.encode()).hexdigest()
-        if digest != track.embedding_text_hash:
-            todo.append((track, text, digest))
-    for start in range(0, len(todo), EMBED_BATCH):
-        batch = todo[start : start + EMBED_BATCH]
-        vectors = provider.embed_texts([text for _, text, _ in batch])
-        for (track, _, digest), vector in zip(batch, vectors, strict=True):
-            array = np.asarray(vector, dtype=np.float32)
-            # Vecteur nul (fournisseur « stub ») : inutilisable en cosinus, on n'enregistre rien.
-            track.embedding = array.tolist() if array.size and float(np.linalg.norm(array)) > 0 else None
-            track.embedding_text_hash = digest
-        Track.objects.bulk_update([t for t, _, _ in batch], ["embedding", "embedding_text_hash"], batch_size=200)
-    return len(todo)
+# Proximité de deux pistes prêtes, visibles, entre 0 et 1 (somme des poids) : même album 0,30 ;
+# même temps liturgique (le sien, sinon celui de l'album) 0,15 ; mots-clés communs 0,25 × Jaccard ;
+# même source 0,10 ; même compositeur 0,05 ; interprètes communs 0,05 × Jaccard ; titres proches
+# 0,10 × similarité trigramme. Chaque égalité passe par coalesce : un album ou un temps absent d'un
+# seul côté donnerait NULL, et NULL annulerait toute la somme.
+#
+# Coût borné : comparer toutes les pistes d'un même temps liturgique (5 valeurs) ou d'une même source
+# serait quadratique (8,6 M paires pour 5 000 pistes). Chaque piste porte des « clés » (sa source, son
+# temps, son compositeur, chacun de ses mots-clés et interprètes) ; elle n'est comparée qu'aux
+# CONTENT_POOL pistes les plus récentes de chacune de ses clés, plus à celles de son album. Les
+# intersections de mots-clés et d'interprètes se comptent sur les clés partagées : aucune
+# sous-requête par paire.
+_CONTENT_SQL = """
+WITH t AS MATERIALIZED (
+    SELECT tr.id, tr.album_id, tr.source_id, tr.title, lower(tr.composer) AS composer, tr.published_at,
+           coalesce(nullif(tr.liturgical_season, ''), nullif(al.liturgical_season, '')) AS season,
+           (SELECT count(DISTINCT lower(x)) FROM unnest(tr.tags) AS x) AS n_tags,
+           (SELECT count(DISTINCT lower(x)) FROM unnest(tr.performers) AS x) AS n_perf,
+           tr.tags, tr.performers
+    FROM audio_track tr LEFT JOIN audio_album al ON al.id = tr.album_id
+    WHERE tr.status = 'pret' AND tr.hidden_at IS NULL
+),
+keys AS MATERIALIZED (
+    SELECT DISTINCT id, published_at, kind, v FROM (
+        SELECT id, published_at, 'source' AS kind, source_id::text AS v FROM t
+        UNION ALL SELECT id, published_at, 'saison', season FROM t WHERE season IS NOT NULL
+        UNION ALL SELECT id, published_at, 'compositeur', composer FROM t WHERE composer <> ''
+        UNION ALL SELECT t.id, t.published_at, 'mot', lower(x) FROM t, unnest(t.tags) AS x
+        UNION ALL SELECT t.id, t.published_at, 'interprete', lower(x) FROM t, unnest(t.performers) AS x
+    ) k
+),
+pool AS MATERIALIZED (
+    SELECT * FROM (
+        SELECT id, kind, v, row_number() OVER (PARTITION BY kind, v ORDER BY published_at DESC NULLS LAST, id) AS rk
+        FROM keys
+    ) r WHERE rk <= %(pool)s
+),
+shared AS (
+    SELECT ka.id AS t1, p.id AS t2,
+           count(*) FILTER (WHERE ka.kind = 'mot') AS mots,
+           count(*) FILTER (WHERE ka.kind = 'interprete') AS interpretes
+    FROM keys ka JOIN pool p ON p.kind = ka.kind AND p.v = ka.v AND p.id <> ka.id
+    GROUP BY ka.id, p.id
+),
+paires AS (
+    SELECT t1, t2, mots, interpretes FROM shared
+    UNION ALL
+    SELECT a.id, b.id, 0, 0 FROM t a JOIN t b ON a.album_id = b.album_id AND a.id <> b.id
+),
+candidates AS (
+    SELECT t1, t2, max(mots) AS mots, max(interpretes) AS interpretes FROM paires GROUP BY t1, t2
+),
+scored AS (
+    SELECT c.t1, c.t2,
+        0.30 * coalesce(a.album_id = b.album_id, false)::int
+      + 0.15 * coalesce(a.season = b.season, false)::int
+      + 0.25 * coalesce(c.mots::float / nullif(a.n_tags + b.n_tags - c.mots, 0), 0)
+      + 0.10 * (a.source_id = b.source_id)::int
+      + 0.05 * (a.composer <> '' AND a.composer = b.composer)::int
+      + 0.05 * coalesce(c.interpretes::float / nullif(a.n_perf + b.n_perf - c.interpretes, 0), 0)
+      + 0.10 * similarity(a.title, b.title) AS score
+    FROM candidates c JOIN t a ON a.id = c.t1 JOIN t b ON b.id = c.t2
+),
+ranked AS (
+    SELECT t1, t2, score, row_number() OVER (PARTITION BY t1 ORDER BY score DESC, t2) AS rk
+    FROM scored WHERE score >= %(min_score)s
+)
+INSERT INTO audio_trackneighbor (track_id, neighbor_id, score, method, computed_at)
+SELECT t1, t2, score, 'contenu', %(now)s FROM ranked WHERE rk <= %(top)s
+"""
 
 
 @transaction.atomic
 def content_neighbors_compute(*, now: datetime.datetime | None = None) -> int:
     now = now or timezone.now()
     TrackNeighbor.objects.filter(method=NeighborMethod.CONTENU).delete()
-    candidates = Track.objects.filter(status=TrackStatus.PRET, hidden_at__isnull=True, embedding__isnull=False)
-    rows: list[TrackNeighbor] = []
-    for track in candidates.only("pk", "embedding"):
-        nearest = (
-            candidates.exclude(pk=track.pk)
-            .annotate(distance=CosineDistance("embedding", track.embedding))
-            .order_by("distance")
-            .values_list("pk", "distance")[: settings.AUDIO_RECO_NEIGHBORS]
-        )
-        rows += [
-            TrackNeighbor(track=track, neighbor_id=pk, score=1.0 - d, method=NeighborMethod.CONTENU, computed_at=now)
-            for pk, d in nearest
-            if d is not None and 1.0 - d > 0
-        ]
-    TrackNeighbor.objects.bulk_create(rows, batch_size=1000)
-    return len(rows)
+    params: dict[str, Any] = {
+        "min_score": CONTENT_MIN_SCORE,
+        "now": now,
+        "top": settings.AUDIO_RECO_NEIGHBORS,
+        "pool": CONTENT_POOL,
+    }
+    with connection.cursor() as cursor:
+        cursor.execute(_CONTENT_SQL, params)
+        return cursor.rowcount
 
 
 # --- 3. Utilisateur → pistes -----------------------------------------------------------------
@@ -261,9 +284,11 @@ def _user_recommendations(
         )[:200]:
             add(str(track_id), PARISH_BONUS, f"Nouveauté de {source_name}", None)
     if season:
-        for track_id in listenable.filter(Q(liturgical_season=season) | Q(album__liturgical_season=season)).order_by(
-            "-published_at"
-        ).values_list("pk", flat=True)[:200]:
+        for track_id in (
+            listenable.filter(Q(liturgical_season=season) | Q(album__liturgical_season=season))
+            .order_by("-published_at")
+            .values_list("pk", flat=True)[:200]
+        ):
             add(str(track_id), SEASON_BONUS, season_reason(season), None)
 
     excluded = seen | {s for s, _, _ in seeds}
@@ -324,18 +349,19 @@ def user_recommendations_compute(*, now: datetime.datetime | None = None) -> int
         cache.delete(user_reco_cache_key(user.pk))
         total += len(recos)
     # Recommandations des personnes devenues inactives ou qui ont désactivé le réglage.
-    UserRecommendation.objects.filter(Q(computed_at__lt=now - datetime.timedelta(days=7)) | Q(user_id__in=opted_out)).delete()
+    UserRecommendation.objects.filter(
+        Q(computed_at__lt=now - datetime.timedelta(days=7)) | Q(user_id__in=opted_out)
+    ).delete()
     return total
 
 
-def recompute_all(*, now: datetime.datetime | None = None, provider: Any = None) -> dict[str, Any]:
+def recompute_all(*, now: datetime.datetime | None = None) -> dict[str, Any]:
     """Tâche nocturne complète (``audio_reco_recompute_task``)."""
     if not settings.AUDIO_RECO_ENABLED:
         return {"desactive": True}
     now = now or timezone.now()
-    embedded = track_embeddings_refresh(provider=provider)
     colisten = colisten_neighbors_compute(now=now)
     content = content_neighbors_compute(now=now)
     users = user_recommendations_compute(now=now)
     logger.info("audio.reco.recompute", extra={"coecoute": colisten, "contenu": content, "recommandations": users})
-    return {"embeddings": embedded, "voisins_coecoute": colisten, "voisins_contenu": content, "recommandations": users}
+    return {"voisins_coecoute": colisten, "voisins_contenu": content, "recommandations": users}
