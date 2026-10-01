@@ -48,7 +48,10 @@ class Command(BaseCommand):
             text = path.read_text(encoding="utf-8")
             for asset_id, digest in pins.items():
                 text = re.sub(
-                    rf"(- id: {re.escape(asset_id)}\n(?:    .*\n)*?    sha256:)[ \t]*\n", rf"\1 {digest}\n", text, count=1
+                    rf"(- id: {re.escape(asset_id)}\n(?:    .*\n)*?    sha256:)[ \t]*\n",
+                    rf"\1 {digest}\n",
+                    text,
+                    count=1,
                 )
             path.write_text(text, encoding="utf-8")
             self.stdout.write(f"{len(pins)} empreinte(s) épinglée(s) dans {path}.")

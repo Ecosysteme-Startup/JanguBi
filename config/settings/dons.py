@@ -38,9 +38,7 @@ DONATIONS_PAYLOAD_KEY = env.str("DONATIONS_PAYLOAD_KEY", default="")
 
 # Agrégateur factice.
 DONATIONS_FAKE_SECRET = env.str("DONATIONS_FAKE_SECRET", default="fake-secret-dev")
-DONATIONS_FAKE_CHECKOUT_BASE = env.str(
-    "DONATIONS_FAKE_CHECKOUT_BASE", default="https://paiement.exemple.test/checkout"
-)
+DONATIONS_FAKE_CHECKOUT_BASE = env.str("DONATIONS_FAKE_CHECKOUT_BASE", default="https://paiement.exemple.test/checkout")
 
 # PayDunya.
 PAYDUNYA_MASTER_KEY = env.str("PAYDUNYA_MASTER_KEY", default="")

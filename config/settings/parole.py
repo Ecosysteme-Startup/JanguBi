@@ -49,9 +49,9 @@ PAROLE_RECO_EXCLUDE_READ_DAYS = env.int("PAROLE_RECO_EXCLUDE_READ_DAYS", default
 PAROLE_RECO_ACTIVE_DAYS = env.int("PAROLE_RECO_ACTIVE_DAYS", default=30)
 # Un mot présent dans plus de cette part des versets est ignoré : il ne départage rien et ferait
 # parcourir des milliers de versets (1,3 s par fidèle en recette). Sur la Bible AELF, 2 % écarte
-# « Seigneur » (20 %), « était » (4,9 %), « si », « celui », « Jésus » (3,7 %), « répondre » (2,4 %) —
-# fr_unaccent ôte les accents AVANT le filtre des mots vides, d'où « était » — et garde « disciple »
-# (0,8 %), « vigne » (0,5 %), « croix » (0,1 %).
+# « Seigneur » (20 %), « Dieu », « peuple », « Jésus » (3,7 %), « répondre » (2,4 %) et garde
+# « disciple » (0,8 %), « vigne » (0,5 %), « croix » (0,1 %). Les mots vides (« était », « à ») sont,
+# eux, filtrés dès l'indexation (configuration fr_unaccent, audio.0006).
 PAROLE_RECO_MAX_DF_RATIO = env.float("PAROLE_RECO_MAX_DF_RATIO", default=0.02)
 # Versets les plus proches du profil retenus avant filtrage et diversification.
 PAROLE_RECO_CANDIDATES = env.int("PAROLE_RECO_CANDIDATES", default=200)

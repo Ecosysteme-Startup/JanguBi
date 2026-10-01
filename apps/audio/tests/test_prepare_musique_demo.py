@@ -16,7 +16,19 @@ from apps.core.management.commands.seed_realiste import Command as SeedCommand
 def _tone(path, seconds=2):
     path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"sine=duration={seconds}", str(path)],
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=duration={seconds}",
+            str(path),
+        ],
         check=True,
     )
 

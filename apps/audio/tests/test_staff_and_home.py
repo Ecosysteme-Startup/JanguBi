@@ -72,7 +72,9 @@ def test_staff_creates_and_edits_an_album(world):
 
     track = ready_track(world.paroisse, "Premier enseignement", album=Album.objects.get(pk=album["id"]))
     patched = client.patch(
-        f"{API}/staff/albums/{album['id']}/", {"title": "Retraite de l'Avent 2026", "visibility": "public"}, format="json"
+        f"{API}/staff/albums/{album['id']}/",
+        {"title": "Retraite de l'Avent 2026", "visibility": "public"},
+        format="json",
     )
     assert patched.status_code == 200
     assert patched.json()["title"] == "Retraite de l'Avent 2026" and patched.json()["track_count"] == 1
@@ -86,9 +88,12 @@ def test_staff_creates_and_edits_an_album(world):
     other = client_for(world.cure_st)
     assert other.patch(f"{API}/staff/albums/{album['id']}/", {"title": "x"}, format="json").status_code == 403
     assert other.get(f"{API}/staff/albums/{album['id']}/").status_code == 403
-    assert other.post(
-        f"{API}/staff/albums/", {"source_id": str(world.paroisse.pk), "title": "x"}, format="json"
-    ).status_code == 403
+    assert (
+        other.post(
+            f"{API}/staff/albums/", {"source_id": str(world.paroisse.pk), "title": "x"}, format="json"
+        ).status_code
+        == 403
+    )
 
 
 def test_staff_tracks_show_plays_of_the_last_30_days_per_source(world):
@@ -205,12 +210,18 @@ def test_cover_rejects_wrong_type_size_content_and_foreign_files(world, media_ro
 
     data = _cover_start(client, world.messe).json()
     fake = SimpleUploadedFile("messe.png", b"<html>pas une image</html>", content_type="image/png")
-    client.post(f"{API}/staff/albums/{world.messe.pk}/pochette/{data['file_id']}/local/", {"file": fake}, format="multipart")
-    bad = client.post(f"{API}/staff/albums/{world.messe.pk}/pochette/terminer/", {"file_id": data["file_id"]}, format="json")
+    client.post(
+        f"{API}/staff/albums/{world.messe.pk}/pochette/{data['file_id']}/local/", {"file": fake}, format="multipart"
+    )
+    bad = client.post(
+        f"{API}/staff/albums/{world.messe.pk}/pochette/terminer/", {"file_id": data["file_id"]}, format="json"
+    )
     assert bad.status_code == 400 and bad.json()["error"]["code"] == "format_image"
 
     # Le fichier d'un album ne peut pas devenir la pochette d'un autre.
-    other = client.post(f"{API}/staff/albums/{world.homelies.pk}/pochette/terminer/", {"file_id": data["file_id"]}, format="json")
+    other = client.post(
+        f"{API}/staff/albums/{world.homelies.pk}/pochette/terminer/", {"file_id": data["file_id"]}, format="json"
+    )
     assert other.status_code == 404
 
 
@@ -311,13 +322,19 @@ def test_album_report_and_removal_hides_the_album_and_its_tracks(world):
 
     # Album réservé aux membres : visible (verrouillé) pour une autre paroisse, donc signalable
     # (décision 4) ; un album brouillon reste introuvable.
-    assert client_for(world.autre).post(
-        f"{API}/albums/{world.homelies.pk}/signaler/", {"motif": "autre"}, format="json"
-    ).status_code == 201
+    assert (
+        client_for(world.autre)
+        .post(f"{API}/albums/{world.homelies.pk}/signaler/", {"motif": "autre"}, format="json")
+        .status_code
+        == 201
+    )
     draft = Album.objects.create(source=world.paroisse, kind="homelies", title="Brouillon", visibility="paroisse")
-    assert client_for(world.autre).post(
-        f"{API}/albums/{draft.pk}/signaler/", {"motif": "autre"}, format="json"
-    ).status_code == 404
+    assert (
+        client_for(world.autre)
+        .post(f"{API}/albums/{draft.pk}/signaler/", {"motif": "autre"}, format="json")
+        .status_code
+        == 404
+    )
     assert client_for().post(f"{API}/albums/{world.messe.pk}/signaler/", {"motif": "autre"}, format="json").status_code in (
         401, 403,
     )  # fmt: skip

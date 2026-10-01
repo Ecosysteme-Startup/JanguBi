@@ -80,5 +80,4 @@ if SENTRY_DSN:
         include_local_variables=False,
         profile_lifecycle="trace",
         profile_session_sample_rate=1.0,
-
     )

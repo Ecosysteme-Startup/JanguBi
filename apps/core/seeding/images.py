@@ -13,7 +13,9 @@ SPECIMEN = "SPÉCIMEN — données fictives"
 PALETTE = ["#7A2E3A", "#2F4858", "#8C6A2F", "#3E5C45", "#5B4A7A", "#9A4E2A", "#2E5E7A", "#6B3A5A"]
 
 
-def stored_file(*, name: str, content: bytes, content_type: str, key: str | None = None, uploaded_by: Any = None) -> Any:
+def stored_file(
+    *, name: str, content: bytes, content_type: str, key: str | None = None, uploaded_by: Any = None
+) -> Any:
     """Crée un ``files.File`` valide (``upload_finished_at``) dont le contenu est dans le stockage par défaut."""
     from apps.files.models import File
     from apps.files.utils import file_generate_name

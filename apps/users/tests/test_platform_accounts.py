@@ -43,7 +43,13 @@ class FakeKeycloak:
         sub = f"kc-{user.pk}"
         BaseUser.objects.filter(pk=user.pk).update(keycloak_sub=sub)
         user.keycloak_sub = sub
-        self.users[sub] = {"id": sub, "enabled": enabled, "emailVerified": verified, "totp": totp, "requiredActions": []}
+        self.users[sub] = {
+            "id": sub,
+            "enabled": enabled,
+            "emailVerified": verified,
+            "totp": totp,
+            "requiredActions": [],
+        }
         self.credentials[sub] = [{"type": t} for t in credentials]
         self.sessions[sub] = list(sessions)
 
@@ -213,7 +219,10 @@ def test_list_items_and_order(world):
     [
         ({"role": "platform_admin"}, {"admin@numerisen.sn"}),
         ({"role": "staff"}, {"cure@sd.sn"}),
-        ({"role": "fidele", "q": "test.sn"}, {"fidele@test.sn", "verrouille@test.sn", "nouveau@test.sn", "non-lie@test.sn"}),
+        (
+            {"role": "fidele", "q": "test.sn"},
+            {"fidele@test.sn", "verrouille@test.sn", "nouveau@test.sn", "non-lie@test.sn"},
+        ),
         ({"mfa": "active"}, {"admin@numerisen.sn", "cure@sd.sn"}),
         ({"status": "verrouille"}, {"verrouille@test.sn"}),
         ({"status": "a_confirmer"}, {"nouveau@test.sn", "non-lie@test.sn"}),

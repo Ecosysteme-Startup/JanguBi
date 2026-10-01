@@ -184,7 +184,10 @@ def test_failed_and_unknown_payments(fund, django_capture_on_commit_callbacks):
 
 
 def test_webhook_of_another_provider_is_404(fund):
-    assert client_for().post("/api/v1/dons/webhooks/paydunya/", data=b"{}", content_type="application/json").status_code == 404
+    assert (
+        client_for().post("/api/v1/dons/webhooks/paydunya/", data=b"{}", content_type="application/json").status_code
+        == 404
+    )
 
 
 def test_real_fee_reported_by_the_provider_is_kept(fund, django_capture_on_commit_callbacks):
@@ -276,7 +279,6 @@ def test_public_checkout_is_rate_limited(fund):
     assert client.post("/api/v1/dons/checkout/", body, format="json").status_code == 201
     assert client.post("/api/v1/dons/checkout/", body, format="json").status_code == 201
     assert client.post("/api/v1/dons/checkout/", body, format="json").status_code == 429
-
 
 
 # --- Numérotation des reçus et clôture des campagnes (décisions du 27/09/2026) --------------

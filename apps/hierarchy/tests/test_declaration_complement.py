@@ -35,8 +35,12 @@ def world(tree):
 
 def _complement_requested(world):
     candidate = person("luc.bassene@example.sn", verified=False)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar)
-    person_verification_decide(actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante.")
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", incardination_node=world.dakar
+    )
+    person_verification_decide(
+        actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante."
+    )
     Notification.objects.all().delete()
     return candidate
 
@@ -50,7 +54,9 @@ def test_faithful_uploads_a_justificatif_then_declares(world):
     client = client_for(candidate)
 
     upload = client.post(
-        UPLOAD, {"file": SimpleUploadedFile("celebret.pdf", b"%PDF-1.4 test", content_type="application/pdf")}, format="multipart"
+        UPLOAD,
+        {"file": SimpleUploadedFile("celebret.pdf", b"%PDF-1.4 test", content_type="application/pdf")},
+        format="multipart",
     )
     assert upload.status_code == 201
 
@@ -69,7 +75,9 @@ def test_answering_a_complement_goes_back_to_declared_and_notifies_the_chancery(
     lettre = FileFactory.create(uploaded_by=candidate, original_file_name="lettre.pdf")
 
     with django_capture_on_commit_callbacks(execute=True):
-        response = client_for(candidate).post(ME_DECLARATION, _body(world, attachment_file_ids=[lettre.pk]), format="json")
+        response = client_for(candidate).post(
+            ME_DECLARATION, _body(world, attachment_file_ids=[lettre.pk]), format="json"
+        )
 
     assert response.status_code == 200
     assert response.data["statut_verification"] == StatutVerification.DECLARE
@@ -77,7 +85,9 @@ def test_answering_a_complement_goes_back_to_declared_and_notifies_the_chancery(
     assert notification.user == world.chancelier
     assert notification.payload == {"person_id": str(candidate.pk), "node_id": str(world.dakar.pk)}
     # Le curé (sans personnes.verifier) et la personne elle-même ne sont pas prévenus.
-    assert not Notification.objects.filter(user__in=[world.cure, candidate], event_type="personnes.complement_fourni").exists()
+    assert not Notification.objects.filter(
+        user__in=[world.cure, candidate], event_type="personnes.complement_fourni"
+    ).exists()
     assert AuditEvent.objects.filter(action="personne.declaration", metadata__complement=True).exists()
     queue = client_for(world.chancelier).get("/api/v1/hierarchy/verifications/", {"statut": "declare"}).data
     assert [r["id"] for r in queue["results"]] == [str(candidate.pk)]

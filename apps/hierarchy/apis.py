@@ -120,7 +120,9 @@ def _resolve_node_refs(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class NodeTypeListApi(HierarchyBaseApi):
-    @extend_schema(tags=TAG, summary="Types de nœuds et parents autorisés", responses=NodeTypeOutputSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Types de nœuds et parents autorisés", responses=NodeTypeOutputSerializer(many=True)
+    )
     def get(self, request: Request) -> Response:
         return Response(NodeTypeOutputSerializer(selectors.node_type_list(), many=True).data)
 
@@ -235,7 +237,9 @@ class NodeChildrenApi(HierarchyBaseApi):
 
 
 class NodeAncestorsApi(HierarchyBaseApi):
-    @extend_schema(tags=TAG, summary="Ancêtres d'un nœud (de la racine au parent)", responses=NodeOutputSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Ancêtres d'un nœud (de la racine au parent)", responses=NodeOutputSerializer(many=True)
+    )
     def get(self, request: Request, node_id: str) -> Response:
         node = selectors.node_get(node_id=node_id)
         ancestors = list(selectors.node_ancestors(node=node))

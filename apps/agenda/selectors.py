@@ -37,7 +37,9 @@ def event_list_public(
     viewer: Any = None,
 ) -> QuerySet[Event]:
     """Événements à venir, non annulés ; ``node`` = ce nœud et son sous-arbre."""
-    qs = Event.objects.filter(cancelled_at__isnull=True, end_at__gte=date_from or timezone.now()).select_related(*_RELATED)
+    qs = Event.objects.filter(cancelled_at__isnull=True, end_at__gte=date_from or timezone.now()).select_related(
+        *_RELATED
+    )
     if node is not None:
         qs = qs.filter(scope_node__path__startswith=node.path)
     if date_to is not None:
@@ -89,4 +91,6 @@ def event_get_for_staff(*, user: Any, event_id: int) -> Event:
 
 
 def event_registrations(*, event: Event) -> QuerySet[EventRegistration]:
-    return EventRegistration.objects.filter(event=event).select_related("user", "user__profile").order_by("registered_at")
+    return (
+        EventRegistration.objects.filter(event=event).select_related("user", "user__profile").order_by("registered_at")
+    )

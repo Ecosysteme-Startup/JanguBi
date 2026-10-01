@@ -57,9 +57,7 @@ class NodeSettingsUpdateInputSerializer(serializers.Serializer):
     acts_delay_days = serializers.IntegerField(
         required=False, allow_null=True, min_value=1, max_value=ACTS_DELAY_MAX_DAYS, help_text="Jours ouvrés"
     )
-    acts_welcome_message = serializers.CharField(
-        required=False, allow_blank=True, max_length=ACTS_WELCOME_MAX_LENGTH
-    )
+    acts_welcome_message = serializers.CharField(required=False, allow_blank=True, max_length=ACTS_WELCOME_MAX_LENGTH)
 
 
 # --- Public ----------------------------------------------------------------------------

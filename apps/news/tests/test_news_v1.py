@@ -140,7 +140,10 @@ def test_update_keeps_authorization(world):
     article = draft(world)
     with pytest.raises(PermissionDeniedError):
         article_update(article=article, editor=world.cure_thies, data={"title": "Piraté"})
-    assert article_update(article=article, editor=world.secretaire, data={"title": "Kermesse 2026"}).title == "Kermesse 2026"
+    assert (
+        article_update(article=article, editor=world.secretaire, data={"title": "Kermesse 2026"}).title
+        == "Kermesse 2026"
+    )
 
 
 # --- Lectures (EF-PAROI-05) -------------------------------------------------------------------
@@ -165,7 +168,9 @@ def test_feed_shows_global_followed_parish_and_its_diocese(world):
     eveque = person(ordre="eveque")
     nominate(eveque, "eveque_diocesain", world.dakar)
     diocese = article_publish(article=draft(world, node=world.dakar, author=eveque), editor=eveque)
-    other = article_publish(article=draft(world, node=world.thies_parish, author=world.cure_thies), editor=world.cure_thies)
+    other = article_publish(
+        article=draft(world, node=world.thies_parish, author=world.cure_thies), editor=world.cure_thies
+    )
 
     feed = set(feed_for(user=fidele))
 
@@ -214,7 +219,12 @@ def test_staff_flow_over_http(world):
     client = client_for(world.secretaire)
     created = client.post(
         "/api/v1/staff/news/",
-        {"node_id": str(world.saint_dominique.pk), "title": "Messe des familles", "content": "…", "category_id": world.category.pk},
+        {
+            "node_id": str(world.saint_dominique.pk),
+            "title": "Messe des familles",
+            "content": "…",
+            "category_id": world.category.pk,
+        },
         format="json",
     )
     article_id = created.data["id"]
@@ -247,7 +257,9 @@ def test_me_feed_api(world):
 def test_reactions_api(world):
     article = article_publish(article=draft(world), editor=world.secretaire)
     client = client_for(person())
-    response = client.put(f"/api/v1/news/{article.pk}/reactions/", {"reaction_type": "pray", "active": True}, format="json")
+    response = client.put(
+        f"/api/v1/news/{article.pk}/reactions/", {"reaction_type": "pray", "active": True}, format="json"
+    )
     assert response.data["reactions"] == {"counts": {"pray": 1, "amen": 0, "attend": 0}, "mine": ["pray"]}
 
 

@@ -81,9 +81,9 @@ def cash_deposit_declare(
 def imperee_cash_to_remit(*, fund: Fund, exclude_pk: Any = None) -> int:
     """Espèces validées de la déclinaison paroissiale, moins les remises déclarées ou confirmées."""
     cash = (
-        Donation.objects.filter(
-            fund=fund, channel=DonationChannel.ESPECES, status=DonationStatus.CONFIRME
-        ).aggregate(s=Sum("net_amount"))["s"]
+        Donation.objects.filter(fund=fund, channel=DonationChannel.ESPECES, status=DonationStatus.CONFIRME).aggregate(
+            s=Sum("net_amount")
+        )["s"]
         or 0
     )
     remitted = (
@@ -156,8 +156,10 @@ def _require_curia(actor: Any, remittance: CuriaRemittance) -> None:
 
 
 def _locked(remittance: CuriaRemittance) -> CuriaRemittance:
-    return CuriaRemittance.objects.select_for_update(of=("self",)).select_related("fund__parent__node", "node").get(
-        pk=remittance.pk
+    return (
+        CuriaRemittance.objects.select_for_update(of=("self",))
+        .select_related("fund__parent__node", "node")
+        .get(pk=remittance.pk)
     )
 
 

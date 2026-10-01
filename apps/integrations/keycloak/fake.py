@@ -47,8 +47,15 @@ class FakeKeycloakAdmin:
         return self.users[user_id]
 
     def seed(
-        self, *, email: str, user_id: str | None = None, first_name: str = "", last_name: str = "",
-        enabled: bool = True, email_verified: bool = True, roles: tuple[str, ...] = ("fidele",),
+        self,
+        *,
+        email: str,
+        user_id: str | None = None,
+        first_name: str = "",
+        last_name: str = "",
+        enabled: bool = True,
+        email_verified: bool = True,
+        roles: tuple[str, ...] = ("fidele",),
         otp: bool = False,
     ) -> str:
         user_id = user_id or str(uuid.uuid4())
@@ -231,7 +238,12 @@ class FakeKeycloakAdmin:
         return self._page(self.admin_event_log, date_from, first, max_results)
 
     def record_user_event(self, event_type: str, user_id: str, *, at_ms: int | None = None) -> dict[str, Any]:
-        event = {"id": str(uuid.uuid4()), "time": at_ms or int(time.time() * 1000), "type": event_type, "userId": user_id}
+        event = {
+            "id": str(uuid.uuid4()),
+            "time": at_ms or int(time.time() * 1000),
+            "type": event_type,
+            "userId": user_id,
+        }
         self.user_events.append(event)
         return event
 

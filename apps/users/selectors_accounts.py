@@ -108,9 +108,7 @@ def account_list(*, filters: dict[str, Any], directory: KeycloakDirectory | None
     qs = _base_queryset()
     q = (filters.get("q") or "").strip()
     if q:
-        qs = qs.filter(
-            Q(email__icontains=q) | Q(profile__first_name__icontains=q) | Q(profile__last_name__icontains=q)
-        )
+        qs = qs.filter(Q(email__icontains=q) | Q(profile__first_name__icontains=q) | Q(profile__last_name__icontains=q))
     role = filters.get("role")
     if role == ROLE_PLATFORM_ADMIN:
         qs = qs.filter(_platform_q(directory))

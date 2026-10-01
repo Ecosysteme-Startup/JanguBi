@@ -96,7 +96,11 @@ def test_playback_returns_url_resume_waveform_and_metadata(world):
     assert data["track"]["source"]["name"] == "Chorale Sainte-Cécile"
     assert data["stream"]["master_url"].endswith(f"/media/audio-hls/{track.pk}/1/master.m3u8")
     assert data["stream"]["mp3_url"].endswith(f"/audio-hls/{track.pk}/1/audio.mp3")
-    assert data["resume"] == {"position_seconds": 73.5, "device_id": "iphone-mt", "updated_at": data["resume"]["updated_at"]}
+    assert data["resume"] == {
+        "position_seconds": 73.5,
+        "device_id": "iphone-mt",
+        "updated_at": data["resume"]["updated_at"],
+    }
     assert len(data["waveform"]) == 200
     assert _play(None, track).json()["resume"] is None  # anonyme : pas de reprise
 
@@ -152,7 +156,12 @@ STATE = "/api/v1/audio/lecture/etat/"
 def _put(user, track, position, device, at):
     return client_for(user).put(
         STATE,
-        {"track_id": str(track.pk), "position_seconds": position, "device_id": device, "client_updated_at": at.isoformat()},
+        {
+            "track_id": str(track.pk),
+            "position_seconds": position,
+            "device_id": device,
+            "client_updated_at": at.isoformat(),
+        },
         format="json",
     )
 

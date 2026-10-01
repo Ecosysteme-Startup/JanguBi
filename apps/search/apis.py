@@ -23,7 +23,9 @@ class SearchQuerySerializer(serializers.Serializer):
         help_text=f"Liste séparée par des virgules parmi {', '.join(selectors.TYPES)} (défaut : tous)",
     )
     limit = serializers.IntegerField(min_value=1, max_value=20, default=5, help_text="Résultats par type")
-    offset = serializers.IntegerField(min_value=0, max_value=selectors.MAX_OFFSET, default=0, help_text="Décalage par type")
+    offset = serializers.IntegerField(
+        min_value=0, max_value=selectors.MAX_OFFSET, default=0, help_text="Décalage par type"
+    )
 
     def validate_types(self, value: str) -> list[str]:
         types = [t.strip() for t in (value or "").split(",") if t.strip()]

@@ -34,7 +34,14 @@ def world(tree):
 
 
 def body(world, **kw):
-    return {"place_id": world.place.pk, "date": "2026-10-10", "start_time": "09:00", "end_time": "10:00", "slot_minutes": 15, **kw}
+    return {
+        "place_id": world.place.pk,
+        "date": "2026-10-10",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "slot_minutes": 15,
+        **kw,
+    }
 
 
 @freeze_time(NOW)

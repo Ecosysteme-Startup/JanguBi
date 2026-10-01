@@ -27,10 +27,8 @@ def setup_bible_data():
     Verse.objects.create(chapter=c_ps_78, number=8, text="Ne te souviens plus")
     Verse.objects.create(chapter=c_ps_78, number=9, text="Secours nous")
 
-    return {
-        "luc_6": c_luc_6,
-        "ps_78": c_ps_78
-    }
+    return {"luc_6": c_luc_6, "ps_78": c_ps_78}
+
 
 @pytest.mark.django_db(transaction=True)
 def test_matcher_standard_gospel(setup_bible_data):
@@ -40,6 +38,7 @@ def test_matcher_standard_gospel(setup_bible_data):
     assert verses[0].number == 36
     assert verses[2].number == 38
 
+
 @pytest.mark.django_db(transaction=True)
 def test_matcher_psalm_complex(setup_bible_data):
     # e.g., "Ps 78 (79), 5a.8,9" -> it should pick up book=ps, chapter=78, range 5 to 9
@@ -47,13 +46,15 @@ def test_matcher_psalm_complex(setup_bible_data):
     assert len(verses) == 3
     assert [v.number for v in verses] == [5, 8, 9]
 
+
 @pytest.mark.django_db(transaction=True)
 def test_matcher_invalid_or_missing():
     verses = CitationMatcher.match("Inconnu 1, 1")
     assert verses == []
-    
+
     verses = CitationMatcher.match("")
     assert verses == []
+
 
 @pytest.mark.django_db(transaction=True)
 def test_matcher_single_verse(setup_bible_data):

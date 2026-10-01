@@ -148,7 +148,9 @@ def invitation_from_token(*, token: str, lock: bool = False) -> ClergyInvitation
     if invitation is None or invitation.status != InvitationStatus.EN_ATTENTE:
         raise InvitationInvalidError("Ce lien d'invitation n'est plus valable.")
     if invitation.expires_at <= timezone.now():
-        raise InvitationInvalidError("Ce lien d'invitation a expiré. Demandez-en un nouveau au diocèse.", code="invitation_expiree")
+        raise InvitationInvalidError(
+            "Ce lien d'invitation a expiré. Demandez-en un nouveau au diocèse.", code="invitation_expiree"
+        )
     return invitation
 
 
@@ -176,9 +178,13 @@ def invitation_accept(*, token: str, user: Any, justificatif_id: int | None = No
         user.statut_verification = StatutVerification.DECLARE
         user.declared_at = now
         user.verification_note = ""
-        user.save(update_fields=["etat_de_vie", "degre_ordre", "statut_verification", "declared_at", "verification_note"])
+        user.save(
+            update_fields=["etat_de_vie", "degre_ordre", "statut_verification", "declared_at", "verification_note"]
+        )
     audit_log(actor=user, action="compte.invitation_acceptation", target=invitation, node=invitation.node)
-    _notify(user_ids=[invitation.invited_by_id], event="invitation_acceptee", payload={"invitation_id": str(invitation.pk)})
+    _notify(
+        user_ids=[invitation.invited_by_id], event="invitation_acceptee", payload={"invitation_id": str(invitation.pk)}
+    )
     return invitation
 
 
@@ -230,7 +236,9 @@ def account_decide(*, actor: Any, person: Any, approve: bool, reason: str = "") 
         node=invitation.node,
         metadata={} if approve else {"motif": reason[:255]},
     )
-    _notify(user_ids=[person.pk], event="valide" if approve else "refuse", payload={"status": person.statut_verification})
+    _notify(
+        user_ids=[person.pk], event="valide" if approve else "refuse", payload={"status": person.statut_verification}
+    )
     return person
 
 
@@ -245,7 +253,11 @@ def account_set_active(*, actor: Any, person: Any, active: bool, ip: str | None 
     else:
         person = services_accounts.account_lock(account=person, actor=actor, ip=ip)
     audit_log(
-        actor=actor, action="compte.activation" if active else "compte.desactivation", target=person, node=invitation.node, ip=ip
+        actor=actor,
+        action="compte.activation" if active else "compte.desactivation",
+        target=person,
+        node=invitation.node,
+        ip=ip,
     )
     return person
 

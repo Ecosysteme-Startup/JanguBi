@@ -121,9 +121,7 @@ def test_conversation_create_returns_201(auth_client):
     url = reverse("api:messaging:conversation-create")
 
     # Act
-    response = auth_client.post(
-        url, {"priest_user_id": str(priest_user.id)}, format="json"
-    )
+    response = auth_client.post(url, {"priest_user_id": str(priest_user.id)}, format="json")
 
     # Assert
     assert response.status_code == 201
@@ -135,9 +133,7 @@ def test_conversation_create_rejected_for_non_clergy_recipient(auth_client):
     other_user = BaseUserFactory()  # aucune capacité messagerie.recevoir_fideles
     url = reverse("api:messaging:conversation-create")
 
-    response = auth_client.post(
-        url, {"priest_user_id": str(other_user.id)}, format="json"
-    )
+    response = auth_client.post(url, {"priest_user_id": str(other_user.id)}, format="json")
 
     assert response.status_code == 400
 
@@ -164,9 +160,7 @@ def test_conversation_create_returns_400_on_invalid_payload(auth_client):
 @pytest.mark.django_db
 def test_conversation_create_returns_404_when_priest_not_found(auth_client):
     url = reverse("api:messaging:conversation-create")
-    response = auth_client.post(
-        url, {"priest_user_id": str(uuid.uuid4())}, format="json"
-    )
+    response = auth_client.post(url, {"priest_user_id": str(uuid.uuid4())}, format="json")
     assert response.status_code == 404
 
 
@@ -233,9 +227,7 @@ def test_conversation_archive_returns_200():
     conv = ConversationFactory(is_archived=False)
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
-    url = reverse(
-        "api:messaging:conversation-archive", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-archive", kwargs={"conversation_id": conv.id})
 
     # Act
     response = client.post(url)
@@ -248,9 +240,7 @@ def test_conversation_archive_returns_200():
 @pytest.mark.django_db
 def test_conversation_archive_requires_authentication(anon_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-archive", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-archive", kwargs={"conversation_id": conv.id})
     response = anon_client.post(url)
     assert response.status_code == 401
 
@@ -258,9 +248,7 @@ def test_conversation_archive_requires_authentication(anon_client):
 @pytest.mark.django_db
 def test_conversation_archive_returns_403_for_non_participant(auth_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-archive", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-archive", kwargs={"conversation_id": conv.id})
     response = auth_client.post(url)
     assert response.status_code == 403
 
@@ -276,9 +264,7 @@ def test_conversation_delete_returns_204():
     conv = ConversationFactory()
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
-    url = reverse(
-        "api:messaging:conversation-detail", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-detail", kwargs={"conversation_id": conv.id})
 
     # Act
     with patch(_ON_COMMIT, lambda fn: None):
@@ -291,9 +277,7 @@ def test_conversation_delete_returns_204():
 @pytest.mark.django_db
 def test_conversation_delete_requires_authentication(anon_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-detail", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-detail", kwargs={"conversation_id": conv.id})
     response = anon_client.delete(url)
     assert response.status_code == 401
 
@@ -301,9 +285,7 @@ def test_conversation_delete_requires_authentication(anon_client):
 @pytest.mark.django_db
 def test_conversation_delete_returns_403_for_non_participant(auth_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-detail", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-detail", kwargs={"conversation_id": conv.id})
     response = auth_client.delete(url)
     assert response.status_code == 403
 
@@ -319,9 +301,7 @@ def test_conversation_export_post_returns_201():
     conv = ConversationFactory()
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
-    url = reverse(
-        "api:messaging:conversation-export", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-export", kwargs={"conversation_id": conv.id})
 
     # Act
     with patch(_ON_COMMIT, lambda fn: None):
@@ -337,9 +317,7 @@ def test_conversation_export_get_returns_200():
     conv = ConversationFactory()
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
-    url = reverse(
-        "api:messaging:conversation-export", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-export", kwargs={"conversation_id": conv.id})
 
     # Act
     response = client.get(url)
@@ -351,9 +329,7 @@ def test_conversation_export_get_returns_200():
 @pytest.mark.django_db
 def test_conversation_export_requires_authentication(anon_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-export", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-export", kwargs={"conversation_id": conv.id})
     response = anon_client.post(url)
     assert response.status_code == 401
 
@@ -361,9 +337,7 @@ def test_conversation_export_requires_authentication(anon_client):
 @pytest.mark.django_db
 def test_conversation_export_returns_403_for_non_participant(auth_client):
     conv = ConversationFactory()
-    url = reverse(
-        "api:messaging:conversation-export", kwargs={"conversation_id": conv.id}
-    )
+    url = reverse("api:messaging:conversation-export", kwargs={"conversation_id": conv.id})
     response = auth_client.post(url)
     assert response.status_code == 403
 
@@ -376,9 +350,7 @@ def test_conversation_export_returns_403_for_non_participant(auth_client):
 @pytest.mark.django_db
 def test_message_list_returns_200():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     MessageFactory(conversation=conv, sender=conv.participant_a)
@@ -402,9 +374,7 @@ def test_message_list_requires_authentication(anon_client):
 
 @pytest.mark.django_db
 def test_message_list_returns_403_for_non_participant(auth_client):
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     url = reverse("api:messaging:message-list", kwargs={"conversation_id": conv.id})
     response = auth_client.get(url)
     assert response.status_code == 403
@@ -413,9 +383,7 @@ def test_message_list_returns_403_for_non_participant(auth_client):
 @pytest.mark.django_db
 def test_message_list_returns_403_when_cgu_not_accepted():
     # Arrange — participant_a has NOT accepted CGU
-    conv = ConversationFactory(
-        cgu_accepted_by_a=None, cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=None, cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     url = reverse("api:messaging:message-list", kwargs={"conversation_id": conv.id})
@@ -430,9 +398,7 @@ def test_message_list_returns_403_when_cgu_not_accepted():
 @pytest.mark.django_db
 def test_message_list_respects_limit_query_param():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     for _ in range(10):
@@ -455,9 +421,7 @@ def test_message_list_respects_limit_query_param():
 @pytest.mark.django_db
 def test_message_send_returns_201():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
@@ -484,9 +448,7 @@ def test_message_send_requires_authentication(anon_client):
 @pytest.mark.django_db
 def test_message_send_returns_400_on_empty_payload():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
@@ -500,9 +462,7 @@ def test_message_send_returns_400_on_empty_payload():
 
 @pytest.mark.django_db
 def test_message_send_returns_403_for_non_participant(auth_client):
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
     response = auth_client.post(url, {"content": "Hi"}, format="json")
     assert response.status_code == 403
@@ -511,9 +471,7 @@ def test_message_send_returns_403_for_non_participant(auth_client):
 @pytest.mark.django_db
 def test_message_send_returns_403_when_cgu_not_accepted():
     # Arrange — participant_a has NOT accepted CGU
-    conv = ConversationFactory(
-        cgu_accepted_by_a=None, cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=None, cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
@@ -528,9 +486,7 @@ def test_message_send_returns_403_when_cgu_not_accepted():
 @pytest.mark.django_db
 def test_message_send_returns_400_when_sender_blocked():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     sender = conv.participant_a
     receiver = conv.participant_b
     MessageBlockFactory(blocker=sender, blocked=receiver)
@@ -549,9 +505,7 @@ def test_message_send_returns_400_when_sender_blocked():
 @pytest.mark.django_db
 def test_message_send_is_idempotent_with_same_client_message_id():
     # Arrange
-    conv = ConversationFactory(
-        cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now()
-    )
+    conv = ConversationFactory(cgu_accepted_by_a=timezone.now(), cgu_accepted_by_b=timezone.now())
     client = APIClient()
     client.force_authenticate(user=conv.participant_a)
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
@@ -736,9 +690,7 @@ def test_message_react_delete_returns_204(auth_client):
     conv = ConversationFactory(participant_a=auth_client._user)
     msg = MessageFactory(conversation=conv, sender=conv.participant_a)
     reaction = MessageReactionFactory(message=msg, user=auth_client._user, emoji="love")
-    url = reverse(
-        "api:messaging:message-react", kwargs={"message_id": reaction.message.id}
-    )
+    url = reverse("api:messaging:message-react", kwargs={"message_id": reaction.message.id})
 
     # Act
     response = auth_client.delete(url, {"emoji": "love"}, format="json")
@@ -751,9 +703,7 @@ def test_message_react_delete_returns_204(auth_client):
 def test_message_react_delete_returns_403_for_non_participant(auth_client):
     # Arrange — message belongs to a conversation auth_client._user is NOT in
     reaction = MessageReactionFactory(emoji="love")
-    url = reverse(
-        "api:messaging:message-react", kwargs={"message_id": reaction.message.id}
-    )
+    url = reverse("api:messaging:message-react", kwargs={"message_id": reaction.message.id})
 
     # Act
     response = auth_client.delete(url, {"emoji": "love"}, format="json")
@@ -765,9 +715,7 @@ def test_message_react_delete_returns_403_for_non_participant(auth_client):
 @pytest.mark.django_db
 def test_message_react_delete_requires_authentication(anon_client):
     reaction = MessageReactionFactory(emoji="love")
-    url = reverse(
-        "api:messaging:message-react", kwargs={"message_id": reaction.message.id}
-    )
+    url = reverse("api:messaging:message-react", kwargs={"message_id": reaction.message.id})
     response = anon_client.delete(url, {"emoji": "love"}, format="json")
     assert response.status_code == 401
 
@@ -806,9 +754,7 @@ def test_block_create_returns_201(auth_client):
     url = reverse("api:messaging:block-list-create")
 
     # Act
-    response = auth_client.post(
-        url, {"blocked_user_id": str(target.id)}, format="json"
-    )
+    response = auth_client.post(url, {"blocked_user_id": str(target.id)}, format="json")
 
     # Assert
     assert response.status_code == 201
@@ -836,9 +782,7 @@ def test_block_create_returns_400_when_user_already_blocked(auth_client):
     url = reverse("api:messaging:block-list-create")
 
     # Act
-    response = auth_client.post(
-        url, {"blocked_user_id": str(target.id)}, format="json"
-    )
+    response = auth_client.post(url, {"blocked_user_id": str(target.id)}, format="json")
 
     # Assert
     assert response.status_code == 400
@@ -847,9 +791,7 @@ def test_block_create_returns_400_when_user_already_blocked(auth_client):
 @pytest.mark.django_db
 def test_block_create_returns_400_when_blocking_self(auth_client):
     url = reverse("api:messaging:block-list-create")
-    response = auth_client.post(
-        url, {"blocked_user_id": str(auth_client._user.id)}, format="json"
-    )
+    response = auth_client.post(url, {"blocked_user_id": str(auth_client._user.id)}, format="json")
     assert response.status_code == 400
 
 
@@ -944,9 +886,7 @@ def test_notification_list_requires_authentication(anon_client):
 def test_notification_read_returns_200(auth_client):
     # Arrange
     notif = NotificationFactory(user=auth_client._user, is_read=False)
-    url = reverse(
-        "api:messaging:notification-read", kwargs={"notification_id": notif.id}
-    )
+    url = reverse("api:messaging:notification-read", kwargs={"notification_id": notif.id})
 
     # Act
     response = auth_client.post(url)
@@ -959,9 +899,7 @@ def test_notification_read_returns_200(auth_client):
 @pytest.mark.django_db
 def test_notification_read_requires_authentication(anon_client):
     notif = NotificationFactory()
-    url = reverse(
-        "api:messaging:notification-read", kwargs={"notification_id": notif.id}
-    )
+    url = reverse("api:messaging:notification-read", kwargs={"notification_id": notif.id})
     response = anon_client.post(url)
     assert response.status_code == 401
 
@@ -970,9 +908,7 @@ def test_notification_read_requires_authentication(anon_client):
 def test_notification_read_returns_400_for_wrong_user(auth_client):
     # Arrange — notification belongs to a different user
     notif = NotificationFactory(is_read=False)
-    url = reverse(
-        "api:messaging:notification-read", kwargs={"notification_id": notif.id}
-    )
+    url = reverse("api:messaging:notification-read", kwargs={"notification_id": notif.id})
 
     # Act
     response = auth_client.post(url)
@@ -1034,9 +970,7 @@ def test_global_cgu_grants_message_access_on_any_conversation():
 
     # Act — acceptation GLOBALE puis accès aux messages de la conversation
     client.post(reverse("api:messaging:messaging-cgu"))
-    response = client.get(
-        reverse("api:messaging:message-list", kwargs={"conversation_id": conv.id})
-    )
+    response = client.get(reverse("api:messaging:message-list", kwargs={"conversation_id": conv.id}))
 
     # Assert — l'acceptation globale vaut pour toutes les conversations
     assert response.status_code == 200
@@ -1052,9 +986,7 @@ def test_global_cgu_allows_sending_without_per_conversation_flag():
     url = reverse("api:messaging:message-send", kwargs={"conversation_id": conv.id})
 
     # Act — _check_cgu (couche service) doit aussi honorer l'acceptation globale
-    with patch(_FANOUT_WS), patch(_FANOUT_NOTIF), patch(
-        "apps.messaging.services.cache", _mock_cache()
-    ):
+    with patch(_FANOUT_WS), patch(_FANOUT_NOTIF), patch("apps.messaging.services.cache", _mock_cache()):
         response = client.post(url, {"content": "Bonjour"}, format="json")
 
     # Assert

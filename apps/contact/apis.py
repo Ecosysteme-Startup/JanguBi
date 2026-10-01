@@ -37,5 +37,7 @@ class PublicContactApi(APIView):
         try:
             presentation_request_create(**serializer.validated_data)
         except ContactValidationError as exc:
-            return Response({exc.extra.get("field", "non_field_errors"): [exc.message]}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {exc.extra.get("field", "non_field_errors"): [exc.message]}, status=status.HTTP_400_BAD_REQUEST
+            )
         return Response(PresentationRequestOutputSerializer({"received": True}).data, status=status.HTTP_201_CREATED)

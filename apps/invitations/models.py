@@ -46,7 +46,11 @@ class ClergyInvitation(BaseModel):
     # Pièce justificative facultative (celebret, lettre de l'ordinaire…), déposée par apps/files
     # par l'invitant à la création ou par la personne à l'acceptation.
     justificatif = models.ForeignKey(
-        "files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+        "files.File",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
         verbose_name=_("pièce justificative"),
     )
 

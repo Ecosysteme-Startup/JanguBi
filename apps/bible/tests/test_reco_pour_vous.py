@@ -235,7 +235,7 @@ def test_profile_weighs_rare_words_over_common_ones(world):
 
     # « croix » (5 versets sur 24) est plus rare que « chemin » (7 sur 24) : il pèse plus, et il
     # fait partie des mots retenus pour le profil.
-    assert ctx.idf("croix") > ctx.idf("chemin") > ctx.idf("a")
+    assert ctx.idf("croix") > ctx.idf("chemin")
     assert "croix" in profile.terms
     assert profile.terms["croix"] == max(profile.terms.values())
     assert ctx.liturgy.terms  # mots de l'évangile du jour

@@ -47,9 +47,7 @@ class ReadingFactory(DjangoModelFactory):
     type = factory.Sequence(lambda n: f"lecture{n % 3 + 1}")
     citation = factory.Sequence(lambda n: f"Lc {n + 1}, 1-10")
     text = factory.Sequence(lambda n: f"Texte de la lecture numéro {n}.")
-    raw_metadata = factory.LazyAttribute(
-        lambda o: {"type": o.type, "ref": o.citation, "contenu": o.text}
-    )
+    raw_metadata = factory.LazyAttribute(lambda o: {"type": o.type, "ref": o.citation, "contenu": o.text})
 
 
 class OfficeFactory(DjangoModelFactory):
@@ -66,9 +64,7 @@ class OfficeFactory(DjangoModelFactory):
         lambda: [{"number": 1, "antienne": "Antienne test", "psaume": {"texte": "Psaume test"}}]
     )
     canticle = "Cantique de Zacharie — Béni soit le Seigneur."
-    readings = factory.LazyFunction(
-        lambda: [{"titre": "Lecture courte", "texte": "Texte court"}]
-    )
+    readings = factory.LazyFunction(lambda: [{"titre": "Lecture courte", "texte": "Texte court"}])
     intercessions = "Seigneur, exauce-nous."
     raw_metadata = factory.LazyFunction(lambda: {})
 
@@ -82,6 +78,4 @@ class AelfDataEntryFactory(DjangoModelFactory):
     source_endpoint = "/v1/informations"
     date = factory.LazyFunction(lambda: timezone.now().date())
     zone = "afrique"
-    raw_json = factory.LazyFunction(
-        lambda: {"informations": {"jour": "Lundi", "temps": "Temps Ordinaire"}}
-    )
+    raw_json = factory.LazyFunction(lambda: {"informations": {"jour": "Lundi", "temps": "Temps Ordinaire"}})

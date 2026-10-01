@@ -20,6 +20,7 @@ from apps.users.models import BaseUser
 if TYPE_CHECKING:
     from apps.users.models import BaseUser
 
+
 def conversation_list(*, user: BaseUser, search: str | None = None) -> QuerySet[Conversation]:
     unread_subquery = (
         Message.objects.filter(
@@ -71,9 +72,7 @@ def messaging_cgu_get(*, user: BaseUser) -> Optional[MessagingCguAcceptance]:
     return MessagingCguAcceptance.objects.filter(user=user).first()
 
 
-def conversation_get(
-    *, conversation_id: UUID, user: BaseUser
-) -> Optional[Conversation]:
+def conversation_get(*, conversation_id: UUID, user: BaseUser) -> Optional[Conversation]:
     return (
         Conversation.objects.filter(pk=conversation_id)
         .filter(Q(participant_a=user) | Q(participant_b=user))
@@ -189,14 +188,10 @@ def block_list(*, user: BaseUser) -> QuerySet[MessageBlock]:
 
 
 def export_list(*, conversation: Conversation) -> QuerySet[ConversationExport]:
-    return ConversationExport.objects.filter(conversation=conversation).order_by(
-        "-created_at"
-    )
+    return ConversationExport.objects.filter(conversation=conversation).order_by("-created_at")
 
 
-def notification_list(
-    *, user: BaseUser, unread_only: bool = False
-) -> QuerySet[Notification]:
+def notification_list(*, user: BaseUser, unread_only: bool = False) -> QuerySet[Notification]:
     qs = Notification.objects.filter(user=user).order_by("-created_at")
     if unread_only:
         qs = qs.filter(is_read=False)

@@ -74,9 +74,11 @@ def test_anticipated_mass_follows_the_diocese_decision(world, included):
         assert exc.value.code == "mass_outside_imperee"
     with pytest.raises(ApplicationError):
         services.cash_collection_create(mass_date=SUNDAY - datetime.timedelta(days=7), **kwargs)
-    proposed = client_for(world.secretaire).get(
-        "/api/v1/staff/dons/quetes/fonds-proposes/", {"node": str(world.sd.pk), "date": str(SATURDAY)}
-    ).json()
+    proposed = (
+        client_for(world.secretaire)
+        .get("/api/v1/staff/dons/quetes/fonds-proposes/", {"node": str(world.sd.pk), "date": str(SATURDAY)})
+        .json()
+    )
     assert any(p["id"] == str(fund.pk) for p in proposed) is included
 
 

@@ -50,7 +50,9 @@ COVER_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
 def article_publish_check(*, user: Any, node: Node | None) -> None:
     if node is None:
         if not authz.peut(user, "plateforme.admin", None):
-            raise PermissionDeniedError("Seule la plateforme publie des contenus globaux.", code="global_scope_forbidden")
+            raise PermissionDeniedError(
+                "Seule la plateforme publie des contenus globaux.", code="global_scope_forbidden"
+            )
         return
     if not authz.peut(user, "annonces.publier", node):
         raise PermissionDeniedError("Vous ne pouvez pas publier sur ce nœud.", code="publish_forbidden")
@@ -302,8 +304,14 @@ def article_unpublish(*, article: Article, editor: Any, reason: str = "") -> Art
     article.pinned_at = None
     article.save(
         update_fields=[
-            "status", "unpublished_at", "unpublished_by", "unpublish_reason", "publish_at",
-            "pinned_until", "pinned_at", "updated_at",
+            "status",
+            "unpublished_at",
+            "unpublished_by",
+            "unpublish_reason",
+            "publish_at",
+            "pinned_until",
+            "pinned_at",
+            "updated_at",
         ]
     )
     audit_log(actor=editor, action="annonce.retrait", target=article, node=article.scope_node)
@@ -324,14 +332,15 @@ def article_pin(*, article: Article, editor: Any, until: datetime.datetime) -> A
     if until <= now:
         raise ApplicationError("La date de fin de l'épinglage doit être future.", code="pin_until_past")
     if until > now + datetime.timedelta(days=PIN_MAX_DAYS):
-        raise ApplicationError(
-            f"Un contenu s'épingle pour {PIN_MAX_DAYS} jours au plus.", code="pin_until_too_far"
-        )
+        raise ApplicationError(f"Un contenu s'épingle pour {PIN_MAX_DAYS} jours au plus.", code="pin_until_too_far")
     article.pinned_until = until
     article.pinned_at = now
     article.save(update_fields=["pinned_until", "pinned_at", "updated_at"])
     audit_log(
-        actor=editor, action="annonce.epinglage", target=article, node=article.scope_node,
+        actor=editor,
+        action="annonce.epinglage",
+        target=article,
+        node=article.scope_node,
         metadata={"until": until.isoformat()},
     )
     return article

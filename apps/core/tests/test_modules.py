@@ -51,7 +51,17 @@ def test_submodule_requires_its_parent():
 
 def test_v1_default_excludes_every_frozen_module():
     assert not FROZEN_BY_DEFAULT & set(V1_DEFAULT_MODULES)
-    for module in ("bible", "liturgy", "rosary", "messaging", "documents", "news", "agenda", "dashboards", "confessions"):
+    for module in (
+        "bible",
+        "liturgy",
+        "rosary",
+        "messaging",
+        "documents",
+        "news",
+        "agenda",
+        "dashboards",
+        "confessions",
+    ):
         assert module in V1_DEFAULT_MODULES
 
 
@@ -101,7 +111,11 @@ def test_frozen_task_is_absent_from_beat_schedule():
     schedule = {
         "lectio_reminder": {"task": "apps.bible.tasks.remind", "schedule": crontab(hour=1), "module": "bible.avance"},
         "purge_conversations": {"task": "apps.messaging.tasks.purge", "schedule": crontab(hour=3)},
-        "hours_sync": {"task": "apps.liturgy.tasks.sync_hours", "schedule": crontab(hour=2), "module": "liturgy.heures"},
+        "hours_sync": {
+            "task": "apps.liturgy.tasks.sync_hours",
+            "schedule": crontab(hour=2),
+            "module": "liturgy.heures",
+        },
         "celery_cleanup": {"task": "celery.backend_cleanup", "schedule": crontab(hour=4)},
     }
 

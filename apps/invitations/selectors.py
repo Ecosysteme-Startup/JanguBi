@@ -80,9 +80,7 @@ def accounts_list(*, user: Any, filters: dict[str, Any] | None = None) -> QueryS
     elif role:
         qs = qs.filter(degre_ordre=role)
     if q := (filters.get("q") or "").strip():
-        qs = qs.filter(
-            Q(email__icontains=q) | Q(profile__first_name__icontains=q) | Q(profile__last_name__icontains=q)
-        )
+        qs = qs.filter(Q(email__icontains=q) | Q(profile__first_name__icontains=q) | Q(profile__last_name__icontains=q))
     return qs.order_by("declared_at", "email")
 
 

@@ -9,14 +9,16 @@ def rosary_data():
     group = MysteryGroup.objects.create(name="Joyful Mysteries", slug="joyful")
     mystery = Mystery.objects.create(group=group, order=1, title="The Annunciation")
     prayer = Prayer.objects.create(type=Prayer.Type.OUR_FATHER, text="Our Father...", language="en")
-    day = RosaryDay.objects.create(weekday=0, group=group) # Monday
+    day = RosaryDay.objects.create(weekday=0, group=group)  # Monday
     return group, mystery, prayer, day
+
 
 @pytest.mark.django_db
 def test_get_groups(rosary_data):
     groups = RosaryService.get_groups()
     assert groups.count() == 1
     assert groups.first().name == "Joyful Mysteries"
+
 
 @pytest.mark.django_db
 def test_get_daily_rosary(rosary_data):
@@ -25,6 +27,7 @@ def test_get_daily_rosary(rosary_data):
     assert daily.group.name == "Joyful Mysteries"
     assert daily.weekday == 0
     assert daily.group.mysteries.count() == 1
+
 
 @pytest.mark.django_db
 def test_search_text(rosary_data):

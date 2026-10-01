@@ -142,7 +142,9 @@ class MinioStore:
         self.client.upload_file(str(local), self.bucket, self._key(name))
 
     def list(self, prefix: str) -> list[str]:
-        pages = self.client.get_paginator("list_objects_v2").paginate(Bucket=self.bucket, Prefix=self._key(f"{prefix}/"))
+        pages = self.client.get_paginator("list_objects_v2").paginate(
+            Bucket=self.bucket, Prefix=self._key(f"{prefix}/")
+        )
         start = len(self._key(""))
         return sorted(obj["Key"][start:] for page in pages for obj in page.get("Contents", []))
 
@@ -250,7 +252,14 @@ def user_album(folder: str | None) -> list[UserTrack]:
     for path in sorted(p for p in root.iterdir() if p.suffix.lower() in AUDIO_EXTENSIONS):
         meta = per_track.get(path.name) or {}
         attribution = meta.get("attribution") or " · ".join(
-            x for x in [album.get("artiste", ""), album.get("titre", ""), album.get("licence", ""), album.get("source", "")] if x
+            x
+            for x in [
+                album.get("artiste", ""),
+                album.get("titre", ""),
+                album.get("licence", ""),
+                album.get("source", ""),
+            ]
+            if x
         )
         tracks.append(
             UserTrack(
@@ -266,7 +275,9 @@ def user_album(folder: str | None) -> list[UserTrack]:
 
 
 def _ffmpeg(*args: str) -> None:
-    subprocess.run([settings.AUDIO_FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, timeout=1800)
+    subprocess.run(
+        [settings.AUDIO_FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, timeout=1800
+    )
 
 
 def piper_command(voice: str | None) -> list[str] | None:
