@@ -40,7 +40,7 @@ class CleaningServiceTests(TestCase):
         self.assertEqual(CleaningService.clean_text(raw), "Au commencement Dieu créa le ciel et la terre.")
 
     def test_strip_control_chars(self):
-        self.assertEqual(CleaningService.strip_control_chars("\x01\x02texte\x1F"), "texte")
+        self.assertEqual(CleaningService.strip_control_chars("\x01\x02texte\x1f"), "texte")
 
     def test_normalize_book_name(self):
         self.assertEqual(CleaningService.normalize_book_name("  genesis "), "genesis")

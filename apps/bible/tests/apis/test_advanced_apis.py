@@ -192,9 +192,7 @@ def test_lectio_divina_upsert_with_unknown_passage_still_returns_400(fidele_clie
 
 @pytest.mark.django_db
 def test_reading_plan_subscribe_returns_200_and_flags_subscription(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours Carême", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours Carême", is_published=True)
     url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
 
     resp = fidele_client.post(url, {}, format="json")
@@ -205,9 +203,7 @@ def test_reading_plan_subscribe_returns_200_and_flags_subscription(fidele_client
 
 @pytest.mark.django_db
 def test_reading_plan_subscribe_twice_is_idempotent(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours Avent", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours Avent", is_published=True)
     url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
 
     fidele_client.post(url, {}, format="json")
@@ -218,9 +214,7 @@ def test_reading_plan_subscribe_twice_is_idempotent(fidele_client, clergy_client
 
 @pytest.mark.django_db
 def test_reading_plan_subscribe_unpublished_returns_400(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Brouillon", is_published=False
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Brouillon", is_published=False)
     url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
 
     resp = fidele_client.post(url, {}, format="json")
@@ -230,9 +224,7 @@ def test_reading_plan_subscribe_unpublished_returns_400(fidele_client, clergy_cl
 
 @pytest.mark.django_db
 def test_reading_plan_unsubscribe_returns_200(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours Psaumes", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours Psaumes", is_published=True)
     subscribe_url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
     unsubscribe_url = reverse("api:bible:reading-plan-unsubscribe", kwargs={"plan_id": plan.pk})
     fidele_client.post(subscribe_url, {}, format="json")
@@ -245,9 +237,7 @@ def test_reading_plan_unsubscribe_returns_200(fidele_client, clergy_client):
 
 @pytest.mark.django_db
 def test_reading_plan_unsubscribe_without_subscription_returns_200(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours libre", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours libre", is_published=True)
     url = reverse("api:bible:reading-plan-unsubscribe", kwargs={"plan_id": plan.pk})
 
     resp = fidele_client.post(url, {}, format="json")
@@ -258,9 +248,7 @@ def test_reading_plan_unsubscribe_without_subscription_returns_200(fidele_client
 
 @pytest.mark.django_db
 def test_reading_plan_subscribe_requires_auth(clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours privé", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours privé", is_published=True)
     url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
 
     resp = APIClient().post(url, {}, format="json")
@@ -270,9 +258,7 @@ def test_reading_plan_subscribe_requires_auth(clergy_client):
 
 @pytest.mark.django_db
 def test_reading_plan_list_exposes_is_subscribed(fidele_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours listé", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours listé", is_published=True)
     subscribe_url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
     fidele_client.post(subscribe_url, {}, format="json")
 
@@ -284,9 +270,7 @@ def test_reading_plan_list_exposes_is_subscribed(fidele_client, clergy_client):
 
 @pytest.mark.django_db
 def test_reading_plan_list_is_not_subscribed_for_another_user(fidele_client, diacre_client, clergy_client):
-    plan = ReadingPlan.objects.create(
-        author=clergy_client._user, title="Parcours partagé", is_published=True
-    )
+    plan = ReadingPlan.objects.create(author=clergy_client._user, title="Parcours partagé", is_published=True)
     subscribe_url = reverse("api:bible:reading-plan-subscribe", kwargs={"plan_id": plan.pk})
     fidele_client.post(subscribe_url, {}, format="json")
 

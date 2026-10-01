@@ -14,18 +14,19 @@ class BibleApiTests(APITestCase):
         # Setup basic data
         self.testament_at = Testament.objects.create(slug="ancien", name="Ancien Testament", order=1)
         self.testament_nt = Testament.objects.create(slug="nouveau", name="Nouveau Testament", order=2)
-        
+
         self.book1 = Book.objects.create(name="Genèse", slug="genese", testament=self.testament_at, order=1)
         self.book2 = Book.objects.create(name="Exode", slug="exode", testament=self.testament_at, order=2)
-        
+
         self.chapter1 = Chapter.objects.create(book=self.book1, number=1)
         self.chapter2 = Chapter.objects.create(book=self.book1, number=2)
-        
+
         self.verse1 = Verse.objects.create(chapter=self.chapter1, number=1, text="Au commencement Dieu...")
         self.verse2 = Verse.objects.create(chapter=self.chapter1, number=2, text="La terre était sans forme...")
-        
+
         # Populate TSV for search simulation
         from apps.bible.services.index_service import IndexService
+
         IndexService.populate_tsv_for_book(self.book1.id)
 
     def test_list_testaments(self):
@@ -118,7 +119,7 @@ class BibleApiTests(APITestCase):
         url = reverse("api:bible:search") + "?q=Dieu&limit=1"
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Search API does not follow DRF PageNumberPagination by default, it just limits results inside `SearchService`. 
+        # Search API does not follow DRF PageNumberPagination by default, it just limits results inside `SearchService`.
         # But we ensure the limit is respected (we only have 1 match for Dieu anyway here).
         self.assertEqual(len(response.data[0]["matches"]), 1)
 
@@ -132,9 +133,11 @@ class BibleApiTests(APITestCase):
 
         # Norm user
         user = BaseUser.objects.create_user(
-            email="test@test.com", password="pwd",
+            email="test@test.com",
+            password="pwd",
             phone_number="+221771000001",
-            is_active=True, is_verified=True,
+            is_active=True,
+            is_verified=True,
         )
         self.client.force_authenticate(user=user)
         response = self.client.post(url, {"filename": "bible.json", "source": "b"})
