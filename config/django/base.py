@@ -337,33 +337,33 @@ REST_FRAMEWORK = {
     # Filet de sécurité global : sans ce réglage, toute vue qui oublie ApiAuthMixin
     # retombe sur le défaut DRF (Session+Basic) et IGNORE le Bearer JWT — c'était
     # la cause du 401 systématique de la Liturgie des Heures côté SPA/mobile.
-    'DEFAULT_AUTHENTICATION_CLASSES': [
+    "DEFAULT_AUTHENTICATION_CLASSES": [
         # Keycloak seul (ADR-004).
-        'apps.authentication.keycloak.KeycloakJWTAuthentication',
+        "apps.authentication.keycloak.KeycloakJWTAuthentication",
     ],
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    'DEFAULT_FILTER_BACKENDS': [
-            'django_filters.rest_framework.DjangoFilterBackend',
-            'rest_framework.filters.SearchFilter',
-        ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
-    'PAGE_SIZE': 10,
-    'DEFAULT_PARSER_CLASSES': [
-        'rest_framework.parsers.JSONParser',
-        'rest_framework.parsers.MultiPartParser',
-        'rest_framework.parsers.FormParser',
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
+    "PAGE_SIZE": 10,
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.MultiPartParser",
+        "rest_framework.parsers.FormParser",
     ],
     # Quotas de débit. Pas de DEFAULT_THROTTLE_CLASSES global (éviterait de
     # throttler aveuglément tous les endpoints) ; ces rates sont consommés par
     # les throttles déclarés explicitement sur les vues sensibles. Le scope
     # 'rag' borne l'endpoint LLM/recherche sémantique (BUG : était inopérant —
     # UserRateThrottle sans rate => throttle silencieusement désactivé).
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '60/min',
-        'user': '240/min',
-        'rag': '20/min',
-        'login': env.str("LOGIN_THROTTLE_RATE", default="10/min"),
-        'register': env.str("REGISTER_THROTTLE_RATE", default="10/hour"),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "240/min",
+        "rag": "20/min",
+        "login": env.str("LOGIN_THROTTLE_RATE", default="10/min"),
+        "register": env.str("REGISTER_THROTTLE_RATE", default="10/hour"),
     },
     # Nombre de proxys de confiance DEVANT l'application. Réglage de SÉCURITÉ,
     # pas de confort : sans lui, DRF laissé à `None` construit l'identité de
@@ -377,7 +377,7 @@ REST_FRAMEWORK = {
     # on lit REMOTE_ADDR directement (exécution en local sans reverse proxy).
     # ⚠️ Doit correspondre à la topologie réelle : trop grand, on lit une valeur
     # forgée par le client ; trop petit, on limite le proxy au lieu du client.
-    'NUM_PROXIES': env.int("NUM_PROXIES", default=1),
+    "NUM_PROXIES": env.int("NUM_PROXIES", default=1),
 }
 
 YOUTUBE_API_KEY = env.str("YOUTUBE_API_KEY", default="")
@@ -392,7 +392,7 @@ CACHES = {
             # Préfixe propre à Jàngu Bi (l'ancien, « guiss_talli », venait d'un autre projet
             # hébergé sur le même serveur : risque de collision de clés sur un Redis partagé).
             "KEY_PREFIX": "jangubi",
-        }
+        },
     }
 }
 
@@ -426,7 +426,8 @@ from config.settings.celery import *  # noqa
 from config.settings.cors import *  # noqa
 from config.settings.email_sending import *  # noqa
 from config.settings.files_and_storages import *  # noqa
-#from config.settings.google_oauth2 import *  # noqa
+
+# from config.settings.google_oauth2 import *  # noqa
 from config.settings.keycloak import *  # noqa
 from config.settings.parole import *  # noqa
 from config.settings.conformite import *  # noqa
@@ -436,7 +437,6 @@ from config.settings.temps_reel import *  # noqa
 from config.settings.sentry import *  # noqa
 from config.settings.sessions import *  # noqa
 from config.settings.drf_spectacular import *  # noqa
-from config.settings.rag import *  # noqa
 
 from config.settings.debug_toolbar.settings import *  # noqa
 from config.settings.debug_toolbar.setup import DebugToolbarSetup  # noqa

@@ -9,10 +9,10 @@ django-celery-beat==2.8.1
 
 whitenoise==6.11.0
 
+# pgvector : importé par les migrations initiales (colonnes vectorielles d'avant ADR-018) ; aucun
+# usage à l'exécution. Pas de modèle d'embeddings : aucune IA dans la plateforme (ADR-018).
 pgvector==0.4.2
-# Embeddings locaux gratuits (ONNX, sans torch) pour la recherche sémantique.
-fastembed==0.8.0
-# Sonothèque : forme d'onde et calculs des recommandations (déjà tiré par pgvector et fastembed).
+# Sonothèque : forme d'onde audio.
 numpy==2.4.6
 
 django-filter==25.2

@@ -25,7 +25,7 @@ class TrackAdmin(admin.ModelAdmin):
     list_filter = ("status", "effective_visibility")
     search_fields = ("title",)
     raw_id_fields = ("source", "album", "raw_file", "uploaded_by")
-    exclude = ("search_vector", "embedding")
+    exclude = ("search_vector",)
 
 
 @admin.register(Playlist)
