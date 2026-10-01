@@ -43,7 +43,9 @@ pytestmark = [
 
 @pytest.fixture
 def frozen():
-    with override_settings(BIBLE_EDITION="", LITURGY_ZONE="afrique"):
+    # Jeu d'essai de 25 versets : « croix » y est dans 20 % des versets ; on relève le plafond des mots
+    # courants (5 % sur la vraie Bible), sans quoi aucun mot ne départagerait les versets.
+    with override_settings(BIBLE_EDITION="", LITURGY_ZONE="afrique", PAROLE_RECO_MAX_DF_RATIO=0.5):
         with freeze_time(NOW):
             yield
 
@@ -237,6 +239,19 @@ def test_profile_weighs_rare_words_over_common_ones(world):
     assert "croix" in profile.terms
     assert profile.terms["croix"] == max(profile.terms.values())
     assert ctx.liturgy.terms  # mots de l'évangile du jour
+
+
+def test_too_common_words_are_left_out_of_the_profile(world):
+    lu(world.mt_user, chapter=world.lc9, days_ago=1)  # tout le chapitre
+    ctx = reco.reco_context_build(today=TODAY)
+
+    with override_settings(PAROLE_RECO_MAX_DF_RATIO=0.25):
+        profile = reco.reading_profile_build(user=world.mt_user, now=timezone.now(), ctx=ctx)
+
+    # « chemin » est dans 7 versets sur 25 (28 %) : trop courant, même lu cinq fois ; « croix » (20 %) reste.
+    assert ctx.idf("chemin") > 0  # sous le plafond du jeu d'essai (50 %)
+    assert "chemin" not in profile.terms
+    assert "croix" in profile.terms
 
 
 def test_finished_chapter_suggests_the_next_one(world):

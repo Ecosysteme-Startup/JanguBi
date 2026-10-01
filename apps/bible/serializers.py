@@ -28,7 +28,7 @@ class TestamentWithBooksOutputSerializer(serializers.ModelSerializer):
 class BookMetadataOutputSerializer(serializers.ModelSerializer):
     testament: serializers.SlugRelatedField = serializers.SlugRelatedField(read_only=True, slug_field="slug")
     chapter_count = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
         model = Book
         fields = ("id", "name", "slug", "order", "testament", "verse_count", "chapter_count")
@@ -55,6 +55,7 @@ class SearchVerseOutputSerializer(serializers.Serializer):
 
 class SearchMatchOutputSerializer(serializers.Serializer):
     """Shape of the search result specific to a matching verse."""
+
     verse = SearchVerseOutputSerializer()
     # Some results (especially hybrid) might bring custom fields like score or no_internal_source
     no_internal_source = serializers.BooleanField(required=False, default=False)
@@ -63,6 +64,7 @@ class SearchMatchOutputSerializer(serializers.Serializer):
 
 class SearchBookMetadataOutputSerializer(serializers.Serializer):
     """Shape of book metadata returned by search service."""
+
     id = serializers.IntegerField()
     name = serializers.CharField()
     slug = serializers.CharField()
@@ -72,6 +74,7 @@ class SearchBookMetadataOutputSerializer(serializers.Serializer):
 
 class SearchBookGroupOutputSerializer(serializers.Serializer):
     """Shape of search results grouped by book."""
+
     book = SearchBookMetadataOutputSerializer()
     matches = SearchMatchOutputSerializer(many=True)
 

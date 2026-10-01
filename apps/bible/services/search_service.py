@@ -4,7 +4,8 @@
    ``websearch_to_tsquery`` (« expression entre guillemets », ``-mot`` pour exclure, ``or``).
    Score = 0,6 × ``ts_rank`` + 0,4 × similarité trigramme du texte.
 2. Repli trigramme quand le plein texte ne trouve rien (faute de frappe, mot tronqué) :
-   opérateur ``%`` sur l'index GIN ``idx_verse_trgm``, seuil ``TRIGRAM_THRESHOLD``.
+   ``word_similarity`` (opérateur ``<%``, index GIN ``idx_verse_trgm``) : la requête est comparée
+   aux mots du verset, pas au verset entier ; seuil ``TRIGRAM_THRESHOLD``.
 """
 
 import logging
@@ -17,9 +18,10 @@ from apps.bible.services.cleaning import CleaningService
 
 logger = logging.getLogger(__name__)
 
-# Seuil de similarité trigramme du repli (0 à 1) : fixé pour la transaction (SET LOCAL), l'opérateur
-# « % » peut alors utiliser l'index GIN, là où « similarity() > seuil » parcourt toute la table.
-TRIGRAM_THRESHOLD = 0.15
+# Seuil de word_similarity du repli (0 à 1), fixé pour la requête : l'opérateur « <% » utilise alors
+# l'index GIN. Mesuré en recette (35 283 versets) : « comencement » → 0,2 s, contre 4 s avec
+# similarity() au seuil 0,15 (un mot comparé au verset entier ne filtre presque rien).
+TRIGRAM_THRESHOLD = 0.6
 
 
 class SearchService:
@@ -115,12 +117,12 @@ class SearchService:
                 c.number as chapter_number,
                 b.id as book_id, b.name as book_name, b.slug as book_slug, b.order as book_order,
                 t.slug as testament_slug,
-                similarity(v.text, %s) as score
+                word_similarity(%s, v.text) as score
             FROM bible_verse v
             JOIN bible_chapter c ON v.chapter_id = c.id
             JOIN bible_book b ON c.book_id = b.id
             JOIN bible_testament t ON b.testament_id = t.id
-            WHERE v.text %% %s
+            WHERE %s <%% v.text
         """
         params = [query, query]
 
@@ -131,12 +133,12 @@ class SearchService:
 
         # Seuil local à la transaction... mais sous ATOMIC_REQUESTS, atomic() n'ouvre qu'un savepoint et
         # un SET LOCAL survit à son RELEASE : on remet donc l'ancienne valeur, sinon les recherches
-        # trigrammes suivantes de la même requête HTTP (audio, recherche globale) hériteraient de 0,15.
+        # trigrammes suivantes de la même requête HTTP (audio, recherche globale) hériteraient de ce seuil.
         with transaction.atomic():
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "SELECT current_setting('pg_trgm.similarity_threshold'), "
-                    "set_config('pg_trgm.similarity_threshold', %s, true)",
+                    "SELECT current_setting('pg_trgm.word_similarity_threshold'), "
+                    "set_config('pg_trgm.word_similarity_threshold', %s, true)",
                     [str(TRIGRAM_THRESHOLD)],
                 )
                 previous = cursor.fetchone()[0]
@@ -144,7 +146,7 @@ class SearchService:
                 return self._execute_search_query(sql, params)
             finally:
                 with connection.cursor() as cursor:
-                    cursor.execute("SELECT set_config('pg_trgm.similarity_threshold', %s, true)", [previous])
+                    cursor.execute("SELECT set_config('pg_trgm.word_similarity_threshold', %s, true)", [previous])
 
     def _apply_filters(
         self,

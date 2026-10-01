@@ -5,8 +5,10 @@ des mots dans toute la Bible (TF-IDF), et calculée dans PostgreSQL à partir de
 (plein texte ``fr_unaccent``, index GIN existant).
 
 Méthode :
-- poids d'un mot = ``log((N + 1) / (df + 1))`` : un mot présent dans presque tous les versets
-  (« Dieu », « dire ») ne compte presque pas, un mot rare (« vigne », « talent ») compte beaucoup ;
+- poids d'un mot = ``log((N + 1) / (df + 1))`` : un mot rare (« vigne », « talent ») compte
+  beaucoup ; un mot présent dans plus de ``PAROLE_RECO_MAX_DF_RATIO`` des versets (« le », « dit »,
+  « Dieu ») ne compte pas du tout — sinon un chapitre lu (trente versets) additionne trente fois
+  ses mots courants, qui passent devant les mots rares et rendent la recherche lente ;
 - profil du fidèle = mots des versets lus et marqués, chacun pondéré par le signal (lu, signet,
   surlignage…) et par la récence (moitié du poids tous les ``PAROLE_RECO_HALF_LIFE_DAYS`` jours) ;
   on garde les ``PROFILE_TERMS`` mots les plus lourds ;
@@ -195,8 +197,11 @@ class RecoContext:
     document_frequencies: dict[str, int]
 
     def idf(self, term: str) -> float:
-        """Rareté d'un mot : 0 s'il est dans tous les versets, élevée s'il est rare."""
-        return math.log((self.total_verses + 1) / (self.document_frequencies.get(term, 0) + 1))
+        """Rareté d'un mot : élevée s'il est rare, 0 s'il est trop courant pour départager des versets."""
+        df = self.document_frequencies.get(term, 0)
+        if df > settings.PAROLE_RECO_MAX_DF_RATIO * self.total_verses:
+            return 0.0
+        return math.log((self.total_verses + 1) / (df + 1))
 
 
 def reading_kind(reading_type: str) -> str:
