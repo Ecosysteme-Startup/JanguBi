@@ -70,11 +70,11 @@ class SearchServiceTests(TransactionTestCase):
 
         with transaction.atomic():  # comme sous ATOMIC_REQUESTS
             with connection.cursor() as cursor:
-                cursor.execute("SHOW pg_trgm.similarity_threshold")
+                cursor.execute("SHOW pg_trgm.word_similarity_threshold")
                 before = cursor.fetchone()[0]
             self.service.search("comencement", source_file=None)
             with connection.cursor() as cursor:
-                cursor.execute("SHOW pg_trgm.similarity_threshold")
+                cursor.execute("SHOW pg_trgm.word_similarity_threshold")
                 after = cursor.fetchone()[0]
 
         self.assertEqual(after, before)
