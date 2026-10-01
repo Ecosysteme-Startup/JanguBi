@@ -190,7 +190,9 @@ def test_exceptions_create_list_delete(admin, anon, tree):
     place = make_place(tree.saint_dominique, "Église", is_main=True)
     url = f"{BASE}/places/{place.pk}/exceptions/"
 
-    created = admin.post(url, {"date": "2099-12-24", "kind": "messe", "start_time": "23:00", "note": "Veillée"}, format="json")
+    created = admin.post(
+        url, {"date": "2099-12-24", "kind": "messe", "start_time": "23:00", "note": "Veillée"}, format="json"
+    )
     listing = anon.get(url)
     deleted = admin.delete(f"{url}{created.data['id']}/")
 
@@ -201,7 +203,9 @@ def test_exceptions_create_list_delete(admin, anon, tree):
 
 def test_public_week(anon, tree):
     place = make_place(tree.saint_dominique, "Église", is_main=True)
-    schedule_replace(place=place, items=[{"weekday": 6, "start_time": time(9, 30)}, {"weekday": 6, "start_time": time(11, 30)}])
+    schedule_replace(
+        place=place, items=[{"weekday": 6, "start_time": time(9, 30)}, {"weekday": 6, "start_time": time(11, 30)}]
+    )
     schedule_exception_create(place=place, date=date(2026, 10, 4), cancelled=True, start_time=time(11, 30))
 
     response = anon.get(f"/api/v1/public/nodes/{tree.saint_dominique.pk}/week/", {"start": "2026-09-28"})

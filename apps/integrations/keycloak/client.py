@@ -74,7 +74,12 @@ class KeycloakAdminClient(KeycloakAdmin):
     # --- actions ------------------------------------------------------------------------
 
     def execute_actions_email(
-        self, user_id: str, actions: list[str], *, lifespan: int | None = None, client_id: str | None = None,
+        self,
+        user_id: str,
+        actions: list[str],
+        *,
+        lifespan: int | None = None,
+        client_id: str | None = None,
         redirect_uri: str | None = None,
     ) -> None:
         params: dict[str, Any] = {}

@@ -197,10 +197,20 @@ def test_secondary_parishes_have_their_own_feed(tree):
     now = timezone.now()
     author = person("secretariat@sd.sn")
     kermesse = ArticleFactory(
-        title="Kermesse", slug="kermesse", author=author, status="published", scope_node=tree.saint_dominique, published_at=now
+        title="Kermesse",
+        slug="kermesse",
+        author=author,
+        status="published",
+        scope_node=tree.saint_dominique,
+        published_at=now,
     )
     concert = ArticleFactory(
-        title="Concert", slug="concert", author=author, status="published", scope_node=tree.sainte_therese, published_at=now
+        title="Concert",
+        slug="concert",
+        author=author,
+        status="published",
+        scope_node=tree.sainte_therese,
+        published_at=now,
     )
     ArticleFactory(title="Global", slug="global", author=author, status="published", scope_node=None, published_at=now)
     client = _client(marie)

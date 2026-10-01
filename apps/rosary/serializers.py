@@ -13,6 +13,7 @@ class PrayerSerializer(serializers.ModelSerializer):
 
 class SearchPrayerSerializer(PrayerSerializer):
     """Extends PrayerSerializer to show rank from full text search."""
+
     rank = serializers.FloatField(read_only=True, required=False)
 
     class Meta(PrayerSerializer.Meta):
@@ -33,7 +34,17 @@ class MysterySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Mystery
-        fields = ("id", "order", "title", "meditation", "meditation_source", "fruit", "audio_file", "audio_duration", "prayers")
+        fields = (
+            "id",
+            "order",
+            "title",
+            "meditation",
+            "meditation_source",
+            "fruit",
+            "audio_file",
+            "audio_duration",
+            "prayers",
+        )
 
     def get_prayers(self, obj):
         # Conditionally include prayers only if prefetch_prayers was used or flag requested

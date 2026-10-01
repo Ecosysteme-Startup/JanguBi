@@ -88,7 +88,10 @@ def test_paydunya_ipn_form_and_json():
     ).encode()  # fmt: skip
     state = PayDunyaProvider().verify_callback(headers={}, body=form)
     assert (state.external_ref, state.status, state.amount, state.method) == (
-        "abc", ProviderStatus.COMPLETED, 5100, PaymentMethod.ORANGE_MONEY
+        "abc",
+        ProviderStatus.COMPLETED,
+        5100,
+        PaymentMethod.ORANGE_MONEY,
     )
     as_json = json.dumps({"data": {"hash": good, "status": "cancelled", "invoice": {"token": "abc"}}}).encode()
     assert PayDunyaProvider().verify_callback(headers={}, body=as_json).status == ProviderStatus.CANCELLED
@@ -156,9 +159,12 @@ def test_selector_filters(world, fund, django_capture_on_commit_callbacks):
     )  # fmt: skip
     assert ops.count() == 1
     assert selectors.cash_collections_for_parish(node=world.sd, status="saisie").count() == 0
-    assert selectors.export_rows(node=world.sd, date_from=today, date_to=today, fund_id=fund.pk, with_names=False)[0][
-        "donateur"
-    ] == "Donateur"
+    assert (
+        selectors.export_rows(node=world.sd, date_from=today, date_to=today, fund_id=fund.pk, with_names=False)[0][
+            "donateur"
+        ]
+        == "Donateur"
+    )
 
 
 @pytest.mark.django_db
@@ -170,7 +176,9 @@ def test_reconciliation_issues_and_health(world, fund):
             counter_one="A", counter_two="B", entered_by=world.secretaire,
         )  # fmt: skip
     today = timezone.localdate()
-    report = selectors.parish_reconciliation(node=world.sd, date_from=today - datetime.timedelta(days=30), date_to=today)
+    report = selectors.parish_reconciliation(
+        node=world.sd, date_from=today - datetime.timedelta(days=30), date_to=today
+    )
     assert {i["kind"] for i in report["issues"]} == {"paiement_en_attente", "quete_non_validee"}
     client_headers = {"HTTP_X_FAKE_SIGNATURE": "faux"}
     from apps.donations.tests.conftest import client_for

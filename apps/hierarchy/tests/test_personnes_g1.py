@@ -179,7 +179,9 @@ def test_declaration_attaches_own_finished_files(world):
 
     candidate.refresh_from_db()
     assert candidate.declared_at is not None
-    assert list(DeclarationAttachment.objects.filter(person=candidate).values_list("file_id", flat=True)) == [celebret.pk]
+    assert list(DeclarationAttachment.objects.filter(person=candidate).values_list("file_id", flat=True)) == [
+        celebret.pk
+    ]
 
 
 @pytest.mark.parametrize(
@@ -252,7 +254,9 @@ def test_complement_api_without_motive_is_a_400(world):
 
 def test_person_completes_the_declaration(world):
     candidate = _declare(world)
-    person_verification_decide(actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante.")
+    person_verification_decide(
+        actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante."
+    )
     lettre = FileFactory.create(uploaded_by=candidate, original_file_name="lettre-provincial.pdf")
 
     response = client_for(candidate).post(
@@ -273,7 +277,9 @@ def test_person_completes_the_declaration(world):
 
 def test_me_declaration_shows_the_complement_request(world):
     candidate = _declare(world)
-    person_verification_decide(actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante.")
+    person_verification_decide(
+        actor=world.chancelier, person=candidate, decision="complement", note="Lettre manquante."
+    )
 
     data = client_for(candidate).get("/api/v1/me/declaration/").data
 
@@ -291,7 +297,9 @@ def test_account_deletion_forgets_the_attachments(world):
 
     candidate = person(verified=False)
     celebret = FileFactory.create(uploaded_by=candidate)
-    person_declaration_submit(person=candidate, etat_de_vie="clerc", degre_ordre="pretre", attachment_file_ids=[celebret.pk])
+    person_declaration_submit(
+        person=candidate, etat_de_vie="clerc", degre_ordre="pretre", attachment_file_ids=[celebret.pk]
+    )
 
     account_delete(user=candidate)
 

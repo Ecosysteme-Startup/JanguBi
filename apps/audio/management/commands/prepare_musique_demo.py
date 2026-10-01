@@ -39,7 +39,9 @@ class Command(BaseCommand):
         selection = yaml.safe_load(SELECTION.read_text(encoding="utf-8"))
         source = pathlib.Path(pack).expanduser() if pack else ROOT / selection["pack"]
         if not source.is_dir():
-            raise CommandError(f"Pack introuvable : {source}. Décompressez l'archive dans seed_assets/ ou passez --pack.")
+            raise CommandError(
+                f"Pack introuvable : {source}. Décompressez l'archive dans seed_assets/ ou passez --pack."
+            )
         out = pathlib.Path(sortie).expanduser()
         out.mkdir(parents=True, exist_ok=True)
         credits: dict[str, Any] = {"album": selection["album"], "pistes": {}}
@@ -61,7 +63,9 @@ class Command(BaseCommand):
                 "attribution": f"{selection['album']['artiste']} · « {stem} » · démonstration interne",
             }
             self.stdout.write(f"  {name} ← {track['source']}")
-        (out / "credits.yaml").write_text(yaml.safe_dump(credits, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        (out / "credits.yaml").write_text(
+            yaml.safe_dump(credits, allow_unicode=True, sort_keys=False), encoding="utf-8"
+        )
         for name in missing:
             self.stdout.write(self.style.WARNING(f"  absente du pack : {name}"))
         done = len(credits["pistes"])
@@ -73,4 +77,6 @@ class Command(BaseCommand):
             if isinstance(store, LocalStore):
                 raise CommandError("--publier : MinIO non configuré (AWS_S3_ACCESS_KEY_ID absent).")
             count = publish_folder(store, out)
-            self.stdout.write(self.style.SUCCESS(f"{count} fichier(s) copiés dans {store.kind}, dossier musique-demo/."))
+            self.stdout.write(
+                self.style.SUCCESS(f"{count} fichier(s) copiés dans {store.kind}, dossier musique-demo/.")
+            )

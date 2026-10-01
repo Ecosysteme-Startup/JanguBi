@@ -45,7 +45,9 @@ def _ws_push(user_id: Any, event_type: str, payload: dict[str, Any]) -> None:
     if layer is None:
         return
     try:
-        async_to_sync(layer.group_send)(f"user_{user_id}", {"type": "notification.push", "event_type": event_type, **payload})
+        async_to_sync(layer.group_send)(
+            f"user_{user_id}", {"type": "notification.push", "event_type": event_type, **payload}
+        )
     except Exception:  # noqa: BLE001 — une socket fermée ne doit pas bloquer la diffusion
         logger.warning("notification.ws_push_failed", extra={"user_id": str(user_id)})
 

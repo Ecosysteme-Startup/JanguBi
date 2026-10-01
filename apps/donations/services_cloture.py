@@ -93,9 +93,7 @@ def months_auto_close(*, today: datetime.date | None = None) -> int:
 
 
 @transaction.atomic
-def adjustment_create(
-    *, actor: Any, fund: Fund, channel: str, amount: int, reason: str
-) -> DonationAdjustment:
+def adjustment_create(*, actor: Any, fund: Fund, channel: str, amount: int, reason: str) -> DonationAdjustment:
     """Correction d'un mois clos : écriture signée datée du jour, sur le fonds concerné (c. 1267 §3)."""
     access.require_parish_level(actor, "dons.gerer_fonds", fund.node)
     if not access.is_parish(fund.node):
@@ -122,8 +120,10 @@ def adjustment_create(
 def incident_resolve(*, incident: PaymentIncident, actor: Any, resolution: str, note: str = "") -> PaymentIncident:
     """Régularise un incident. ``integre`` (paiement tardif seulement) confirme le don, daté du jour :
     le fidèle a bien payé, l'argent va à son fonds. ``rembourse`` : remboursé chez l'agrégateur."""
-    incident = PaymentIncident.objects.select_for_update(of=("self",)).select_related("donation__fund__node").get(
-        pk=incident.pk
+    incident = (
+        PaymentIncident.objects.select_for_update(of=("self",))
+        .select_related("donation__fund__node")
+        .get(pk=incident.pk)
     )
     node = incident.donation.fund.node
     access.require_parish_level(actor, "dons.gerer_fonds", node)

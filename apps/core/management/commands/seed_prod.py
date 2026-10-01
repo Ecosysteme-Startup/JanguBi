@@ -72,12 +72,15 @@ class Command(BaseCommand):
             # Synchrone : les lectures doivent exister avant leur rattachement aux versets.
             daily_sync_task.apply(args=[day.isoformat(), [zone]])
         served = set(
-            Reading.objects.filter(liturgical_date__zone=zone, liturgical_date__date__in=days)
-            .values_list("liturgical_date__date", flat=True)
+            Reading.objects.filter(liturgical_date__zone=zone, liturgical_date__date__in=days).values_list(
+                "liturgical_date__date", flat=True
+            )
         )
         self.stdout.write(f"  {len(served)}/{jours} jour(s) avec lectures, zone {zone}")
         if len(served) < jours:
-            self.stdout.write(self.style.WARNING("  AELF injoignable pour certains jours : relancer seed_prod plus tard."))
+            self.stdout.write(
+                self.style.WARNING("  AELF injoignable pour certains jours : relancer seed_prod plus tard.")
+            )
 
     def _step(self, label: str) -> None:
         self.stdout.write(self.style.MIGRATE_HEADING(f"▸ {label}"))

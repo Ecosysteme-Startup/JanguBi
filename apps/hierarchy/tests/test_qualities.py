@@ -95,7 +95,11 @@ def test_create_accepts_administrateur_and_audits_it(world):
 def test_create_rejects_an_unknown_quality(world):
     with pytest.raises(ApplicationError) as exc:
         assignment_create(
-            actor=world.chancelier, person=priest(), office_type=office("cure"), node=world.saint_dominique, quality="eveque"
+            actor=world.chancelier,
+            person=priest(),
+            office_type=office("cure"),
+            node=world.saint_dominique,
+            quality="eveque",
         )
     assert exc.value.code == "invalid_quality"
 
@@ -129,7 +133,9 @@ def test_quality_set_requires_the_appointing_authority(world):
 
 
 def test_quality_set_refuses_a_closed_assignment(world):
-    assignment = nominate(priest(), "cure", world.saint_dominique, status="terminee", end_date=datetime.date(2021, 1, 1))
+    assignment = nominate(
+        priest(), "cure", world.saint_dominique, status="terminee", end_date=datetime.date(2021, 1, 1)
+    )
     with pytest.raises(ApplicationError) as exc:
         assignment_quality_set(actor=world.chancelier, assignment=assignment, quality="cure")
     assert exc.value.code == "assignment_closed"

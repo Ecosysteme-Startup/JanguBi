@@ -58,6 +58,20 @@ class SearchServiceTests(TransactionTestCase):
 
         self.assertEqual([r["book"]["name"] for r in results], ["Genèse", "Jean"])
 
+    def test_accented_stop_words_are_not_indexed(self):
+        # Les mots vides sont filtrés AVANT le retrait des accents (audio.0006) : « était », « été », « à »
+        # ne deviennent plus « etait », « ete », « a » ; les mots pleins restent sans accents.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT to_tsvector('fr_unaccent', 'Il était là, à Jérusalem ; l''Église a été fondée.')::text"
+            )
+            vector = cursor.fetchone()[0]
+
+        self.assertNotIn("'etait'", vector)
+        self.assertNotIn("'ete'", vector)
+        self.assertIn("'eglis'", vector)
+        self.assertIn("'jerusalem'", vector)
+
     def test_search_tolerates_a_typo_through_trigrams(self):
         # « comencement » (faute) : le plein texte ne trouve rien, le repli trigramme si.
         results = self.service.search("comencement", source_file=None)

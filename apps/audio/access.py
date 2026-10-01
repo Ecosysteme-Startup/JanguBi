@@ -252,11 +252,7 @@ def _track_published(track: Track) -> bool:
 
 def is_reserved_for_members(user: Any, track: Track) -> bool:
     """Piste publiée, réservée aux paroissiens, que ``user`` ne peut pas écouter (décision 4)."""
-    return (
-        _track_published(track)
-        and track.effective_visibility == Visibility.PAROISSE
-        and not can_play(user, track)
-    )
+    return _track_published(track) and track.effective_visibility == Visibility.PAROISSE and not can_play(user, track)
 
 
 def reserved_error(node: Node) -> PermissionDeniedError:

@@ -112,7 +112,9 @@ def test_node_list_filters(tree):
         "T-ST",
         "T-THI-CATH",
     }
-    assert set(selectors.node_list(filters={"within": tree.dakar.pk, "type": "paroisse"}).values_list("code", flat=True)) == {
+    assert set(
+        selectors.node_list(filters={"within": tree.dakar.pk, "type": "paroisse"}).values_list("code", flat=True)
+    ) == {
         "T-SD",
         "T-ST",
     }

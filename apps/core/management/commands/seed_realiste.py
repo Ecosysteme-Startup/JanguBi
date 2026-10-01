@@ -44,7 +44,9 @@ class Command(BaseCommand):
         parser.add_argument("--historique", type=int, default=12, help="Mois d'historique (dons, écoutes).")
         parser.add_argument("--reset", action="store_true", help="Supprime exactement le lot de cette graine.")
         parser.add_argument("--verifier", action="store_true", help="Contrôle les invariants et affiche le rapport.")
-        parser.add_argument("--simuler-trafic", dest="trafic", default=None, help="Ex. 10min : dons et écoutes en continu.")
+        parser.add_argument(
+            "--simuler-trafic", dest="trafic", default=None, help="Ex. 10min : dons et écoutes en continu."
+        )
         parser.add_argument("--medias-dossier", dest="medias_dossier", default=None,
                             help="Album libre fourni (jamais commité) ; credits.yaml optionnel dans ce dossier.")  # fmt: skip
         parser.add_argument("--musique-demo", dest="musique_demo", action="store_true",

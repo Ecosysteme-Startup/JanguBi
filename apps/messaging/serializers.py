@@ -105,9 +105,7 @@ class MessageOutputSerializer(serializers.ModelSerializer):
     sender_name = serializers.SerializerMethodField()
     reactions = MessageReactionOutputSerializer(many=True, read_only=True)
     attachments = MessageAttachmentOutputSerializer(many=True, read_only=True)
-    reply_to_id = serializers.UUIDField(
-        source="reply_to.id", read_only=True, allow_null=True
-    )
+    reply_to_id = serializers.UUIDField(source="reply_to.id", read_only=True, allow_null=True)
     is_deleted = serializers.BooleanField(read_only=True)
 
     class Meta:

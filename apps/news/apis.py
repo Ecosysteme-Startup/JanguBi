@@ -322,7 +322,10 @@ class StaffArticlePinApi(_StaffApi):
         )
 
     @extend_schema(
-        tags=TAG, operation_id="staff_news_unpin", summary="Désépingler un contenu", responses=StaffArticleOutputSerializer
+        tags=TAG,
+        operation_id="staff_news_unpin",
+        summary="Désépingler un contenu",
+        responses=StaffArticleOutputSerializer,
     )
     def delete(self, request: Request, article_id: str) -> Response:
         article = selectors.article_get_for_staff(user=request.user, article_id=article_id)

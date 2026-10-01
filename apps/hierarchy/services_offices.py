@@ -279,19 +279,21 @@ def assignments_sync_statuses(*, today: date | None = None) -> dict[str, int]:
     """Tâche quotidienne (EF-PER-06) : active les nominations arrivées à échéance, termine les échues."""
     today = today or timezone.localdate()
     counts = {"activated": 0, "terminated": 0}
-    to_activate = OfficeAssignment.objects.select_for_update().filter(
-        status=AssignmentStatus.PROPOSEE, start_date__lte=today
-    ).filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
-    to_terminate = OfficeAssignment.objects.select_for_update().filter(
-        status__in=OPEN_STATUSES, end_date__lt=today
+    to_activate = (
+        OfficeAssignment.objects.select_for_update()
+        .filter(status=AssignmentStatus.PROPOSEE, start_date__lte=today)
+        .filter(Q(end_date__isnull=True) | Q(end_date__gte=today))
     )
+    to_terminate = OfficeAssignment.objects.select_for_update().filter(status__in=OPEN_STATUSES, end_date__lt=today)
     for assignment, status, key in [
         *((a, AssignmentStatus.ACTIVE, "activated") for a in to_activate.select_related("node")),
         *((a, AssignmentStatus.TERMINEE, "terminated") for a in to_terminate.select_related("node")),
     ]:
         assignment.status = status
         assignment.save(update_fields=["status", "updated_at"])
-        audit_log(actor=None, action=f"office.{key}", target=assignment, node=assignment.node, metadata={"on": str(today)})
+        audit_log(
+            actor=None, action=f"office.{key}", target=assignment, node=assignment.node, metadata={"on": str(today)}
+        )
         counts[key] += 1
         _invalidate(assignment.person_id)
     return counts
@@ -415,9 +417,7 @@ def _declaration_attach(*, person: Any, file_ids: list[int]) -> int:
     existing = set(DeclarationAttachment.objects.filter(person=person).values_list("file_id", flat=True))
     new_ids = [i for i in ids if i not in existing]
     if len(existing) + len(new_ids) > MAX_DECLARATION_ATTACHMENTS:
-        raise ApplicationError(
-            f"{MAX_DECLARATION_ATTACHMENTS} justificatifs au plus.", code="too_many_attachments"
-        )
+        raise ApplicationError(f"{MAX_DECLARATION_ATTACHMENTS} justificatifs au plus.", code="too_many_attachments")
     DeclarationAttachment.objects.bulk_create([DeclarationAttachment(person=person, file=files[i]) for i in new_ids])
     return len(new_ids)
 
@@ -428,16 +428,16 @@ def verification_node(person: Any) -> Node | None:
 
 
 @transaction.atomic
-def person_verification_decide(
-    *, actor: Any, person: Any, decision: str, note: str = "", ip: str | None = None
-) -> Any:
+def person_verification_decide(*, actor: Any, person: Any, decision: str, note: str = "", ip: str | None = None) -> Any:
     """Vérifier, rejeter ou demander un complément (motif obligatoire, transmis à la personne,
     qui complète alors sa déclaration)."""
     if decision not in {StatutVerification.VERIFIE, StatutVerification.REJETE, StatutVerification.COMPLEMENT}:
         raise ApplicationError("Décision invalide.", code="invalid_decision")
     if decision == StatutVerification.COMPLEMENT and not note.strip():
         raise ApplicationError(
-            "Indiquez ce qui manque : le motif est transmis à la personne.", {"note": "obligatoire"}, code="note_required"
+            "Indiquez ce qui manque : le motif est transmis à la personne.",
+            {"note": "obligatoire"},
+            code="note_required",
         )
     if person.pk == actor.pk:
         raise PermissionDeniedError("On ne vérifie pas son propre statut (RG-07).", code="self_verification")
@@ -453,7 +453,9 @@ def person_verification_decide(
     person.verified_by = actor
     person.verified_at = timezone.now()
     person.save(update_fields=["statut_verification", "verification_note", "verified_by", "verified_at"])
-    audit_log(actor=actor, action="personne.verification", target=person, node=node, metadata={"decision": decision}, ip=ip)
+    audit_log(
+        actor=actor, action="personne.verification", target=person, node=node, metadata={"decision": decision}, ip=ip
+    )
     if decision == StatutVerification.COMPLEMENT:
         transaction.on_commit(partial(_notify_complement, person))
     return person

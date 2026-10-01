@@ -64,7 +64,14 @@ def search_parishes(*, q: str, offset: int, limit: int, user: Any) -> tuple[list
     )
     rows, more = _page(qs, offset=offset, limit=limit)
     return [
-        {"id": str(n.pk), "code": n.code, "name": n.name, "type": n.type.code, "city": n.city, "on_platform": n.is_active_on_platform}
+        {
+            "id": str(n.pk),
+            "code": n.code,
+            "name": n.name,
+            "type": n.type.code,
+            "city": n.city,
+            "on_platform": n.is_active_on_platform,
+        }
         for n in rows
     ], more
 
@@ -81,7 +88,14 @@ def search_places(*, q: str, offset: int, limit: int, user: Any) -> tuple[list[d
     )
     rows, more = _page(qs, offset=offset, limit=limit)
     return [
-        {"id": p.pk, "name": p.name, "kind": p.kind, "city": p.city, "node_id": str(p.node_id), "node_name": p.node.name}
+        {
+            "id": p.pk,
+            "name": p.name,
+            "kind": p.kind,
+            "city": p.city,
+            "node_id": str(p.node_id),
+            "node_name": p.node.name,
+        }
         for p in rows
     ], more
 
@@ -146,7 +160,13 @@ def search_priests(*, q: str, offset: int, limit: int, user: Any) -> tuple[list[
         name = full_name(a.person)
         if name:  # sans nom renseigné, la personne n'apparaît pas (son e-mail n'est jamais exposé)
             items.append(
-                {"id": str(a.person_id), "name": name, "office": a.title, "node_id": str(a.node_id), "node_name": a.node.name}
+                {
+                    "id": str(a.person_id),
+                    "name": name,
+                    "office": a.title,
+                    "node_id": str(a.node_id),
+                    "node_name": a.node.name,
+                }
             )
     return items, more
 

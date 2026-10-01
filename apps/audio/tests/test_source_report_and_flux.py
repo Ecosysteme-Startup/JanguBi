@@ -39,9 +39,12 @@ def test_source_report_is_listed_and_removal_deactivates_the_source(world):
     listed = client_for(world.cure).get(f"{API}/moderation/signalements/").json()
     assert [(r["id"], r["cible"]) for r in listed] == [(report["id"], "source")]
     assert client_for(world.cure_st).get(f"{API}/moderation/signalements/").json() == []
-    assert client_for(world.cure_st).post(
-        f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json"
-    ).status_code == 403
+    assert (
+        client_for(world.cure_st)
+        .post(f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json")
+        .status_code
+        == 403
+    )
 
     done = client_for(world.cure).post(
         f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json"
@@ -52,12 +55,17 @@ def test_source_report_is_listed_and_removal_deactivates_the_source(world):
     assert client_for(world.fidele).post(f"{API}/pistes/{kyrie.pk}/lecture/").status_code == 404
     assert str(world.chorale.pk) not in {s["id"] for s in client_for().get(f"{API}/sources/").json()}
     # Une source inactive n'est plus signalable.
-    assert client_for(world.autre).post(
-        f"{API}/sources/{world.chorale.pk}/signaler/", {"motif": "autre"}, format="json"
-    ).status_code == 404
+    assert (
+        client_for(world.autre)
+        .post(f"{API}/sources/{world.chorale.pk}/signaler/", {"motif": "autre"}, format="json")
+        .status_code
+        == 404
+    )
 
     # Seul audio.moderer rétablit une source retirée par la modération.
-    refused = client_for(world.secretaire).patch(f"{API}/sources/{world.chorale.pk}/", {"is_active": True}, format="json")
+    refused = client_for(world.secretaire).patch(
+        f"{API}/sources/{world.chorale.pk}/", {"is_active": True}, format="json"
+    )
     assert refused.status_code == 403 and refused.json()["error"]["code"] == "source_retiree"
     restored = client_for(world.cure).patch(f"{API}/sources/{world.chorale.pk}/", {"is_active": True}, format="json")
     assert restored.status_code == 200 and restored.json()["is_active"] is True
@@ -69,7 +77,12 @@ def test_source_report_rejection_and_validation(world):
     url = f"{API}/sources/{world.paroisse.pk}/signaler/"
     assert client_for().post(url, {"motif": "autre"}, format="json").status_code in (401, 403)
     assert client_for(world.fidele).post(url, {"motif": "inconnu"}, format="json").status_code == 400
-    assert client_for(world.fidele).post(f"{API}/sources/{world.messe.pk}/signaler/", {"motif": "autre"}, format="json").status_code == 404
+    assert (
+        client_for(world.fidele)
+        .post(f"{API}/sources/{world.messe.pk}/signaler/", {"motif": "autre"}, format="json")
+        .status_code
+        == 404
+    )
 
     first = client_for(world.fidele).post(url, {"motif": "droits"}, format="json").json()
     client_for(world.autre).post(url, {"motif": "autre"}, format="json")
@@ -117,7 +130,10 @@ def _upload(world, tmp_path, user):
     ).json()  # fmt: skip
     with open(src, "rb") as fh:
         upload = SimpleUploadedFile("kyrie.mp3", fh.read(), content_type="audio/mpeg")
-    assert client.post(f"{API}/uploads/{data['upload_id']}/local/", {"file": upload}, format="multipart").status_code == 200
+    assert (
+        client.post(f"{API}/uploads/{data['upload_id']}/local/", {"file": upload}, format="multipart").status_code
+        == 200
+    )
     return client, data["upload_id"]
 
 

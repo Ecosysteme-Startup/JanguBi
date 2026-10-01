@@ -129,9 +129,7 @@ def _full_name(user: BaseUser) -> tuple[str, str]:
 def account_status(user: BaseUser) -> str:
     if not user.is_active:
         return STATUS_DESACTIVE
-    pending = not user.is_verified or (
-        user.etat_de_vie != "laic" and user.statut_verification in PENDING_STATUTS
-    )
+    pending = not user.is_verified or (user.etat_de_vie != "laic" and user.statut_verification in PENDING_STATUTS)
     return STATUS_EN_ATTENTE if pending else STATUS_ACTIF
 
 
@@ -327,7 +325,9 @@ def sync_status() -> dict[str, Any]:
         echecs=Count("pk", filter=Q(status=KeycloakEventStatus.ECHEC)),
         traites_24h=Count(
             "pk",
-            filter=Q(status=KeycloakEventStatus.TRAITE, processed_at__gte=timezone.now() - datetime.timedelta(hours=24)),
+            filter=Q(
+                status=KeycloakEventStatus.TRAITE, processed_at__gte=timezone.now() - datetime.timedelta(hours=24)
+            ),
         ),
     )
     last_event = KeycloakEvent.objects.order_by("-received_at").values_list("received_at", flat=True).first()

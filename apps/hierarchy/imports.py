@@ -219,9 +219,7 @@ ASSIGNMENT_COLUMNS = ("action", "email", "office", "node_code")
 ASSIGNMENT_OPTIONAL = ("start_date", "end_date", "decree_ref", "quality")
 
 
-def assignments_import_csv(
-    *, actor: Any, content: str, effective_date: date, dry_run: bool = True
-) -> ImportReport:
+def assignments_import_csv(*, actor: Any, content: str, effective_date: date, dry_run: bool = True) -> ImportReport:
     """Colonnes : action (``nommer`` | ``terminer``), email, office, node_code (+ start_date,
     end_date, decree_ref, quality — ex. ``cure`` ou ``administrateur`` pour une cure). Date par défaut : ``effective_date``. Pour un office à titulaire
     unique, le titulaire en place est terminé la veille (avertissement)."""

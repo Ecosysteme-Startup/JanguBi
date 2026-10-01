@@ -453,7 +453,9 @@ class AudioUploadInputSerializer(serializers.Serializer):
     file_name = serializers.CharField(max_length=255)
     file_type = serializers.CharField(max_length=100)
     file_size = serializers.IntegerField(min_value=1, help_text="Octets ; 500 Mo au plus")
-    rights_confirmed = serializers.BooleanField(help_text="Case « J'ai les droits sur cet enregistrement » (obligatoire)")
+    rights_confirmed = serializers.BooleanField(
+        help_text="Case « J'ai les droits sur cet enregistrement » (obligatoire)"
+    )
 
 
 class AudioStaffAlbumFilterSerializer(serializers.Serializer):

@@ -152,9 +152,7 @@ def test_failure_handler_marks_email_as_failed():
     email = SendingEmailFactory()
 
     # Act
-    _email_send_failure(
-        MagicMock(), RuntimeError("boom"), "task-id", [email.id], {}, None
-    )
+    _email_send_failure(MagicMock(), RuntimeError("boom"), "task-id", [email.id], {}, None)
 
     # Assert
     email.refresh_from_db()
@@ -171,9 +169,7 @@ def test_failure_handler_does_not_raise_when_email_was_deleted():
     email.delete()
 
     # Act & Assert — aucune exception ne doit sortir du handler
-    _email_send_failure(
-        MagicMock(), RuntimeError("boom"), "task-id", [deleted_id], {}, None
-    )
+    _email_send_failure(MagicMock(), RuntimeError("boom"), "task-id", [deleted_id], {}, None)
 
 
 @pytest.mark.django_db
@@ -183,9 +179,7 @@ def test_failure_handler_does_not_raise_when_email_is_not_sending():
     email = SentEmailFactory()
 
     # Act & Assert — pas d'exception, et le statut d'origine est préservé
-    _email_send_failure(
-        MagicMock(), RuntimeError("boom"), "task-id", [email.id], {}, None
-    )
+    _email_send_failure(MagicMock(), RuntimeError("boom"), "task-id", [email.id], {}, None)
 
     email.refresh_from_db()
     assert email.status == Email.Status.SENT
@@ -204,9 +198,7 @@ def test_failure_handler_reads_email_id_from_kwargs():
     email = SendingEmailFactory()
 
     # Act
-    _email_send_failure(
-        MagicMock(), RuntimeError("boom"), "task-id", [], {"email_id": email.id}, None
-    )
+    _email_send_failure(MagicMock(), RuntimeError("boom"), "task-id", [], {"email_id": email.id}, None)
 
     # Assert
     email.refresh_from_db()
@@ -220,9 +212,7 @@ def test_failure_handler_does_not_touch_other_emails():
     untouched = EmailFactory(status=Email.Status.READY)
 
     # Act
-    _email_send_failure(
-        MagicMock(), RuntimeError("boom"), "task-id", [target.id], {}, None
-    )
+    _email_send_failure(MagicMock(), RuntimeError("boom"), "task-id", [target.id], {}, None)
 
     # Assert
     untouched.refresh_from_db()

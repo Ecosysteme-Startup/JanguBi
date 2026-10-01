@@ -29,9 +29,7 @@ from apps.hierarchy.persons import email_mask, full_name
 
 
 class NodeTypeOutputSerializer(serializers.ModelSerializer):
-    allowed_parent_types: serializers.Field = serializers.SlugRelatedField(
-        many=True, read_only=True, slug_field="code"
-    )
+    allowed_parent_types: serializers.Field = serializers.SlugRelatedField(many=True, read_only=True, slug_field="code")
 
     class Meta:
         model = NodeType
@@ -302,7 +300,9 @@ class AssignmentOutputSerializer(serializers.ModelSerializer):
     person = PersonRefSerializer(read_only=True)
     office = serializers.CharField(source="office_type.code", read_only=True)
     office_label = serializers.CharField(
-        source="title", read_only=True, help_text="Titre du titulaire : « Curé », « Administrateur paroissial », « Vicaire paroissial »…"
+        source="title",
+        read_only=True,
+        help_text="Titre du titulaire : « Curé », « Administrateur paroissial », « Vicaire paroissial »…",
     )
     quality = serializers.CharField(read_only=True, help_text="Code de la qualité (vide si l'office n'en a pas)")
     node = NodeRefSerializer(read_only=True)
@@ -352,7 +352,9 @@ class AssignmentCreateInputSerializer(serializers.Serializer):
 
 class AssignmentUpdateInputSerializer(serializers.Serializer):
     action = serializers.ChoiceField(choices=["terminer", "annuler", "qualifier"])
-    end_date = serializers.DateField(required=False, allow_null=True, help_text="Terminer : date de fin (défaut : aujourd'hui)")
+    end_date = serializers.DateField(
+        required=False, allow_null=True, help_text="Terminer : date de fin (défaut : aujourd'hui)"
+    )
     quality = serializers.SlugField(
         max_length=40, required=False, allow_blank=True, help_text="Qualifier : nouvelle qualité"
     )
@@ -480,14 +482,29 @@ class CapabilityOverrideSerializer(serializers.Serializer):
 class AuditEventOutputSerializer(serializers.ModelSerializer):
     actor_id = serializers.UUIDField(read_only=True, allow_null=True)
     node_id = serializers.UUIDField(read_only=True, allow_null=True)
-    actor_name = serializers.SerializerMethodField(help_text="Prénom et nom de l'acteur ; null pour une action du système")
+    actor_name = serializers.SerializerMethodField(
+        help_text="Prénom et nom de l'acteur ; null pour une action du système"
+    )
     ip = serializers.IPAddressField(
-        read_only=True, allow_null=True, help_text="Adresse du client, tronquée (IPv4 /24, IPv6 /48) ; null hors requête"
+        read_only=True,
+        allow_null=True,
+        help_text="Adresse du client, tronquée (IPv4 /24, IPv6 /48) ; null hors requête",
     )
 
     class Meta:
         model = AuditEvent
-        fields = ["id", "at", "actor_id", "actor_name", "action", "target_type", "target_id", "node_id", "metadata", "ip"]
+        fields = [
+            "id",
+            "at",
+            "actor_id",
+            "actor_name",
+            "action",
+            "target_type",
+            "target_id",
+            "node_id",
+            "metadata",
+            "ip",
+        ]
 
     def get_actor_name(self, obj: AuditEvent) -> str | None:
         actor = obj.actor

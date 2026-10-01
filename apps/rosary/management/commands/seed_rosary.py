@@ -10,11 +10,12 @@ from apps.rosary.models import Mystery, MysteryGroup, MysteryPrayer, Prayer, Ros
 
 logger = logging.getLogger(__name__)
 
+
 class Command(BaseCommand):
     help = "Seed Rosary data from init JSON file"
 
     def _ensure_rosary_bucket(self) -> None:
-        endpoint_url = getattr(settings, 'AWS_S3_ENDPOINT_URL', None)
+        endpoint_url = getattr(settings, "AWS_S3_ENDPOINT_URL", None)
         if not endpoint_url:
             return  # local storage, nothing to create
 
@@ -22,25 +23,25 @@ class Command(BaseCommand):
         from botocore.exceptions import ClientError
 
         s3 = boto3.client(
-            's3',
+            "s3",
             endpoint_url=endpoint_url,
-            aws_access_key_id=getattr(settings, 'AWS_S3_ACCESS_KEY_ID', None),
-            aws_secret_access_key=getattr(settings, 'AWS_S3_SECRET_ACCESS_KEY', None),
-            region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'us-east-1'),
+            aws_access_key_id=getattr(settings, "AWS_S3_ACCESS_KEY_ID", None),
+            aws_secret_access_key=getattr(settings, "AWS_S3_SECRET_ACCESS_KEY", None),
+            region_name=getattr(settings, "AWS_S3_REGION_NAME", "us-east-1"),
         )
         bucket = settings.ROSARY_AUDIO_BUCKET
         try:
             s3.head_bucket(Bucket=bucket)
         except ClientError as exc:
-            code = exc.response['Error']['Code']
+            code = exc.response["Error"]["Code"]
             # Bucket absent : le créer (développement local). Un 403 veut dire
             # « bucket d'un autre » ou compte restreint : ne rien créer.
-            if code in ('404', 'NoSuchBucket'):
+            if code in ("404", "NoSuchBucket"):
                 s3.create_bucket(Bucket=bucket)
                 # Lecture anonyme UNIQUEMENT si demandée (développement local).
                 if settings.ROSARY_AUDIO_PUBLIC:
                     try:
-                        s3.put_bucket_acl(Bucket=bucket, ACL='public-read')
+                        s3.put_bucket_acl(Bucket=bucket, ACL="public-read")
                     except ClientError:
                         pass  # ACL not supported by all MinIO versions
                 self.stdout.write(self.style.SUCCESS(f"Created bucket: {bucket}"))
@@ -51,7 +52,7 @@ class Command(BaseCommand):
         self._ensure_rosary_bucket()
         # We look for the file in the expected path
         json_path = Path(settings.BASE_DIR) / "init" / "rosary" / "format" / "json" / "rosary_french.json"
-        
+
         if not json_path.exists():
             self.stdout.write(self.style.ERROR(f"File not found: {json_path}"))
             return
@@ -89,25 +90,25 @@ class Command(BaseCommand):
             for day_key, day_data in data.items():
                 if day_key == "_instructions":
                     continue
-                    
+
                 group_name = day_data["group"]
-                
+
                 # 1. Create or get Mystery Group
                 group, group_created = MysteryGroup.objects.get_or_create(
-                    name=group_name,
-                    defaults={"slug": group_name.lower()}
+                    name=group_name, defaults={"slug": group_name.lower()}
                 )
-                
+
                 # Check for audio file
                 if group_created or not group.audio_file:
                     audio_filename = f"Mystères {group_name}.mp3"
                     audio_path = Path(settings.BASE_DIR) / "init" / "rosary" / "format" / "mp3" / audio_filename
                     if audio_path.exists():
                         from django.core.files import File
+
                         with open(audio_path, "rb") as f:
                             group.audio_file.save(audio_filename, File(f), save=True)
                         self.stdout.write(self.style.SUCCESS(f"Uploaded audio for group {group_name}"))
-                        
+
                         # Clean up the local file after uploading
                         # audio_path.unlink()
                         # self.stdout.write(self.style.SUCCESS(f"Deleted local audio file: {audio_filename}"))
@@ -115,10 +116,7 @@ class Command(BaseCommand):
                 # 2. Create or update RosaryDay
                 weekday = day_mapping.get(day_key.lower())
                 if weekday is not None:
-                    RosaryDay.objects.update_or_create(
-                        weekday=weekday,
-                        defaults={"group": group}
-                    )
+                    RosaryDay.objects.update_or_create(weekday=weekday, defaults={"group": group})
 
                 # 3. Process Mysteries
                 mysteries_data = day_data.get("mysteries", [])
@@ -129,67 +127,49 @@ class Command(BaseCommand):
                     fruit = m_data.get("fruit", "")
 
                     mystery, created = Mystery.objects.update_or_create(
-                        group=group,
-                        order=order,
-                        defaults={"title": title, "meditation": meditation, "fruit": fruit}
+                        group=group, order=order, defaults={"title": title, "meditation": meditation, "fruit": fruit}
                     )
 
                     if not created:
-                        continue # Already processed related prayers
+                        continue  # Already processed related prayers
 
                     # Sequence of prayers for this mystery
                     seq_order = 1
-                    
+
                     # A. Our Father
                     of_text = m_data.get("our_father")
                     if of_text:
                         prayer_obj, _ = Prayer.objects.get_or_create(
-                            text=of_text.strip(),
-                            language="fr",
-                            defaults={"type": prayer_type_map["our_father"]}
+                            text=of_text.strip(), language="fr", defaults={"type": prayer_type_map["our_father"]}
                         )
-                        MysteryPrayer.objects.create(
-                            mystery=mystery, prayer=prayer_obj, order=seq_order
-                        )
+                        MysteryPrayer.objects.create(mystery=mystery, prayer=prayer_obj, order=seq_order)
                         seq_order += 1
 
                     # B. Hail Marys (usually an array of 10)
                     hm_texts = m_data.get("hail_mary", [])
                     for hm_text in hm_texts:
                         prayer_obj, _ = Prayer.objects.get_or_create(
-                            text=hm_text.strip(),
-                            language="fr",
-                            defaults={"type": prayer_type_map["hail_mary"]}
+                            text=hm_text.strip(), language="fr", defaults={"type": prayer_type_map["hail_mary"]}
                         )
-                        MysteryPrayer.objects.create(
-                            mystery=mystery, prayer=prayer_obj, order=seq_order
-                        )
+                        MysteryPrayer.objects.create(mystery=mystery, prayer=prayer_obj, order=seq_order)
                         seq_order += 1
 
                     # C. Glory Be
                     gb_text = m_data.get("glory_be")
                     if gb_text:
                         prayer_obj, _ = Prayer.objects.get_or_create(
-                            text=gb_text.strip(),
-                            language="fr",
-                            defaults={"type": prayer_type_map["glory_be"]}
+                            text=gb_text.strip(), language="fr", defaults={"type": prayer_type_map["glory_be"]}
                         )
-                        MysteryPrayer.objects.create(
-                            mystery=mystery, prayer=prayer_obj, order=seq_order
-                        )
+                        MysteryPrayer.objects.create(mystery=mystery, prayer=prayer_obj, order=seq_order)
                         seq_order += 1
 
                     # D. Fatima Prayer
                     fatima_text = m_data.get("fatima_prayer")
                     if fatima_text:
                         prayer_obj, _ = Prayer.objects.get_or_create(
-                            text=fatima_text.strip(),
-                            language="fr",
-                            defaults={"type": prayer_type_map["fatima_prayer"]}
+                            text=fatima_text.strip(), language="fr", defaults={"type": prayer_type_map["fatima_prayer"]}
                         )
-                        MysteryPrayer.objects.create(
-                            mystery=mystery, prayer=prayer_obj, order=seq_order
-                        )
+                        MysteryPrayer.objects.create(mystery=mystery, prayer=prayer_obj, order=seq_order)
                         seq_order += 1
 
                     self.stdout.write(f"    - Processed Mystery: {title}")
@@ -206,11 +186,11 @@ class Command(BaseCommand):
                             Prayer.objects.get_or_create(
                                 text=t.strip(),
                                 language="fr",
-                                defaults={"type": prayer_type_map.get(p_key, Prayer.Type.OTHER)}
+                                defaults={"type": prayer_type_map.get(p_key, Prayer.Type.OTHER)},
                             )
                         except Exception as e:
                             logger.error(f"Failed to create intro prayer {p_key}: {e}")
-                
+
                 closing_data = day_data.get("closing", {})
                 for p_key, p_val in closing_data.items():
                     if not p_val:
@@ -218,7 +198,7 @@ class Command(BaseCommand):
                     Prayer.objects.get_or_create(
                         text=p_val.strip(),
                         language="fr",
-                        defaults={"type": prayer_type_map.get(p_key, Prayer.Type.OTHER)}
+                        defaults={"type": prayer_type_map.get(p_key, Prayer.Type.OTHER)},
                     )
 
             self.stdout.write(self.style.SUCCESS("Successfully seeded Rosary data!"))

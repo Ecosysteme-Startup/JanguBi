@@ -240,7 +240,9 @@ def test_scope_list_is_limited_to_the_perimeter(world):
 
 def test_never_above_oneself(world):
     # Un curé ne gère pas le compte d'un vicaire (nommé par l'évêque), un chancelier pas celui de l'évêque.
-    response = client_for(world.cure).post(f"{ACCOUNTS}{world.vicaire.pk}/disable/", {"reason": "Départ de la paroisse"})
+    response = client_for(world.cure).post(
+        f"{ACCOUNTS}{world.vicaire.pk}/disable/", {"reason": "Départ de la paroisse"}
+    )
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "account_above_scope"
     response = client_for(world.chancelier).post(f"{ACCOUNTS}{world.eveque.pk}/logout/")
@@ -321,7 +323,9 @@ def test_delete_anonymizes_and_removes_keycloak_account(world, kc):
     url = f"{ACCOUNTS}{world.fidele.pk}/"
     wrong = client_for(world.admin).delete(url, {"confirm_email": "x@y.sn", "reason": "Demande RGPD"}, format="json")
     assert wrong.json()["error"]["code"] == "confirmation_mismatch"
-    response = client_for(world.admin).delete(url, {"confirm_email": "fidele@test.sn", "reason": "Demande RGPD"}, format="json")
+    response = client_for(world.admin).delete(
+        url, {"confirm_email": "fidele@test.sn", "reason": "Demande RGPD"}, format="json"
+    )
     assert response.status_code == 204, response.content
     world.fidele.refresh_from_db()
     assert world.fidele.email.endswith("@deleted.invalid") and world.fidele.keycloak_sub is None
@@ -332,7 +336,9 @@ def test_delete_anonymizes_and_removes_keycloak_account(world, kc):
 def test_delete_rolled_back_when_keycloak_fails(world, kc):
     kc.fail_on = {"user_delete"}
     url = f"{ACCOUNTS}{world.fidele.pk}/"
-    response = client_for(world.admin).delete(url, {"confirm_email": "fidele@test.sn", "reason": "Demande RGPD"}, format="json")
+    response = client_for(world.admin).delete(
+        url, {"confirm_email": "fidele@test.sn", "reason": "Demande RGPD"}, format="json"
+    )
     assert response.status_code == 503
     world.fidele.refresh_from_db()
     assert world.fidele.email == "fidele@test.sn" and world.fidele.keycloak_sub
@@ -340,7 +346,9 @@ def test_delete_rolled_back_when_keycloak_fails(world, kc):
 
 def test_delete_refused_with_active_office(world):
     url = f"{ACCOUNTS}{world.cure.pk}/"
-    response = client_for(world.admin).delete(url, {"confirm_email": "cure@sd.sn", "reason": "Demande RGPD"}, format="json")
+    response = client_for(world.admin).delete(
+        url, {"confirm_email": "cure@sd.sn", "reason": "Demande RGPD"}, format="json"
+    )
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "active_office"
 
@@ -351,7 +359,9 @@ def test_delete_refused_with_active_office(world):
 def test_detail_shows_live_keycloak_state(world, kc):
     sub = world.cure.keycloak_sub
     kc.credentials[sub].append({"id": "o1", "type": "otp"})
-    kc.sessions[sub] = [{"id": "s1", "ipAddress": "10.0.0.1", "start": 1_790_000_000_000, "clients": {"c": "jangubi-web"}}]
+    kc.sessions[sub] = [
+        {"id": "s1", "ipAddress": "10.0.0.1", "start": 1_790_000_000_000, "clients": {"c": "jangubi-web"}}
+    ]
     body = client_for(world.admin).get(f"{ACCOUNTS}{world.cure.pk}/").json()
     assert body["role"] == "staff" and body["can_manage"] is True
     assert body["offices"][0]["office"] == "cure"
@@ -393,7 +403,10 @@ def test_platform_only_actions(world, kc):
     response = cure.post(f"{ACCOUNTS}{secretary.pk}/platform-admin/", {"grant": True, "reason": "Essai interdit"})
     assert response.status_code == 403
     admin = client_for(world.admin)
-    assert admin.post(f"{ACCOUNTS}{secretary.pk}/mark-email-verified/", {"reason": "Vérifié en personne"}).status_code == 200
+    assert (
+        admin.post(f"{ACCOUNTS}{secretary.pk}/mark-email-verified/", {"reason": "Vérifié en personne"}).status_code
+        == 200
+    )
     assert kc.users[secretary.keycloak_sub]["emailVerified"] is True
     response = admin.post(f"{ACCOUNTS}{secretary.pk}/platform-admin/", {"grant": True, "reason": "Équipe Numerisen"})
     assert response.json()["role"] == "platform_admin"
@@ -479,7 +492,10 @@ def _post_event(payload, *, secret="secret-webhook-de-test"):
     body = json.dumps(payload).encode()
     signature = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
     return APIClient().post(
-        "/api/v1/integrations/keycloak/events/", body, content_type="application/json", HTTP_X_KEYCLOAK_SIGNATURE=signature
+        "/api/v1/integrations/keycloak/events/",
+        body,
+        content_type="application/json",
+        HTTP_X_KEYCLOAK_SIGNATURE=signature,
     )
 
 

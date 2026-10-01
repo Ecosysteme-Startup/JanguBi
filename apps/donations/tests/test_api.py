@@ -82,7 +82,10 @@ def test_checkout_api_errors(world, fund):
     bad_amount = client.post("/api/v1/dons/checkout/", {"fund_id": str(fund.pk), "amount": 50}, format="json")
     assert bad_amount.status_code == 400 and bad_amount.json()["error"]["code"] == "amount_out_of_range"
     DonationActivation.objects.filter(node=world.sd).update(enabled=False)
-    assert client.post("/api/v1/dons/checkout/", {"fund_id": str(fund.pk), "amount": 5000}, format="json").status_code == 404
+    assert (
+        client.post("/api/v1/dons/checkout/", {"fund_id": str(fund.pk), "amount": 5000}, format="json").status_code
+        == 404
+    )
 
 
 def test_checkout_api_links_the_logged_in_donor(world, fund):
@@ -155,18 +158,27 @@ def test_fund_crud_over_http(world):
     )
     assert created.status_code == 201
     fund_id = created.json()["id"]
-    assert client.patch(f"/api/v1/staff/dons/fonds/{fund_id}/", {"description": "Tôles"}, format="json").json()[
-        "description"
-    ] == "Tôles"
+    assert (
+        client.patch(f"/api/v1/staff/dons/fonds/{fund_id}/", {"description": "Tôles"}, format="json").json()[
+            "description"
+        ]
+        == "Tôles"
+    )
     assert client.post(f"/api/v1/staff/dons/fonds/{fund_id}/publier/").json()["status"] == "ouvert"
-    assert client.post(f"/api/v1/staff/dons/fonds/{fund_id}/nouvelles/", {"body": "Début"}, format="json").status_code == 201
+    assert (
+        client.post(f"/api/v1/staff/dons/fonds/{fund_id}/nouvelles/", {"body": "Début"}, format="json").status_code
+        == 201
+    )
     listing = client.get(f"/api/v1/staff/dons/fonds/?node={world.sd.pk}").json()
     assert [f["id"] for f in listing] == [fund_id]
     assert client.get(f"/api/v1/staff/dons/fonds/{fund_id}/").status_code == 200
     assert client.post(f"/api/v1/staff/dons/fonds/{fund_id}/clore/").json()["status"] == "clos"
-    assert client_for(world.secretaire).post(
-        "/api/v1/staff/dons/fonds/", {"node": str(world.sd.pk), "kind": "campagne", "title": "X"}, format="json"
-    ).status_code == 403
+    assert (
+        client_for(world.secretaire)
+        .post("/api/v1/staff/dons/fonds/", {"node": str(world.sd.pk), "kind": "campagne", "title": "X"}, format="json")
+        .status_code
+        == 403
+    )
     imperee = client.post(
         "/api/v1/staff/dons/fonds/", {"node": str(world.sd.pk), "kind": "quete_imperee", "title": "X"}, format="json"
     )

@@ -124,8 +124,7 @@ class Node(MP_Node):  # type: ignore[django-manager-missing]  # idem : gestionna
     class Meta:
         verbose_name = _("nœud")
         verbose_name_plural = _("nœuds")
-        constraints = [
-        ]
+        constraints = []
         indexes = [
             models.Index(fields=["type", "status"], name="hierarchy_node_type_status"),
             # path__startswith (sous-arbre, enfants) : l'index unique ne sert pas au LIKE 'x%'
@@ -409,9 +408,7 @@ class AuditEvent(models.Model):
     """Journal d'audit métier, en insertion seule (EF-PER-11). Écrit par les services."""
 
     at = models.DateTimeField(auto_now_add=True, db_index=True)
-    actor = models.ForeignKey(
-        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
-    )
+    actor = models.ForeignKey("users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     action = models.CharField(max_length=80)
     target_type = models.CharField(max_length=80)
     target_id = models.CharField(max_length=64)

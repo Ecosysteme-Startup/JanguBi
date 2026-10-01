@@ -108,7 +108,9 @@ def test_staff_creates_album_publishes_and_edits_track(world):
 
 
 def test_search_is_accent_insensitive_and_weighted(world):
-    careme = ready_track(world.paroisse, "Homélie du premier dimanche de Carême", liturgical_season=LiturgicalSeason.CAREME)
+    careme = ready_track(
+        world.paroisse, "Homélie du premier dimanche de Carême", liturgical_season=LiturgicalSeason.CAREME
+    )
     ready_track(world.chorale, "Kyrie", description="Messe chantée pendant le carême")
     data = client_for().get(f"{API}/recherche/", {"q": "careme"}).json()
     titles = [t["title"] for t in data["results"]]
@@ -164,16 +166,24 @@ def test_likes_playlists_and_library(world):
     playlist = client.post(f"{API}/playlists/", {"title": "Pour le dimanche"}, format="json").json()
     assert playlist["visibility"] == "prive" and playlist["is_editorial"] is False
     for track in (kyrie, gloria, homelie):
-        assert client.post(f"{API}/playlists/{playlist['id']}/pistes/", {"track_id": str(track.pk)}, format="json").status_code == 201
+        assert (
+            client.post(
+                f"{API}/playlists/{playlist['id']}/pistes/", {"track_id": str(track.pk)}, format="json"
+            ).status_code
+            == 201
+        )
     order = client.put(
         f"{API}/playlists/{playlist['id']}/ordre/",
         {"track_ids": [str(homelie.pk), str(kyrie.pk), str(gloria.pk)]},
         format="json",
     ).json()
     assert [t["title"] for t in order["tracks"]] == ["Homélie", "Kyrie", "Gloria"]
-    assert client.put(
-        f"{API}/playlists/{playlist['id']}/ordre/", {"track_ids": [str(kyrie.pk)]}, format="json"
-    ).status_code == 400
+    assert (
+        client.put(
+            f"{API}/playlists/{playlist['id']}/ordre/", {"track_ids": [str(kyrie.pk)]}, format="json"
+        ).status_code
+        == 400
+    )
     assert client.delete(f"{API}/playlists/{playlist['id']}/pistes/{gloria.pk}/").status_code == 204
 
     # Playlist privée : invisible des autres ; une piste « paroisse » y reste filtrée par droits.
@@ -181,7 +191,10 @@ def test_likes_playlists_and_library(world):
     client.patch(f"{API}/playlists/{playlist['id']}/", {"visibility": "public"}, format="json")
     shared = client_for(world.autre).get(f"{API}/playlists/{playlist['id']}/").json()
     assert [t["title"] for t in shared["tracks"]] == ["Kyrie"]
-    assert client_for(world.autre).patch(f"{API}/playlists/{playlist['id']}/", {"title": "x"}, format="json").status_code == 404
+    assert (
+        client_for(world.autre).patch(f"{API}/playlists/{playlist['id']}/", {"title": "x"}, format="json").status_code
+        == 404
+    )
 
     services.playback_state_update(
         user=world.fidele, track=gloria, position_seconds=30, device_id="web", client_updated_at=world.messe.created_at
@@ -211,9 +224,12 @@ def test_editorial_playlist_of_a_source(world):
     services.catalog_invalidate()
     page = client_for().get(f"{API}/sources/{world.chorale.pk}/").json()
     assert [p["title"] for p in page["playlists"]] == ["Chants de la Toussaint"]
-    assert client_for(world.fidele).post(
-        f"{API}/playlists/", {"title": "x", "source_id": str(world.chorale.pk)}, format="json"
-    ).status_code == 403
+    assert (
+        client_for(world.fidele)
+        .post(f"{API}/playlists/", {"title": "x", "source_id": str(world.chorale.pk)}, format="json")
+        .status_code
+        == 403
+    )
     assert Playlist.objects.filter(source=world.chorale).count() == 1
 
 
@@ -229,16 +245,25 @@ def test_personal_playlist_cannot_be_parish_only(world):
 
 def test_report_and_moderation(world):
     kyrie = ready_track(world.chorale, "Kyrie")
-    report = client_for(world.fidele).post(
-        f"{API}/pistes/{kyrie.pk}/signaler/", {"motif": "droits", "comment": "Enregistrement d'un disque"}, format="json"
-    ).json()
+    report = (
+        client_for(world.fidele)
+        .post(
+            f"{API}/pistes/{kyrie.pk}/signaler/",
+            {"motif": "droits", "comment": "Enregistrement d'un disque"},
+            format="json",
+        )
+        .json()
+    )
     assert report["status"] == "ouvert"
     assert client_for(world.secretaire).get(f"{API}/moderation/signalements/").json() == []  # pas audio.moderer
     listed = client_for(world.cure).get(f"{API}/moderation/signalements/").json()
     assert [r["id"] for r in listed] == [report["id"]]
-    assert client_for(world.cure_st).post(
-        f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json"
-    ).status_code == 403
+    assert (
+        client_for(world.cure_st)
+        .post(f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json")
+        .status_code
+        == 403
+    )
     done = client_for(world.cure).post(
         f"{API}/moderation/signalements/{report['id']}/traiter/", {"resolution": "retire"}, format="json"
     )

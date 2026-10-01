@@ -206,7 +206,10 @@ def account_admin_create(
                 account=user,
                 action="creation",
                 ip=ip,
-                metadata={"keycloak": "cree" if created else "rattache", "invitation": bool(send_invitation and created)},
+                metadata={
+                    "keycloak": "cree" if created else "rattache",
+                    "invitation": bool(send_invitation and created),
+                },
             )
             if send_invitation and created:
                 _actions_email_on_commit(keycloak_id, INVITATION_ACTIONS)
@@ -257,7 +260,9 @@ def account_admin_update(*, actor: Any, account: BaseUser, data: dict[str, Any],
         if new_node is not None:
             scope_admin.require_node(actor, new_node)
         elif not scope_admin.is_platform(actor):
-            raise PermissionDeniedError("Seule la plateforme peut détacher un compte de tout nœud.", code="platform_only")
+            raise PermissionDeniedError(
+                "Seule la plateforme peut détacher un compte de tout nœud.", code="platform_only"
+            )
         account.admin_node = new_node
         user_fields.append("admin_node")
     if user_fields:
@@ -316,7 +321,10 @@ def account_admin_set_active(
         _kc(client.user_logout, keycloak_id)
     authz.invalidate_user(account.pk)
     _audit(
-        actor=actor, account=account, action="reactivation" if active else "desactivation", ip=ip,
+        actor=actor,
+        account=account,
+        action="reactivation" if active else "desactivation",
+        ip=ip,
         metadata={"motif": motif} if motif else {},
     )
     _invalidate_directory()
@@ -344,9 +352,7 @@ def account_admin_delete(
         raise ConflictError("Ce compte a une nomination en cours : mettez-y fin d'abord.", code="active_office")
     node = scope_admin.primary_node(account)
     account = BaseUser.objects.select_for_update().get(pk=account.pk)
-    keycloak_id = account_erase(
-        user=account, actor=actor, action="compte.admin.suppression", metadata={"motif": motif}
-    )
+    keycloak_id = account_erase(user=account, actor=actor, action="compte.admin.suppression", metadata={"motif": motif})
     if node is not None:
         from apps.hierarchy.models import AuditEvent
 
@@ -360,9 +366,7 @@ def account_admin_delete(
 
 
 @transaction.atomic
-def account_actions_email(
-    *, actor: Any, account: BaseUser, actions: list[str], ip: str | None = None
-) -> BaseUser:
+def account_actions_email(*, actor: Any, account: BaseUser, actions: list[str], ip: str | None = None) -> BaseUser:
     """Keycloak envoie à la personne un lien pour exécuter les actions (nouveau mot de passe,
     vérification d'e-mail, second facteur…). L'administrateur ne saisit jamais de mot de passe."""
     keycloak_id = _manageable(actor, account)
@@ -434,7 +438,9 @@ def account_otp_reset(*, actor: Any, account: BaseUser, reason: str, ip: str | N
     removed = _kc(client.otp_reset, keycloak_id)
     _kc(client.add_required_action, keycloak_id, "CONFIGURE_TOTP")
     _kc(client.user_logout, keycloak_id)
-    _audit(actor=actor, account=account, action="otp_reinitialise", ip=ip, metadata={"motif": motif, "retires": removed})
+    _audit(
+        actor=actor, account=account, action="otp_reinitialise", ip=ip, metadata={"motif": motif, "retires": removed}
+    )
     _invalidate_directory()
     return account
 
@@ -483,8 +489,11 @@ def account_platform_admin_set(
         _kc(client.user_logout, keycloak_id)  # le jeton en cours porte encore le rôle
     authz.invalidate_user(account.pk)
     _audit(
-        actor=actor, account=account, action="role_plateforme_ajoute" if grant else "role_plateforme_retire",
-        ip=ip, metadata={"motif": motif},
+        actor=actor,
+        account=account,
+        action="role_plateforme_ajoute" if grant else "role_plateforme_retire",
+        ip=ip,
+        metadata={"motif": motif},
     )
     _invalidate_directory()
     return account
