@@ -273,7 +273,8 @@ colonne `tsv` des versets (plein texte `fr_unaccent`, index GIN).
 
 2. **Profil de mots** : mots des versets lus et marqués sur les 90 derniers jours, chacun pondéré
    par sa **rareté** dans toute la Bible (`log((N + 1) / (df + 1))` : « croix » pèse, « dire »
-   presque pas) ; on garde les 12 mots les plus lourds.
+   presque pas) ; un mot présent dans plus de 2 % des versets (« le », « était », « Seigneur »)
+   est ignoré (`PAROLE_RECO_MAX_DF_RATIO`) ; on garde les 12 mots les plus lourds.
    - Poids : lu et recherche 1 ; signet et lectio 2 ; surlignage 2,5.
    - Décroissance : le poids d'un signal diminue de moitié tous les 30 jours.
    - Un chapitre lu compte pour un signal, réparti sur ses versets.
