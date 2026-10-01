@@ -2,7 +2,7 @@
 
 La Bible et les lectures sont de **vraies données** : rien n'est généré. ``bible`` appelle l'import réel
 (``import_bible`` avec le JSON fourni par ``--bible-json``) si la Bible est absente, puis l'indexation
-(tsvector, embeddings) comme les tâches de l'import ; ``liturgie`` appelle la synchronisation AELF réelle
+(plein texte `tsv`) comme les tâches de l'import ; ``liturgie`` appelle la synchronisation AELF réelle
 (``AelfService.sync_daily_data``, celle de la tâche ``daily_sync``) pour la semaine, avec repli sans
 réseau (étape sautée et signalée). ``parole`` sème seulement l'activité des lecteurs (lectures sur
 90 jours par profils, signets, surlignages) ; ``parole_reco`` recalcule « Pour vous »
@@ -71,20 +71,24 @@ class BibleSeeder(Seeder):
             return {"bible": "absente"}
         call_command("import_bible", ctx.bible_json, source=ctx.bible_source, verbosity=0)
         from apps.bible.models import Book
-        from apps.bible.tasks import compute_embeddings_task, populate_tsv_task
+        from apps.bible.tasks import populate_tsv_task
 
         # Les tâches d'indexation de l'import sont retenues pendant le semis : on les exécute ici.
         for book_id in Book.objects.values_list("pk", flat=True):
             populate_tsv_task.apply(args=[book_id])
-            if getattr(settings, "PGVECTOR_ENABLED", False):
-                compute_embeddings_task.apply(args=[book_id])
         return {"bible": f"importée depuis {ctx.bible_json} ({ctx.bible_source})"}
 
     def verify(self, ctx: SeedContext) -> list[Check]:
         from apps.bible.models import Verse
 
         n = Verse.objects.count()
-        return [Check("Bible (données réelles)", True, f"{n} versets" if n else "absente : --bible-json non fourni, lecture sautée")]
+        return [
+            Check(
+                "Bible (données réelles)",
+                True,
+                f"{n} versets" if n else "absente : --bible-json non fourni, lecture sautée",
+            )
+        ]
 
 
 def aelf_reachable(day: datetime.date, zone: str, timeout: float = 5.0) -> bool:
@@ -130,14 +134,20 @@ class LiturgieSeeder(Seeder):
                 ctx.note(f"AELF {day} : {exc.__class__.__name__}")
         synced = LiturgicalDate.objects.filter(date__in=missing, zone=zone).count()
         if synced < len(missing):
-            ctx.note(f"AELF : {len(missing) - synced} jour(s) non synchronisé(s) (repli : lecture tirée des évangiles).")
+            ctx.note(
+                f"AELF : {len(missing) - synced} jour(s) non synchronisé(s) (repli : lecture tirée des évangiles)."
+            )
         return {"jours_synchronises": synced}
 
     def verify(self, ctx: SeedContext) -> list[Check]:
         from apps.liturgy.models import LiturgicalDate
 
         ok = LiturgicalDate.objects.filter(date=ctx.today, zone=settings.LITURGY_ZONE).exists()
-        return [Check("Lectures du jour (AELF)", True, "synchronisées" if ok else "absentes (repli sans réseau, non bloquant)")]
+        return [
+            Check(
+                "Lectures du jour (AELF)", True, "synchronisées" if ok else "absentes (repli sans réseau, non bloquant)"
+            )
+        ]
 
 
 def _gospel_chapters() -> list[Any]:
@@ -147,7 +157,9 @@ def _gospel_chapters() -> list[Any]:
     for name in GOSPELS:
         chapters += list(Chapter.objects.filter(book__slug__icontains=name).order_by("book__order", "number"))
     if not chapters:  # autre nommage des livres : Nouveau Testament
-        chapters = list(Chapter.objects.filter(book__testament__slug__icontains="nouveau").order_by("book__order", "number")[:89])
+        chapters = list(
+            Chapter.objects.filter(book__testament__slug__icontains="nouveau").order_by("book__order", "number")[:89]
+        )
     return chapters or list(Chapter.objects.order_by("book__order", "number")[:100])
 
 
@@ -155,7 +167,9 @@ def _daily_chapter(day: datetime.date, fallback: list[Any]) -> Any:
     from apps.liturgy.models import Reading
 
     reading = (
-        Reading.objects.filter(liturgical_date__date=day, liturgical_date__zone=settings.LITURGY_ZONE, type__icontains="evangile")
+        Reading.objects.filter(
+            liturgical_date__date=day, liturgical_date__zone=settings.LITURGY_ZONE, type__icontains="evangile"
+        )
         .prefetch_related("matched_verses__chapter")
         .first()
     )
@@ -271,11 +285,7 @@ class ParoleRecoSeeder(Seeder):
             return {"recommandations": "sautées (Bible absente)"}
         from apps.bible.services.recommendation_service import daily_recommendations_recompute
 
-        result = daily_recommendations_recompute()
-        if not result.get("stored") and not _real_embeddings():
-            ctx.note("« Pour vous » (Parole) vide : EMBEDDING_PROVIDER=stub (vecteurs nuls). En recette : "
-                     "EMBEDDING_PROVIDER=local, `seed_embeddings`, puis relancer seed_realiste --modules parole.")  # fmt: skip
-        return result
+        return daily_recommendations_recompute()
 
     def verify(self, ctx: SeedContext) -> list[Check]:
         from apps.bible.models import DailyRecommendation
@@ -283,13 +293,4 @@ class ParoleRecoSeeder(Seeder):
         if not bible_present():
             return [Check("« Pour vous » (Parole) calculé", True, "sauté : Bible absente")]
         n = DailyRecommendation.objects.filter(date=ctx.today).count()
-        if n == 0 and not _real_embeddings():
-            return [Check("« Pour vous » (Parole) calculé", True,
-                          "non calculable : versets sans embeddings réels (EMBEDDING_PROVIDER=local puis seed_embeddings)")]  # fmt: skip
         return [Check("« Pour vous » (Parole) calculé", n > 0, f"{n} fidèles avec une recommandation du jour")]
-
-
-def _real_embeddings() -> bool:
-    """Le moteur « Pour vous » compare des vecteurs : il faut des embeddings réels (le fournisseur
-    ``stub`` des tests et du poste local produit des vecteurs nuls)."""
-    return getattr(settings, "EMBEDDING_PROVIDER", "stub") != "stub"

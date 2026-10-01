@@ -32,11 +32,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Librairies SYSTÈME nécessaires à l'EXÉCUTION (pas au build) :
 #   libpq5   → client PostgreSQL requis par psycopg2 au runtime
-#   libgomp1 → OpenMP requis par onnxruntime (moteur de fastembed) au runtime
 #   ffmpeg   → encodage et normalisation des pistes de la sonothèque (apps/audio)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
-        libgomp1 \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 

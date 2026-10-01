@@ -1,6 +1,6 @@
 # CLAUDE.md — JanguBi (backend Django), refonte V1
 
-Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (broker RabbitMQ), PostgreSQL + pgvector, Redis, MinIO, **Keycloak** (à partir du lot L3).
+Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (broker RabbitMQ), PostgreSQL (plein texte + pg_trgm ; aucune IA, ADR-018), Redis, MinIO, **Keycloak** (à partir du lot L3).
 
 > **Source de vérité de la V1 : `docs/v1/`.** Lire `docs/v1/00-LIRE-D-ABORD.md` au début de chaque session.
 > Les anciens SRS (`docs/archive/`) et `../memory/*.md` sont **obsolètes** : ne pas s'en servir comme référence.

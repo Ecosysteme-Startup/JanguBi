@@ -29,9 +29,7 @@ class Mystery(BaseModel):
     audio_duration = models.PositiveIntegerField(null=True, blank=True, help_text="Duration in seconds")
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["group", "order"], name="unique_mystery_order_per_group")
-        ]
+        constraints = [models.UniqueConstraint(fields=["group", "order"], name="unique_mystery_order_per_group")]
         verbose_name_plural = "Mysteries"
 
     def __str__(self):
@@ -55,12 +53,9 @@ class Prayer(BaseModel):
     language = models.CharField(max_length=10, default="FR")
     # Provenance (audit L7) : prières traditionnelles du domaine public, ou source et licence.
     source = models.CharField(max_length=255, blank=True, default="", db_default="")
-    
+
     # Text Search Field (populated via triggers/SQL)
     tsv = SearchVectorField(null=True, blank=True)
-    
-    # Vector DB Search Field for Future RAG (Stubbed as JSONField for now)
-    embedding = models.JSONField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -77,9 +72,7 @@ class MysteryPrayer(models.Model):
     order = models.PositiveIntegerField()
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["mystery", "order"], name="unique_prayer_order_per_mystery")
-        ]
+        constraints = [models.UniqueConstraint(fields=["mystery", "order"], name="unique_prayer_order_per_mystery")]
         ordering = ["order"]
 
     def __str__(self):

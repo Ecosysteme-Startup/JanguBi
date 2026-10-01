@@ -12,7 +12,6 @@ from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
-from pgvector.django import HnswIndex, VectorField
 
 from apps.audio.enums import (
     AlbumKind,
@@ -29,8 +28,6 @@ from apps.audio.enums import (
     Visibility,
 )
 from apps.common.models import BaseModel
-
-EMBEDDING_DIM = 768  # même fournisseur que les versets (apps/bible)
 
 
 class AudioSource(BaseModel):
@@ -141,8 +138,6 @@ class Track(BaseModel):
 
     # Indexation.
     search_vector = SearchVectorField(null=True, blank=True)
-    embedding = VectorField(dimensions=EMBEDDING_DIM, null=True, blank=True)
-    embedding_text_hash = models.CharField(max_length=64, blank=True, default="")
 
     class Meta:
         verbose_name = _("piste")
@@ -154,13 +149,6 @@ class Track(BaseModel):
             models.Index(fields=["album", "position"], name="audio_track_album_pos"),
             GinIndex(fields=["search_vector"], name="audio_track_search_gin"),
             GinIndex(fields=["title"], name="audio_track_title_trgm", opclasses=["gin_trgm_ops"]),
-            HnswIndex(
-                name="audio_track_embedding_hnsw",
-                fields=["embedding"],
-                m=16,
-                ef_construction=64,
-                opclasses=["vector_cosine_ops"],
-            ),
         ]
 
     def __str__(self) -> str:

@@ -157,6 +157,12 @@ def _mois_ecoule():
     return (timezone.localdate().replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
 
 
+def _avant_dernier_mois():
+    import datetime
+
+    return (_mois_ecoule() - datetime.timedelta(days=1)).replace(day=1)
+
+
 def test_a_stale_automatic_closing_is_rebuilt_and_reset_with_the_batch(allowed):
     # Recette du 30/09/2026 : la clôture de nuit (03:40) a figé août à 0 sur une base vide, puis le seed
     # a rempli août ; le semeur sautait toute clôture existante → invariant « synthèse » en échec.
@@ -165,20 +171,23 @@ def test_a_stale_automatic_closing_is_rebuilt_and_reset_with_the_batch(allowed):
     from apps.hierarchy.models import Node
     from apps.hierarchy.profiles import PILOT_PARISH_CODE
 
+    # Avant-dernier mois : le dernier mois écoulé garde des quêtes récentes à confirmer en début de mois
+    # (le 1er octobre, septembre ne peut pas se clore), ce qui rendait le test dépendant du jour.
+    mois = _avant_dernier_mois()
     seed("--medias", "aucun", "--modules", "socle")
     pilot = Node.objects.get(code=PILOT_PARISH_CODE)
-    stale = month_close(node=pilot, month=_mois_ecoule())  # automatique (sans auteur), sur une base vide
+    stale = month_close(node=pilot, month=mois)  # automatique (sans auteur), sur une base vide
     assert stale.totals["collecte"] == 0
 
     seed("--medias", "aucun", "--modules", "dons")
 
     from apps.donations.selectors_analyse import month_totals
 
-    rebuilt = MonthClosing.objects.get(node=pilot, month=_mois_ecoule())
+    rebuilt = MonthClosing.objects.get(node=pilot, month=mois)
     assert rebuilt.pk != stale.pk
-    assert rebuilt.totals["collecte"] == month_totals(node=pilot, month=_mois_ecoule())["collecte"] > 0
+    assert rebuilt.totals["collecte"] == month_totals(node=pilot, month=mois)["collecte"] > 0
     call_command("seed_realiste", "--reset")
-    assert not MonthClosing.objects.filter(node=pilot, month=_mois_ecoule()).exists()
+    assert not MonthClosing.objects.filter(node=pilot, month=mois).exists()
 
 
 def test_a_manual_closing_is_never_rebuilt(allowed):
