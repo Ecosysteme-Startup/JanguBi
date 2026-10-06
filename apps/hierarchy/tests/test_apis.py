@@ -45,8 +45,13 @@ def test_node_types_are_public(anon, tree):
     assert paroisse["holds_registers"] is True
 
 
-def test_node_list_is_public_paginated_and_filterable(anon, tree):
-    response = anon.get(f"{BASE}/nodes/", {"type": "paroisse", "within": str(tree.dakar.pk)})
+def test_node_list_requires_authentication(anon, tree):
+    # JB-API-001 : la liste des nœuds n'est plus publique (l'annuaire public est public/nodes/).
+    assert anon.get(f"{BASE}/nodes/").status_code == 401
+
+
+def test_node_list_is_paginated_and_filterable_for_authenticated_users(fidele, tree):
+    response = fidele.get(f"{BASE}/nodes/", {"type": "paroisse", "within": str(tree.dakar.pk)})
 
     assert response.status_code == 200
     assert response.data["count"] == 2
@@ -56,11 +61,11 @@ def test_node_list_is_public_paginated_and_filterable(anon, tree):
     assert "legacy_id" not in first
 
 
-def test_node_list_does_not_query_parents_one_by_one(anon, tree, django_assert_max_num_queries):
+def test_node_list_does_not_query_parents_one_by_one(fidele, tree, django_assert_max_num_queries):
     # 7 nœuds listés : un N+1 sur les parents dépasserait largement ce plafond
     # (transaction ATOMIC_REQUESTS + comptage + page + parents en une requête).
     with django_assert_max_num_queries(6):
-        response = anon.get(f"{BASE}/nodes/")
+        response = fidele.get(f"{BASE}/nodes/")
     assert response.data["count"] == 7
 
 
@@ -129,10 +134,11 @@ def test_invalid_payload_returns_validation_error(admin, tree):
     assert "name" in response.data["error"]["details"]
 
 
-def test_deleted_nodes_are_not_listed_to_anonymous(anon, admin, tree):
+def test_deleted_nodes_are_not_listed_to_non_admin(anon, fidele, admin, tree):
     admin.patch(f"{BASE}/nodes/{tree.sainte_therese.pk}/", {"status": "supprime"}, format="json")
 
-    assert anon.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 403
+    assert anon.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 401
+    assert fidele.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 403
     assert admin.get(f"{BASE}/nodes/", {"status": "supprime"}).data["count"] == 1
 
 

@@ -126,6 +126,14 @@ class NodeTypeListApi(HierarchyBaseApi):
 
 
 class NodeListCreateApi(HierarchyBaseApi):
+    def get_permissions(self):
+        # JB-API-001 : la liste des nœuds expose tout l'arbre (statut, coordonnées, nœuds
+        # non actifs) et n'est PAS un écran public — l'annuaire public passe par public/nodes/.
+        # Lecture réservée aux utilisateurs connectés ; écriture soumise à la capacité.
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), _CanWrite()]
+
     def get_write_node(self) -> Node | None:
         parent_id = self.request.data.get("parent_id") if hasattr(self.request.data, "get") else None
         try:
