@@ -124,4 +124,5 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
 
 # En prod on sert l'app ASGI avec Daphne (WebSocket/Channels et flux SSE).
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "config.asgi:application"]
+# JB-API-005 : --server-name masque l'en-tête « Server: daphne/<version> ».
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "--server-name", "JanguBi", "config.asgi:application"]

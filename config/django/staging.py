@@ -34,3 +34,11 @@ SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=False)
 CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+
+# JB-API-007 : schéma OpenAPI et Swagger/Redoc réservés aux utilisateurs authentifiés en
+# recette aussi (surface d'API non publique). Réouvrable par l'environnement.
+if not env.bool("API_SCHEMA_PUBLIC", default=False):
+    SPECTACULAR_SETTINGS = {  # noqa: F405
+        **SPECTACULAR_SETTINGS,  # noqa: F405
+        "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    }
