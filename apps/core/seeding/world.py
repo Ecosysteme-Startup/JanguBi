@@ -53,6 +53,36 @@ EXTRA_PARISHES: list[tuple[str, str, list[str]]] = [
 ]
 
 
+# JB-WEB-006 : rattachement géographiquement cohérent des paroisses à un doyenné (plus de
+# round-robin qui plaçait Pikine en Petite-Côte ou Guédiawaye dans le Sine). Clé : quartier →
+# code de doyenné. Un quartier non listé retombe sur le doyenné Plateau-Médina (centre).
+DEANERY_BY_QUARTER: dict[str, str] = {
+    # Doyenné Plateau-Médina (centre de Dakar)
+    "Médina": "DAK-D-PLATEAU-MEDINA", "Colobane": "DAK-D-PLATEAU-MEDINA", "Fann": "DAK-D-PLATEAU-MEDINA",
+    "Point E": "DAK-D-PLATEAU-MEDINA", "Sacré-Cœur": "DAK-D-PLATEAU-MEDINA", "HLM": "DAK-D-PLATEAU-MEDINA",
+    "Niary Tally": "DAK-D-PLATEAU-MEDINA", "Bel-Air": "DAK-D-PLATEAU-MEDINA", "Yarakh": "DAK-D-PLATEAU-MEDINA",
+    # Doyenné Grand Dakar-Yoff (ouest)
+    "Ouakam": "DAK-D-GRAND-DAKAR-YOFF", "Grand-Yoff": "DAK-D-GRAND-DAKAR-YOFF", "Yoff": "DAK-D-GRAND-DAKAR-YOFF",
+    "Mermoz": "DAK-D-GRAND-DAKAR-YOFF", "Liberté 6": "DAK-D-GRAND-DAKAR-YOFF", "Hann": "DAK-D-GRAND-DAKAR-YOFF",
+    "Ngor": "DAK-D-GRAND-DAKAR-YOFF", "Mamelles": "DAK-D-GRAND-DAKAR-YOFF", "Golf Sud": "DAK-D-GRAND-DAKAR-YOFF",
+    # Doyenné des Niayes (banlieue : Pikine, Guédiawaye, Parcelles…)
+    "Parcelles Assainies": "DAK-D-NIAYES", "Pikine": "DAK-D-NIAYES", "Thiaroye": "DAK-D-NIAYES",
+    "Guédiawaye": "DAK-D-NIAYES", "Keur Massar": "DAK-D-NIAYES", "Dalifort": "DAK-D-NIAYES",
+    "Yeumbeul": "DAK-D-NIAYES", "Pikine Est": "DAK-D-NIAYES", "Malika": "DAK-D-NIAYES",
+    "Tivaouane Peulh": "DAK-D-NIAYES", "Cambérène 2": "DAK-D-NIAYES", "Camberène": "DAK-D-NIAYES",
+    # Doyenné de la Petite-Côte (Rufisque et au-delà)
+    "Rufisque": "DAK-D-PETITE-COTE", "Mbao": "DAK-D-PETITE-COTE", "Bargny": "DAK-D-PETITE-COTE",
+    "Diamniadio": "DAK-D-PETITE-COTE", "Sangalkam": "DAK-D-PETITE-COTE", "Keur Mbaye Fall": "DAK-D-PETITE-COTE",
+    "Sébikotane": "DAK-D-PETITE-COTE",
+}
+DEFAULT_DEANERY_CODE = "DAK-D-PLATEAU-MEDINA"
+
+
+def deanery_code_for_quarter(quarter: str) -> str:
+    """Code de doyenné cohérent avec le quartier (JB-WEB-006)."""
+    return DEANERY_BY_QUARTER.get(quarter, DEFAULT_DEANERY_CODE)
+
+
 def parish_codes(ctx: SeedContext) -> list[str]:
     from apps.core.management.commands.seed_demo import SECOND_PARISH_CODE
     from apps.hierarchy.profiles import PILOT_PARISH_CODE

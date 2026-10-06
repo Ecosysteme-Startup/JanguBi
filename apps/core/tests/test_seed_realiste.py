@@ -13,6 +13,18 @@ from apps.core.seeding.context import SCALES
 pytestmark = pytest.mark.django_db
 
 
+def test_deanery_by_quarter_is_geographically_coherent():
+    """JB-WEB-006 : une paroisse de Pikine/Guédiawaye relève du doyenné des Niayes, pas du
+    Sine ni de la Petite-Côte ; un quartier inconnu retombe sur Plateau-Médina."""
+    from apps.core.seeding.world import deanery_code_for_quarter
+
+    assert deanery_code_for_quarter("Pikine") == "DAK-D-NIAYES"
+    assert deanery_code_for_quarter("Guédiawaye") == "DAK-D-NIAYES"
+    assert deanery_code_for_quarter("Rufisque") == "DAK-D-PETITE-COTE"
+    assert deanery_code_for_quarter("Ouakam") == "DAK-D-GRAND-DAKAR-YOFF"
+    assert deanery_code_for_quarter("Quartier inconnu") == "DAK-D-PLATEAU-MEDINA"
+
+
 @pytest.fixture
 def allowed(monkeypatch):
     monkeypatch.setenv("SEED_ALLOWED", "true")

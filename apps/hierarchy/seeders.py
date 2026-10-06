@@ -15,7 +15,12 @@ from django.db.models import Count, Q
 from apps.core.seeding import names
 from apps.core.seeding.context import DOMAIN, SeedContext
 from apps.core.seeding.registry import Check, Phase, Seeder, register
-from apps.core.seeding.world import EXTRA_PARISHES, SEED_PARISH_PREFIX
+from apps.core.seeding.world import (
+    DEFAULT_DEANERY_CODE,
+    EXTRA_PARISHES,
+    SEED_PARISH_PREFIX,
+    deanery_code_for_quarter,
+)
 
 # Horaires types d'une paroisse de Dakar : messe anticipée le samedi soir, trois ou quatre le dimanche.
 SUNDAY_TIMES = [datetime.time(7, 0), datetime.time(9, 30), datetime.time(11, 30), datetime.time(18, 30)]
@@ -54,7 +59,11 @@ class HierarchieSeeder(Seeder):
             call_command("seed_demo", verbosity=0)
         rng = ctx.rng(self.name)
         parish_type = NodeType.objects.get(code="paroisse")
-        deaneries = list(Node.objects.filter(type__code="doyenne", code__startswith="DAK-D-").order_by("code"))
+        # JB-WEB-006 : rattachement par quartier (plus de round-robin géographiquement faux).
+        deaneries_by_code = {
+            d.code: d for d in Node.objects.filter(type__code="doyenne", code__startswith="DAK-D-")
+        }
+        fallback = deaneries_by_code.get(DEFAULT_DEANERY_CODE) or next(iter(deaneries_by_code.values()))
         created_nodes, created_places = [], []
         codes = [c for c in _codes(ctx) if c.startswith(SEED_PARISH_PREFIX)]
         with transaction.atomic():
@@ -62,8 +71,9 @@ class HierarchieSeeder(Seeder):
                 if Node.objects.filter(code=code).exists():
                     continue
                 name, quarter, chapels = EXTRA_PARISHES[i % len(EXTRA_PARISHES)]
+                deanery = deaneries_by_code.get(deanery_code_for_quarter(quarter), fallback)
                 node = node_create(
-                    node_type=parish_type, name=name, parent=deaneries[i % len(deaneries)], code=code,
+                    node_type=parish_type, name=name, parent=deanery, code=code,
                     city="Dakar", address=quarter, is_active_on_platform=True,
                 )  # fmt: skip
                 created_nodes.append(node.pk)
