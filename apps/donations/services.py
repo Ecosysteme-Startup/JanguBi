@@ -289,6 +289,26 @@ def fund_close(*, fund: Fund, actor: Any) -> Fund:
 
 
 @transaction.atomic
+def funds_close_past(*, today: datetime.date | None = None) -> int:
+    """JB-WEB-042 : clôture automatique des fonds ouverts dont la période est révolue
+    (``ends_on`` passé) — quêtes dominicales et impérées restées « En cours » après leur fin.
+    Les fonds sans date de fin et les fonds déjà clos ne sont pas touchés ; une clôture manuelle
+    est donc respectée (on ne réouvre jamais). Renvoie le nombre de fonds clôturés."""
+    today = today or timezone.localdate()
+    now = timezone.now()
+    expired = list(
+        Fund.objects.filter(status=FundStatus.OUVERT, ends_on__isnull=False, ends_on__lt=today)
+    )
+    for fund in expired:
+        fund.status = FundStatus.CLOS
+        fund.closed_at = now
+        fund.save(update_fields=["status", "closed_at", "updated_at"])
+        audit_log(actor=None, action="dons.fonds_cloture_auto", target=fund, node=fund.node,
+                  metadata={"ends_on": fund.ends_on.isoformat()})  # fmt: skip
+    return len(expired)
+
+
+@transaction.atomic
 def fund_news_post(*, fund: Fund, actor: Any, body: str) -> FundUpdate:
     access.require_parish_level(actor, "dons.gerer_fonds", fund.node)
     if fund.kind != FundKind.CAMPAGNE:
@@ -735,6 +755,8 @@ def donations_reconcile(*, now: datetime.datetime | None = None) -> dict[str, in
     check_before = now - datetime.timedelta(minutes=settings.DONATIONS_PENDING_CHECK_MINUTES)
     expire_before = now - datetime.timedelta(hours=settings.DONATIONS_EXPIRE_HOURS)
     counts = {"verifies": 0, "confirmes": 0, "expires": 0, "erreurs": 0}
+    # JB-WEB-042 : clôture des fonds dont la période est révolue (statut cohérent avec les dates).
+    counts["fonds_clotures"] = funds_close_past(today=timezone.localdate())
     pending = PaymentAttempt.objects.filter(
         donation__status__in=[DonationStatus.INITIE, DonationStatus.EN_ATTENTE],
         external_ref__isnull=False,
