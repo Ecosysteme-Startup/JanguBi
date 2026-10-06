@@ -213,12 +213,15 @@ class Command(BaseCommand):
                 max_participants=80,
             )
         if place and not ConfessionSlotRule.objects.filter(priest=vicaire).exists():
+            # JB-WEB-018 : les créneaux réservables tombent DANS la permanence de confession
+            # affichée sur « Ma paroisse » (samedi 16 h-18 h, propre « senegal »), au lieu d'un
+            # samedi 10 h-11 h incohérent avec l'horaire annoncé.
             rule_create(
                 priest=vicaire,
                 place=place,
                 weekday=5,
-                start_time=datetime.time(10, 0),
-                end_time=datetime.time(11, 0),
+                start_time=datetime.time(16, 0),
+                end_time=datetime.time(18, 0),
                 slot_minutes=15,
             )
         if not DocumentRequest.objects.filter(requester=people["fidele"]).exists():
