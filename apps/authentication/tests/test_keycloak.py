@@ -631,3 +631,25 @@ def test_cors_allows_the_last_event_id_header():
     from django.conf import settings
 
     assert "last-event-id" in settings.CORS_ALLOW_HEADERS
+
+
+def test_cors_allows_the_idempotency_key_header():
+    from django.conf import settings
+
+    assert "idempotency-key" in settings.CORS_ALLOW_HEADERS
+
+
+@pytest.mark.django_db
+def test_cors_preflight_authorises_idempotency_key(client):
+    from django.conf import settings
+
+    origin = settings.CORS_ALLOWED_ORIGINS[0]
+    resp = client.options(
+        "/api/v1/dons/checkout/",
+        HTTP_ORIGIN=origin,
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="idempotency-key,content-type",
+    )
+    assert resp.status_code == 200
+    allowed = resp.headers["access-control-allow-headers"].lower()
+    assert "idempotency-key" in allowed
