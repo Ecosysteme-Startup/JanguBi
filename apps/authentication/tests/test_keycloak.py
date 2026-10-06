@@ -660,6 +660,23 @@ def test_realm_birthdate_is_required_and_admin_only_edit():
     assert "user" not in birthdate["permissions"]["edit"]
 
 
+def test_realm_declares_configure_totp_and_conditional_otp_login():
+    """JB-WEB-037/043 : CONFIGURE_TOTP est une action requise disponible, et le flux de
+    connexion exige l'OTP dès qu'un compte en a un (CONDITIONAL sur user-configured)."""
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    actions = {a["alias"]: a for a in realm.get("requiredActions", [])}
+    assert actions["CONFIGURE_TOTP"]["enabled"] is True
+    assert realm["browserFlow"] == "browser-mfa"
+    otp_flow = next(f for f in realm["authenticationFlows"] if f["alias"] == "browser-mfa forms")
+    otp = next(e for e in otp_flow["authenticationExecutions"] if e.get("flowAlias") == "browser-mfa otp")
+    assert otp["requirement"] == "CONDITIONAL"
+
+
 def test_cors_allows_the_last_event_id_header():
     from django.conf import settings
 

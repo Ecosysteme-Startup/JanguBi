@@ -581,6 +581,29 @@ def test_reconcile_when_keycloak_is_down(world, kc):
     assert KeycloakSyncRun.objects.get().error
 
 
+def test_reconcile_requires_totp_for_hand_created_platform_admin(world, kc):
+    """JB-WEB-037/043 : un platform_admin créé à la main dans Keycloak, sans OTP, se voit
+    exiger la configuration d'un second facteur par la réconciliation."""
+    sub = kc.seed(email="admin-main@numerisen.sn", email_verified=True, roles=("platform_admin",), otp=False)
+    call_command("sync_keycloak", stdout=io.StringIO())
+    assert "CONFIGURE_TOTP" in kc.users[sub]["requiredActions"]
+
+
+def test_staff_removal_clears_pending_totp_action(world, kc):
+    """JB-WEB-039 : la fin de nomination retire l'obligation de configurer un OTP (non-admin)."""
+    from apps.authentication.services_keycloak import keycloak_staff_role_sync
+
+    p = linked(kc, priest("vicaire039@sd.sn"))
+    assignment = nominate(p, "vicaire_paroissial", world.saint_dominique)
+    assert keycloak_staff_role_sync(person=p, admin=kc) == "added"
+    assert "CONFIGURE_TOTP" in kc.users[p.keycloak_sub]["requiredActions"]
+
+    assignment.status = "terminee"
+    assignment.save()
+    assert keycloak_staff_role_sync(person=p, admin=kc) == "removed"
+    assert "CONFIGURE_TOTP" not in kc.users[p.keycloak_sub]["requiredActions"]
+
+
 def test_periodic_task(world, kc):
     from apps.users.tasks import keycloak_accounts_reconcile_task
 

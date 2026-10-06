@@ -142,6 +142,12 @@ class KeycloakAdmin:
         if action not in actions:
             self._request("PUT", f"/users/{user_id}", json={"requiredActions": sorted(actions | {action})})
 
+    def remove_required_action(self, user_id: str, action: str) -> None:
+        user = self._request("GET", f"/users/{user_id}").json()
+        actions = set(user.get("requiredActions", []))
+        if action in actions:
+            self._request("PUT", f"/users/{user_id}", json={"requiredActions": sorted(actions - {action})})
+
     # --- comptes plateforme (plateforme.admin) -------------------------------------------
 
     def users_list(self, *, page_size: int = 500, limit: int = 20000) -> list[dict[str, Any]]:
