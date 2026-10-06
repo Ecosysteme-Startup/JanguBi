@@ -57,6 +57,33 @@ def _method(value: str) -> str:
     return next((m for key, m in _METHODS.items() if key in value), PaymentMethod.INCONNU)
 
 
+def _method_from_payload(data: dict[str, Any]) -> str:
+    """Moyen de paiement effectif depuis le payload PayDunya.
+
+    JB-API-008 : NE PAS utiliser ``data["mode"]`` — c'est l'environnement PayDunya
+    (« test »/« live »), jamais le moyen de paiement, d'où un résultat toujours « inconnu ».
+    TODO(JB-API-008) : confirmer sur un VRAI paiement sandbox le champ exact qui porte le
+    canal (opérateur mobile / carte). D'après les intégrations connues, il remonte dans le
+    bloc ``customer`` (``payment_method``) ou au niveau racine ; on essaie ces emplacements
+    plausibles dans l'ordre et, à défaut, on reste sur « inconnu » (valeur par défaut robuste,
+    jamais bloquante pour la confirmation du don)."""
+    customer = data.get("customer") or {}
+    invoice = data.get("invoice") or {}
+    candidates = [
+        customer.get("payment_method"),
+        data.get("payment_method"),
+        invoice.get("payment_method"),
+        data.get("channel"),
+        data.get("payment_channel"),
+    ]
+    for candidate in candidates:
+        if candidate:
+            resolved = _method(str(candidate))
+            if resolved != PaymentMethod.INCONNU:
+                return resolved
+    return PaymentMethod.INCONNU
+
+
 def _to_int(value: Any) -> int | None:
     if value in (None, ""):
         return None
@@ -147,7 +174,7 @@ class PayDunyaProvider:
             external_ref=str(invoice.get("token", "")),
             status=_STATUS.get(str(data.get("status", "")).lower(), ProviderStatus.PENDING),
             amount=_to_int(invoice.get("total_amount")),
-            method=_method(str(data.get("mode") or (data.get("customer") or {}).get("payment_method", ""))),
+            method=_method_from_payload(data),
             raw=text,
         )
 
@@ -158,7 +185,7 @@ class PayDunyaProvider:
             external_ref=external_ref,
             status=_STATUS.get(str(data.get("status", "")).lower(), ProviderStatus.PENDING),
             amount=_to_int(invoice.get("total_amount")),
-            method=_method(str(data.get("mode", ""))),
+            method=_method_from_payload(data),
             raw=json.dumps(data),
         )
 
