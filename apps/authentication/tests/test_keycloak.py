@@ -172,6 +172,22 @@ def test_birthdate_from_token_never_overwrites_a_saved_birthdate(keys):
     assert Profile.objects.get(user=empty).date_of_birth == datetime.date(1992, 3, 12)
 
 
+def test_profile_sync_runs_for_an_existing_user_found_by_sub(keys):
+    """JB-API-003 : un utilisateur déjà connu par son sub mais au profil incomplet doit
+    voir sa date de naissance remplie depuis le jeton à une connexion ultérieure."""
+    from apps.users.models import Profile
+
+    sub = str(uuid.uuid4())
+    # 1re connexion sans date de naissance → compte + profil incomplet.
+    assert api(keys.token(sub=sub, email="retour@test.sn")).get(ME).status_code == 200
+    user = get_user_model().objects.get(keycloak_sub=sub)
+    assert Profile.objects.get(user=user).date_of_birth is None
+
+    # 2e connexion (même sub) avec la date de naissance dans le jeton → le profil est complété.
+    assert api(keys.token(sub=sub, email="retour@test.sn", birthdate="1990-07-04")).get(ME).status_code == 200
+    assert Profile.objects.get(user=user).date_of_birth == datetime.date(1990, 7, 4)
+
+
 @pytest.mark.parametrize(
     ("overrides", "reason"),
     [
