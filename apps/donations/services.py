@@ -388,6 +388,25 @@ def _check_fund_open(fund: Fund) -> DonationActivation:
     return activation
 
 
+ADULT_AGE = 18
+MINOR_DONATION_MESSAGE = (
+    "Les dons en ligne sont réservés aux personnes majeures. "
+    "Un mineur peut faire un don à sa paroisse accompagné d'un adulte."
+)
+
+
+def _donor_adult_check(donor: Any) -> None:
+    """RG-13 : refuse côté serveur un don d'un donateur connecté mineur. Un donateur anonyme
+    (non connecté) n'a pas de date de naissance : il n'est pas concerné par ce contrôle."""
+    birth = getattr(getattr(donor, "profile", None), "date_of_birth", None)
+    if birth is None:
+        return
+    today = timezone.localdate()
+    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+    if age < ADULT_AGE:
+        raise PermissionDeniedError(MINOR_DONATION_MESSAGE, code="minor")
+
+
 def checkout_create(
     *,
     fund: Fund,
@@ -412,6 +431,8 @@ def checkout_create(
     if source not in DonationSource.values:
         source = DonationSource.INCONNU
     donor = donor if getattr(donor, "is_authenticated", False) else None
+    if donor is not None:
+        _donor_adult_check(donor)
     if idempotency_key:
         existing = PaymentAttempt.objects.select_related("donation").filter(idempotency_key=idempotency_key).first()
         if existing is not None:

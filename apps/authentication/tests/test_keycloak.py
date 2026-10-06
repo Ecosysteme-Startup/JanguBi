@@ -643,6 +643,23 @@ def test_realm_declares_the_web_client_with_exact_redirects_and_logout():
     assert client["webOrigins"] == ["${KC_WEB_ORIGIN:http://localhost:3000}"]
 
 
+def test_realm_birthdate_is_required_and_admin_only_edit():
+    """JB-WEB-014 (RG-13) : date de naissance obligatoire à l'inscription et non éditable
+    par l'utilisateur (seul l'admin peut la modifier)."""
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    provider = realm["components"]["org.keycloak.userprofile.UserProfileProvider"][0]
+    config = json.loads(provider["config"]["kc.user.profile.config"][0])
+    birthdate = next(a for a in config["attributes"] if a["name"] == "birthdate")
+    assert birthdate["required"] == {"roles": ["user"]}
+    assert birthdate["permissions"]["edit"] == ["admin"]
+    assert "user" not in birthdate["permissions"]["edit"]
+
+
 def test_cors_allows_the_last_event_id_header():
     from django.conf import settings
 

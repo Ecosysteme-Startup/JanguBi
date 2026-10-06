@@ -66,6 +66,30 @@ def test_logged_in_donor_email_is_never_stored(fund, world):
     assert donation.donor_email == ""
 
 
+def test_minor_donor_is_refused_server_side(fund, world):
+    """JB-WEB-014 (RG-13) : un don d'un donateur connecté mineur est refusé par le serveur."""
+    from apps.core.exceptions import PermissionDeniedError
+    from apps.users.models import Profile
+
+    minor_birth = timezone.localdate().replace(year=timezone.localdate().year - 15)
+    Profile.objects.update_or_create(user=world.fidele, defaults={"date_of_birth": minor_birth})
+    with pytest.raises(PermissionDeniedError) as exc:
+        services.checkout_create(fund=fund, amount=5000, fees_covered=True, anonymous=False, donor=world.fidele)
+    assert exc.value.code == "minor"
+    assert Donation.objects.count() == 0
+
+
+def test_adult_donor_is_allowed(fund, world):
+    from apps.users.models import Profile
+
+    adult_birth = timezone.localdate().replace(year=timezone.localdate().year - 40)
+    Profile.objects.update_or_create(user=world.fidele, defaults={"date_of_birth": adult_birth})
+    donation, _, created = services.checkout_create(
+        fund=fund, amount=5000, fees_covered=True, anonymous=False, donor=world.fidele
+    )
+    assert created and donation.status == S.EN_ATTENTE
+
+
 def test_same_idempotency_key_returns_the_same_donation(fund):
     first, _, created = services.checkout_create(
         fund=fund, amount=2000, fees_covered=False, anonymous=True, idempotency_key="k-1"
