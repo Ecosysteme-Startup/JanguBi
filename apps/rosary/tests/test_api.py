@@ -48,6 +48,33 @@ def test_rosary_day_serves_fruit_and_french_labels(api_client):
 
 
 @pytest.mark.django_db
+def test_today_serves_opening_prayers_in_order(api_client):
+    """JB-WEB-025 : les prières d'ouverture (signe de croix, Credo, Notre Père, 3 Je vous
+    salue Marie, Gloire au Père) sont servies dans l'ordre, avant la 1re dizaine."""
+    from django.core.cache import cache
+
+    from apps.rosary.models import Mystery, MysteryGroup, Prayer, RosaryDay
+
+    cache.clear()  # /day/<n>/ est mis en cache (cache_page) : éviter une réponse d'un autre test
+    group = MysteryGroup.objects.create(name="Joyeux", slug="joyeux")
+    Mystery.objects.create(group=group, order=1, title="L'Annonciation")
+    RosaryDay.objects.create(weekday=RosaryDay.Weekday.MONDAY, group=group)
+    Prayer.objects.create(type=Prayer.Type.SIGN_OF_CROSS, text="Au nom du Père…", language="fr")
+    Prayer.objects.create(type=Prayer.Type.CREED, text="Je crois en Dieu…", language="fr")
+    Prayer.objects.create(type=Prayer.Type.OUR_FATHER, text="Notre Père…", language="fr")
+    Prayer.objects.create(type=Prayer.Type.HAIL_MARY, text="Je vous salue, Marie…", language="fr")
+    Prayer.objects.create(type=Prayer.Type.GLORY_BE, text="Gloire au Père…", language="fr")
+
+    response = api_client.get("/api/v1/rosary/day/0/")
+
+    assert response.status_code == 200
+    types = [p["type"] for p in response.data["opening_prayers"]]
+    assert types == [
+        "SIGN_OF_CROSS", "CREED", "OUR_FATHER", "HAIL_MARY", "HAIL_MARY", "HAIL_MARY", "GLORY_BE"
+    ]
+
+
+@pytest.mark.django_db
 def test_fruits_migration_fills_only_empty_fruits():
     import importlib
 

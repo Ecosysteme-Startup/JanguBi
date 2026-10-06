@@ -76,6 +76,7 @@ class TodayRosaryApi(APIView):
 
     class TodayRosaryOutputSerializer(serializers.Serializer):
         day = RosaryDaySerializer()
+        opening_prayers = PrayerSerializer(many=True)
         standalone_prayers = PrayerSerializer(many=True)
 
     @extend_schema(
@@ -109,9 +110,11 @@ class TodayRosaryApi(APIView):
         serializer = RosaryDaySerializer(day_rosary)
         standalone = RosaryService.get_all_standalone_prayers()
         standalone_data = PrayerSerializer(standalone, many=True).data
+        opening_data = PrayerSerializer(RosaryService.get_opening_prayers(), many=True).data
 
         return Response({
             "day": serializer.data,
+            "opening_prayers": opening_data,
             "standalone_prayers": standalone_data
         })
 
@@ -188,9 +191,11 @@ class RosaryWeekdayApi(APIView):
             serializer = RosaryDaySerializer(day_rosary)
             standalone = RosaryService.get_all_standalone_prayers()
             standalone_data = PrayerSerializer(standalone, many=True).data
-            
+            opening_data = PrayerSerializer(RosaryService.get_opening_prayers(), many=True).data
+
             return Response({
                 "day": serializer.data,
+                "opening_prayers": opening_data,
                 "standalone_prayers": standalone_data
             })
         except RosaryDay.DoesNotExist:

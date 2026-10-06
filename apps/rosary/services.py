@@ -53,6 +53,37 @@ class RosaryService:
         # Everything from Prayer, we could return all or filter by type
         return Prayer.objects.all().order_by("type", "language", "id")
 
+    # JB-WEB-025 : séquence traditionnelle des prières d'ouverture, dans l'ordre, AVANT la
+    # 1re dizaine (signe de croix, Je crois en Dieu, Notre Père, 3 Je vous salue Marie, Gloire
+    # au Père). Prières du domaine public, aucune question de licence.
+    OPENING_SEQUENCE = (
+        Prayer.Type.SIGN_OF_CROSS,
+        Prayer.Type.CREED,
+        Prayer.Type.OUR_FATHER,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.GLORY_BE,
+    )
+
+    @staticmethod
+    def get_opening_prayers(language: str = "fr"):
+        """Prières d'ouverture du chapelet, dans l'ordre (le Je vous salue Marie apparaît 3 fois).
+        On choisit une prière par type ; un type absent du contenu est simplement ignoré."""
+        picked: dict[str, Prayer] = {}
+        sequence: list[Prayer] = []
+        for ptype in RosaryService.OPENING_SEQUENCE:
+            if ptype not in picked:
+                found = (
+                    Prayer.objects.filter(type=ptype, language__iexact=language).order_by("id").first()
+                    or Prayer.objects.filter(type=ptype).order_by("id").first()
+                )
+                if found is None:
+                    continue
+                picked[ptype] = found
+            sequence.append(picked[ptype])
+        return sequence
+
     @staticmethod
     def search_text(query: str):
         """Recherche plein-texte sur les prières.
