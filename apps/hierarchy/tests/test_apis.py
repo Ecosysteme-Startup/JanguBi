@@ -4,7 +4,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
-from apps.hierarchy.models import MassSchedule, Node, PlaceOfWorship
+from apps.hierarchy.models import AuditEvent, MassSchedule, Node, PlaceOfWorship
 from apps.hierarchy.services import schedule_exception_create, schedule_replace
 from apps.hierarchy.tests.factories import make_place
 from apps.users.tests.factories import BaseUserFactory, SuperAdminFactory
@@ -198,11 +198,15 @@ def test_exceptions_create_list_delete(admin, anon, tree):
 
     created = admin.post(url, {"date": "2099-12-24", "kind": "messe", "start_time": "23:00", "note": "Veillée"}, format="json")
     listing = anon.get(url)
+    # JB-WEB-031 : la création apparaît au journal d'audit (rubrique Horaires).
+    assert AuditEvent.objects.filter(action="horaires.exception_creee").count() == 1
     deleted = admin.delete(f"{url}{created.data['id']}/")
 
     assert created.status_code == 201
     assert [e["note"] for e in listing.data] == ["Veillée"]
     assert deleted.status_code == 204
+    # JB-WEB-031 : la suppression aussi.
+    assert AuditEvent.objects.filter(action="horaires.exception_supprimee").count() == 1
 
 
 def test_public_week(anon, tree):

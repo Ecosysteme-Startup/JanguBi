@@ -344,7 +344,7 @@ class PlaceExceptionListCreateApi(HierarchyBaseApi):
         place = selectors.place_get(place_id=place_id)
         serializer = ScheduleExceptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        exception = services.schedule_exception_create(place=place, **serializer.validated_data)
+        exception = services.schedule_exception_create(place=place, actor=request.user, **serializer.validated_data)
         return Response(ScheduleExceptionSerializer(exception).data, status=status.HTTP_201_CREATED)
 
 
@@ -356,7 +356,8 @@ class PlaceExceptionDeleteApi(HierarchyBaseApi):
     def delete(self, request: Request, place_id: int, exception_id: int) -> Response:
         place = selectors.place_get(place_id=place_id)
         services.schedule_exception_delete(
-            exception=selectors.schedule_exception_get(place=place, exception_id=exception_id)
+            exception=selectors.schedule_exception_get(place=place, exception_id=exception_id),
+            actor=request.user,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
