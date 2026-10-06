@@ -459,6 +459,9 @@ class FakeAdmin:
     def add_required_action(self, user_id, action):
         self.actions.setdefault(user_id, set()).add(action)
 
+    def remove_required_action(self, user_id, action):
+        self.actions.get(user_id, set()).discard(action)
+
 
 def test_staff_role_follows_active_assignments(keys):
     tree = Tree()
@@ -474,6 +477,8 @@ def test_staff_role_follows_active_assignments(keys):
     assignment.save()
     authz.invalidate_user(secretary.pk)
     assert keycloak_staff_role_sync(person=secretary, admin=admin) == "removed"
+    # JB-WEB-039 : l'obligation CONFIGURE_TOTP en attente est retirée avec le rôle staff.
+    assert admin.actions["kc-sec"] == set()
 
 
 def test_staff_sync_skips_unlinked_people(keys):
