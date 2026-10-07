@@ -37,7 +37,7 @@ make kc-up && manage.py migrate_users_to_keycloak --apply   # si des comptes exi
 | Réglage | Défaut | Remarque |
 |---|---|---|
 | `KEYCLOAK_ENABLED` | vrai | synchronisation avec l'administration Keycloak (rôle staff, suppression de compte) |
-| `LITURGY_SOURCE` | `crampon_refs` | `aelf` seulement avec l'accord écrit de l'AELF |
+| `LITURGY_SOURCE` | `aelf` | réponse AELF telle quelle ; `crampon_refs` en option explicite |
 | `BIBLE_EDITION` | vide | `crampon1923` une fois la Crampon importée ; avertissement au démarrage tant que c'est vide |
 | `CONSENT_CURRENT_VERSION` | `2026-09` | aligner sur la version publiée des CGU et de la politique |
 | `DJANGO_ADMIN_ENABLED` | faux en production | l'admin Django n'a pas de MFA |
