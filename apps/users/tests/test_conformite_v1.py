@@ -133,6 +133,28 @@ def test_office_holder_cannot_delete_account(world):
         account_delete(user=world.pere)
 
 
+def test_consent_withdrawal_closes_the_account(world):
+    """JB-WEB-024 : retrait du consentement « donnée sensible » → fermeture/anonymisation du compte."""
+    from apps.users.services_privacy import consent_withdraw
+
+    consent_withdraw(user=world.awa)
+
+    world.awa.refresh_from_db()
+    assert world.awa.is_active is False
+    assert world.awa.email.endswith("@deleted.invalid")
+    assert AuditEvent.objects.filter(action="conformite.retrait_consentement").exists()
+    assert AuditEvent.objects.filter(action="conformite.suppression_compte").exists()
+
+
+def test_api_withdraw_consent(world):
+    client = client_for(world.awa)
+    assert client.delete("/api/v1/me/consent/").status_code == 204
+    world.awa.refresh_from_db()
+    assert world.awa.is_active is False
+    # Un titulaire d'office doit d'abord libérer sa nomination.
+    assert client_for(world.pere).delete("/api/v1/me/consent/").status_code == 409
+
+
 def test_api_delete_me(world):
     client = client_for(world.awa)
     assert client.delete("/api/v1/me/").status_code == 204

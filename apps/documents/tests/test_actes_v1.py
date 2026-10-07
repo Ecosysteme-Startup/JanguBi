@@ -296,6 +296,25 @@ def test_api_requester_flow(world):
     assert cancelled.data["status"] == "cancelled"
 
 
+def test_sacrament_date_cannot_precede_birth(world):
+    """JB-WEB-028 : la date du sacrement doit être postérieure ou égale à la naissance."""
+    client = client_for(world.fidele)
+    rejected = client.post(
+        "/api/v1/documents/requests/",
+        _payload(world, date_of_birth="2011-05-01", sacrament_approximate_date="2005"),
+        format="json",
+    )
+    assert rejected.status_code == 400
+    assert "sacrament_approximate_date" in rejected.data["error"]["details"]
+
+    accepted = client.post(
+        "/api/v1/documents/requests/",
+        _payload(world, date_of_birth="2011-05-01", sacrament_approximate_date="2012"),
+        format="json",
+    )
+    assert accepted.status_code == 201
+
+
 def test_api_staff_flow_and_404_outside_the_queue(world):
     r = submit(world)
     staff = client_for(world.secretaire)

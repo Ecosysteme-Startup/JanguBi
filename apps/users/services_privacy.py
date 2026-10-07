@@ -45,6 +45,26 @@ def consent_required(*, user: Any) -> bool:
     return user.consent_version != settings.CONSENT_CURRENT_VERSION or user.consent_at is None
 
 
+@transaction.atomic
+def consent_withdraw(*, user: Any) -> None:
+    """EF-CONF : retrait du consentement au traitement des données sensibles (loi 2008-12).
+    Comme toute l'activité de l'application repose sur ces données (état de vie, paroisse,
+    demandes d'actes…), le retrait entraîne la fermeture du compte : anonymisation,
+    purge des conversations et suppression dans Keycloak, comme la suppression de compte.
+    Un titulaire d'office doit d'abord voir ses nominations prendre fin (cf. account_delete)."""
+    from apps.hierarchy.audit import audit_log
+
+    if not user.is_active:
+        raise ApplicationError("Ce compte est déjà supprimé.", code="account_deleted")
+    audit_log(
+        actor=user,
+        action="conformite.retrait_consentement",
+        target=user,
+        metadata={"version": user.consent_version},
+    )
+    account_delete(user=user)
+
+
 def _active_offices(user: Any) -> bool:
     from apps.hierarchy.authz import active_assignments
 

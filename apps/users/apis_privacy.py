@@ -65,6 +65,19 @@ class MeConsentApi(V1ApiMixin, ApiAuthMixin, APIView):
         user = services_privacy.consent_give(user=request.user, **serializer.validated_data)
         return Response(_consent_status(user))
 
+    @extend_schema(
+        tags=TAG,
+        summary="Retirer mon consentement « donnée sensible » (ferme et anonymise le compte ; irréversible)",
+        responses={
+            204: None,
+            400: OpenApiResponse(description="Compte déjà supprimé"),
+            409: OpenApiResponse(description="Nomination en cours : elle doit d'abord prendre fin"),
+        },
+    )
+    def delete(self, request: Request) -> Response:
+        services_privacy.consent_withdraw(user=request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class MeExportApi(V1ApiMixin, ApiAuthMixin, APIView):
     permission_classes = (IsAuthenticated,)

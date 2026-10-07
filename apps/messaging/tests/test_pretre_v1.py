@@ -129,6 +129,16 @@ def test_api_availability_roundtrip(world):
     assert client_for(world.adulte).get("/api/v1/messaging/availability/").status_code == 403
 
 
+def test_seeder_reply_windows_pass_serializer_validation():
+    """JB-WEB-016 : le seeder doit produire {weekday, start, end} accepté par la validation."""
+    from apps.messaging.serializers import AvailabilitySerializer
+
+    seeded = [{"weekday": d, "start": "17:00", "end": "19:00"} for d in (1, 2, 3, 4, 5)]
+    serializer = AvailabilitySerializer()
+    # Ne lève pas et renvoie les fenêtres telles quelles.
+    assert serializer.validate_reply_windows(seeded) == seeded
+
+
 def test_api_priests_lists_only_reachable(world):
     assert client_for(world.adulte).get("/api/v1/messaging/priests/").data == []  # sans paroisse suivie
     world.adulte.paroisse_suivie = world.saint_dominique

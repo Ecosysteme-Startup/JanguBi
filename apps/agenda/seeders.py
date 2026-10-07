@@ -33,7 +33,9 @@ class AgendaSeeder(Seeder):
             for i in range(ctx.scale.evenements_par_paroisse):
                 title, kind, capacity = catalogue[(i + rng.randint(0, 3)) % len(catalogue)]
                 offset = rng.randint(-60, 45)
-                start = ctx.aware(ctx.today + datetime.timedelta(days=offset), rng.choice([9, 10, 16, 18, 19]))
+                # JB-WEB-006 : une veillée est un événement du soir (horaires cohérents).
+                hours = [19, 20, 21] if "eillée" in title or "igile" in title else [9, 10, 16, 18, 19]
+                start = ctx.aware(ctx.today + datetime.timedelta(days=offset), rng.choice(hours))
                 e = Event(
                     title=title, description=f"{title} à {parish.name.removeprefix('Paroisse ')}. Tous sont les bienvenus.",
                     event_type=kind, start_at=start, end_at=start + datetime.timedelta(hours=rng.choice([2, 3])),

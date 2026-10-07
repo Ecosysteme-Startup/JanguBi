@@ -134,6 +134,23 @@ def test_booking_marks_slot_reserved_and_second_booking_conflicts(world):
 
 
 @freeze_time(NOW)
+def test_booking_refuses_overlap_with_another_priest(world):
+    """JB-WEB-017 : un fidèle ne peut pas réserver deux rendez-vous qui se chevauchent,
+    même avec deux prêtres différents."""
+    rule(world)  # père
+    rule(world, priest=world.autre_pere)  # autre père, même place, même horaire
+    slot_pere = first_slot(world)
+    slot_autre = (
+        ConfessionSlot.objects.filter(priest=world.autre_pere, starts_at=slot_pere.starts_at).first()
+    )
+    assert slot_autre is not None
+    services.booking_create(slot=slot_pere, person=world.fidele)
+    with pytest.raises(ConflictError) as exc:
+        services.booking_create(slot=slot_autre, person=world.fidele)
+    assert exc.value.code == "overlapping_booking"
+
+
+@freeze_time(NOW)
 def test_booking_limits_active_bookings_per_person(world):
     rule(world)
     slots = list(ConfessionSlot.objects.filter(priest=world.pere).order_by("starts_at")[:3])
