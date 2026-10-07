@@ -6,7 +6,7 @@ Sources, par ordre de préférence :
    servent de chants et de musique. Attribution lue dans ``credits.yaml`` (facultatif) du dossier ;
 2. **manifeste** ``seed_assets/manifest.yaml`` : compléments du domaine public, CC0 ou CC BY(-SA),
    téléchargés une fois par ``fetch_seed_assets`` (sha256 vérifié) dans le cache local
-   (``~/.cache/jangubi-seed/``) ou, en recette, dans le bucket MinIO ``seed-assets`` ;
+   (``~/.cache/jangubi-seed/``) ou, en recette, sous ``seed-assets/`` dans le bucket MinIO de l'application ;
 3. **voix** (homélies, lectures, retraites) : synthèse vocale locale **Piper** si elle est installée ;
    sinon repli **ffmpeg** (signal de parole synthétique : bruit rose filtré et modulé au rythme d'une
    voix). On n'échoue jamais faute de Piper ;
@@ -29,7 +29,12 @@ import yaml
 from django.conf import settings
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".ogg", ".oga", ".opus", ".wav", ".m4a", ".aac"}
-SEED_BUCKET = "seed-assets"
+# Préfixe des médias de test dans le bucket de l'application (recette). Pas de bucket à part : la clé MinIO
+# de la recette n'ouvre QUE le bucket de l'application, sans droit d'en créer un (dépôt Infrastructure,
+# mk/stockage.mk) — un bucket « seed-assets » dédié était refusé en 403.
+SEED_PREFIX = "seed-assets"
+# Musique de démonstration préparée (prepare_musique_demo --publier) : recette seulement, jamais en production.
+DEMO_PREFIX = "musique-demo"
 
 
 def manifest_path() -> pathlib.Path:
@@ -77,7 +82,7 @@ def sha256_of(path: pathlib.Path) -> str:
     return h.hexdigest()
 
 
-# --- Stockage des médias de test : cache local ou bucket MinIO « seed-assets » ------------------------
+# --- Stockage des médias de test : cache local ou dossier « seed-assets/ » du bucket MinIO -------------
 
 
 class LocalStore:
@@ -97,35 +102,51 @@ class LocalStore:
         path = self.root / name
         return path if path.exists() else None
 
+    def list(self, prefix: str) -> list[str]:
+        folder = self.root / prefix
+        return sorted(f"{prefix}/{p.name}" for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
+
 
 class MinioStore:
-    """Bucket ``seed-assets`` du MinIO de recette (partagé ; téléchargé une seule fois)."""
+    """Dossier ``seed-assets/`` du bucket MinIO de l'application, en recette (téléchargé une seule fois).
 
-    kind = f"bucket MinIO « {SEED_BUCKET} »"
+    Les noms manipulés restent relatifs (``musique-demo/01-piano.flac``) : le préfixe ne sert qu'aux clés.
+    Aucune action de niveau bucket (ni ``head_bucket`` ni ``create_bucket``) : le bucket est créé par
+    l'infrastructure, et la clé de recette n'a pas le droit d'y toucher.
+    """
 
     def __init__(self) -> None:
         import boto3
 
+        self.bucket = settings.AWS_STORAGE_BUCKET_NAME
+        self.kind = f"bucket MinIO « {self.bucket} », dossier {SEED_PREFIX}/"
         self.client = boto3.client(
             "s3", endpoint_url=getattr(settings, "AWS_S3_ENDPOINT_URL", None),
             aws_access_key_id=settings.AWS_S3_ACCESS_KEY_ID, aws_secret_access_key=settings.AWS_S3_SECRET_ACCESS_KEY,
             region_name=getattr(settings, "AWS_S3_REGION_NAME", None) or "us-east-1",
         )  # fmt: skip
-        try:
-            self.client.head_bucket(Bucket=SEED_BUCKET)
-        except Exception:  # noqa: BLE001
-            self.client.create_bucket(Bucket=SEED_BUCKET)
         self.local = LocalStore()
+
+    @staticmethod
+    def _key(name: str) -> str:
+        return f"{SEED_PREFIX}/{name}"
 
     def has(self, name: str) -> bool:
         try:
-            self.client.head_object(Bucket=SEED_BUCKET, Key=name)
+            self.client.head_object(Bucket=self.bucket, Key=self._key(name))
             return True
         except Exception:  # noqa: BLE001
             return False
 
     def put(self, name: str, local: pathlib.Path) -> None:
-        self.client.upload_file(str(local), SEED_BUCKET, name)
+        self.client.upload_file(str(local), self.bucket, self._key(name))
+
+    def list(self, prefix: str) -> list[str]:
+        pages = self.client.get_paginator("list_objects_v2").paginate(
+            Bucket=self.bucket, Prefix=self._key(f"{prefix}/")
+        )
+        start = len(self._key(""))
+        return sorted(obj["Key"][start:] for page in pages for obj in page.get("Contents", []))
 
     def get(self, name: str) -> pathlib.Path | None:
         cached = self.local.get(name)
@@ -134,7 +155,8 @@ class MinioStore:
         if not self.has(name):
             return None
         target = self.local.root / name
-        self.client.download_file(SEED_BUCKET, name, str(target))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        self.client.download_file(self.bucket, self._key(name), str(target))
         return target
 
 
@@ -142,6 +164,27 @@ def store_for(profil: str) -> LocalStore | MinioStore:
     if profil == "recette" and bool(getattr(settings, "AWS_S3_ACCESS_KEY_ID", None)):
         return MinioStore()
     return LocalStore()
+
+
+def publish_folder(store: Any, folder: pathlib.Path, prefix: str = DEMO_PREFIX) -> int:
+    """Range les fichiers de ``folder`` sous ``<prefix>/`` dans ``store`` ; renvoie leur nombre."""
+    files = sorted(p for p in folder.iterdir() if p.is_file())
+    for path in files:
+        store.put(f"{prefix}/{path.name}", path)
+    return len(files)
+
+
+def restore_folder(store: Any, target: pathlib.Path, prefix: str = DEMO_PREFIX) -> pathlib.Path | None:
+    """Recopie ``<prefix>/`` de ``store`` dans ``target`` ; ``None`` si rien n'y est publié."""
+    names = store.list(prefix)
+    if not names:
+        return None
+    target.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        source = store.get(name)
+        if source is not None and source.resolve() != (target / pathlib.Path(name).name).resolve():
+            shutil.copyfile(source, target / pathlib.Path(name).name)
+    return target
 
 
 def fetch(asset: Asset, store: Any, *, timeout: int = 60) -> tuple[str, str]:
@@ -209,7 +252,14 @@ def user_album(folder: str | None) -> list[UserTrack]:
     for path in sorted(p for p in root.iterdir() if p.suffix.lower() in AUDIO_EXTENSIONS):
         meta = per_track.get(path.name) or {}
         attribution = meta.get("attribution") or " · ".join(
-            x for x in [album.get("artiste", ""), album.get("titre", ""), album.get("licence", ""), album.get("source", "")] if x
+            x
+            for x in [
+                album.get("artiste", ""),
+                album.get("titre", ""),
+                album.get("licence", ""),
+                album.get("source", ""),
+            ]
+            if x
         )
         tracks.append(
             UserTrack(
@@ -225,7 +275,9 @@ def user_album(folder: str | None) -> list[UserTrack]:
 
 
 def _ffmpeg(*args: str) -> None:
-    subprocess.run([settings.AUDIO_FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, timeout=1800)
+    subprocess.run(
+        [settings.AUDIO_FFMPEG_BIN, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, timeout=1800
+    )
 
 
 def piper_command(voice: str | None) -> list[str] | None:

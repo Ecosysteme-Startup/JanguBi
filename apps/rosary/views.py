@@ -20,8 +20,8 @@ class GroupListApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses=GroupSerializer(many=True), 
-        tags=["Rosary"], 
+        responses=GroupSerializer(many=True),
+        tags=["Rosary"],
         summary="List all rosary groups (Mysteries)",
         description="""
         Returns a list of all Rosary Groups (Joyeux, Lumineux, Douloureux, Glorieux).
@@ -30,7 +30,7 @@ class GroupListApi(APIView):
         In the Catholic tradition, the Rosary is a meditative prayer based on the life of Jesus Christ. 
         It is divided into 4 groups called 'Mysteries'. Each group contains 5 specific events 
         (e.g., 'The Annunciation' is the 1st Joyful Mystery).
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 24))  # Cache for 24 hours
     def get(self, request):
@@ -43,8 +43,8 @@ class GroupDetailApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses=GroupSerializer, 
-        tags=["Rosary"], 
+        responses=GroupSerializer,
+        tags=["Rosary"],
         summary="Get details of a specific rosary group by slug",
         description="""
         Retrieve a specific Rosary Group (e.g., 'joyeux') and its 5 mysteries.
@@ -58,11 +58,12 @@ class GroupDetailApi(APIView):
         4. (Optional) The Fatima Prayer
         
         The API returns this exact sequential order of prayers under each mystery.
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 24))
     def get(self, request, slug):
         from apps.rosary.models import MysteryGroup
+
         try:
             group = RosaryService.get_group_with_mysteries(slug)
             serializer = GroupSerializer(group)
@@ -80,8 +81,8 @@ class TodayRosaryApi(APIView):
         standalone_prayers = PrayerSerializer(many=True)
 
     @extend_schema(
-        responses=TodayRosaryOutputSerializer, 
-        tags=["Rosary"], 
+        responses=TodayRosaryOutputSerializer,
+        tags=["Rosary"],
         summary="Get today's rosary prayers along with standalone prayers",
         description="""
         Fetches the Rosary Group assigned to the current day of the week, along with the introductory 
@@ -95,11 +96,12 @@ class TodayRosaryApi(APIView):
         
         This endpoint also returns `standalone_prayers` (like the Apostles' Creed or the Hail Holy Queen) 
         which are recited at the very beginning and very end of the entire Rosary.
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 1))  # Cache for 1 hour because day changes
     def get(self, request):
         from apps.rosary.models import RosaryDay
+
         try:
             day_rosary = RosaryService.get_today_rosary()
         except RosaryDay.DoesNotExist:
@@ -123,12 +125,10 @@ class RosarySearchApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        parameters=[
-            OpenApiParameter("q", OpenApiTypes.STR, description="Search query")
-        ],
+        parameters=[OpenApiParameter("q", OpenApiTypes.STR, description="Search query")],
         responses=SearchPrayerSerializer(many=True),
         tags=["Rosary"],
-        summary="Search within rosary prayers using text match"
+        summary="Search within rosary prayers using text match",
     )
     def get(self, request):
         query = request.query_params.get("q", "").strip()
@@ -141,16 +141,15 @@ class RosarySearchApi(APIView):
 
 
 class RosaryVectorSearchApi(APIView):
-    """Stub endpoint for future RAG implementation via pgvector."""
+    """Ancienne route « vectorielle », conservée pour les clients existants : plein texte (ADR-018)."""
+
     permission_classes = [AllowAny]
 
     @extend_schema(
-        parameters=[
-            OpenApiParameter("q", OpenApiTypes.STR, description="Semantic search query")
-        ],
+        parameters=[OpenApiParameter("q", OpenApiTypes.STR, description="Texte recherché")],
         responses=SearchPrayerSerializer(many=True),
         tags=["Rosary"],
-        summary="Search within rosary prayers using vector embeddings"
+        summary="Recherche dans les prières (plein texte, route conservée pour compatibilité)",
     )
     def get(self, request):
         query = request.query_params.get("q", "").strip()
@@ -166,8 +165,8 @@ class RosaryWeekdayApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses=TodayRosaryApi.TodayRosaryOutputSerializer, 
-        tags=["Rosary"], 
+        responses=TodayRosaryApi.TodayRosaryOutputSerializer,
+        tags=["Rosary"],
         summary="Get rosary prayers for a specific day of the week",
         description="""
         Fetches the Rosary Group assigned to a given weekday, along with the introductory 
@@ -181,11 +180,12 @@ class RosaryWeekdayApi(APIView):
         4: Friday (Douloureux)
         5: Saturday (Joyeux)
         6: Sunday (Glorieux)
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 24))
     def get(self, request, day):
         from apps.rosary.models import RosaryDay
+
         try:
             day_rosary = RosaryService.get_daily_rosary(day_of_week=int(day))
             serializer = RosaryDaySerializer(day_rosary)
@@ -208,17 +208,18 @@ class PrayerListApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses=PrayerSerializer(many=True), 
-        tags=["Rosary"], 
+        responses=PrayerSerializer(many=True),
+        tags=["Rosary"],
         summary="List all foundational standalone prayers",
         description="""
         Retrieve all foundational pieces used in the Rosary, such as the 'Our Father', 
         the 'Apostles Creed' (Je crois en Dieu), or the 'Fatima Prayer'.
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 24))
     def get(self, request):
         from apps.rosary.models import Prayer
+
         prayers = Prayer.objects.all().order_by("id")
         serializer = PrayerSerializer(prayers, many=True)
         return Response(serializer.data)
@@ -228,18 +229,19 @@ class MysteryDetailApi(APIView):
     permission_classes = [AllowAny]
 
     @extend_schema(
-        responses=MysterySerializer, 
-        tags=["Rosary"], 
+        responses=MysterySerializer,
+        tags=["Rosary"],
         summary="Get details of a specific Mystery (Dizaine)",
         description="""
         Retrieve a specific Mystery by its ID, complete with its scriptural meditation 
         and the full sequence of prayers (1 Our Father, 10 Hail Marys, etc.) that 
         compose its 'decade'.
-        """
+        """,
     )
     @method_decorator(cache_page(60 * 60 * 24))
     def get(self, request, pk):
         from apps.rosary.models import Mystery
+
         try:
             mystery = Mystery.objects.prefetch_related("prayers__prayer").get(pk=pk)
             # Flag it so the serializer knows to include prayers

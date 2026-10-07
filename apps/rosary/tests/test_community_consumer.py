@@ -59,9 +59,7 @@ def _immediate_on_commit(monkeypatch):
     sans ce raccourci, aucune diffusion ne partirait et les tests attendraient
     une trame qui n'arrive jamais.
     """
-    monkeypatch.setattr(
-        "django.db.transaction.on_commit", lambda func, using=None, robust=False: func()
-    )
+    monkeypatch.setattr("django.db.transaction.on_commit", lambda func, using=None, robust=False: func())
 
 
 @pytest.fixture(autouse=True)
@@ -84,9 +82,7 @@ def session(db, settings):
 
     pretre = _make_user("pretre.ws@example.com", "pretre")
     fidele = _make_user("fidele.ws@example.com", "fidele")
-    rosary = CommunityRosary.objects.create(
-        initiator=pretre, status=CommunityRosary.Status.ACTIVE, current_decade=2
-    )
+    rosary = CommunityRosary.objects.create(initiator=pretre, status=CommunityRosary.Status.ACTIVE, current_decade=2)
     # Participant déjà présent AVANT la connexion testée : c'est précisément ce
     # que la liste nominative ratait jusqu'ici.
     RosaryParticipant.objects.create(rosary=rosary, user=fidele)
@@ -94,9 +90,7 @@ def session(db, settings):
 
 
 def _communicator(rosary_id, user):
-    communicator = WebsocketCommunicator(
-        RosaryConsumer.as_asgi(), f"/ws/rosary/community/{rosary_id}/"
-    )
+    communicator = WebsocketCommunicator(RosaryConsumer.as_asgi(), f"/ws/rosary/community/{rosary_id}/")
     communicator.scope["url_route"] = {"kwargs": {"rosary_id": str(rosary_id)}}
     communicator.scope["user"] = user
     return communicator
@@ -115,9 +109,7 @@ async def _connect_and_drain(rosary_id, user):
 @pytest.mark.django_db
 def test_connect_sends_session_state_with_existing_roster(session):
     async def scenario():
-        communicator, state, joined = await _connect_and_drain(
-            session.rosary.pk, session.pretre
-        )
+        communicator, state, joined = await _connect_and_drain(session.rosary.pk, session.pretre)
 
         assert state["type"] == "session_state"
         assert state["current_decade"] == 2
@@ -203,9 +195,7 @@ def test_end_outside_socket_reaches_connected_participant(session):
     async def scenario():
         communicator, _, _ = await _connect_and_drain(session.rosary.pk, session.fidele)
 
-        await database_sync_to_async(community_rosary_end)(
-            rosary=session.rosary, user=session.pretre
-        )
+        await database_sync_to_async(community_rosary_end)(rosary=session.rosary, user=session.pretre)
 
         frame = await communicator.receive_json_from()
         assert frame == {"type": "rosary_ended"}
@@ -233,9 +223,7 @@ def test_unknown_action_is_rejected(session):
 
 @pytest.mark.django_db
 def test_connect_rejected_when_session_not_active(session):
-    CommunityRosary.objects.filter(pk=session.rosary.pk).update(
-        status=CommunityRosary.Status.COMPLETED
-    )
+    CommunityRosary.objects.filter(pk=session.rosary.pk).update(status=CommunityRosary.Status.COMPLETED)
 
     async def scenario():
         communicator = _communicator(session.rosary.pk, session.pretre)

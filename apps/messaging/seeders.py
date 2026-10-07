@@ -72,7 +72,9 @@ class MessagerieSeeder(Seeder):
             Message.objects.bulk_create(messages, batch_size=2000)
             ctx.track(Conversation, [c.pk for c in conversations])
             participants = {c.participant_a_id for c in conversations} | {c.participant_b_id for c in conversations}
-            existing = set(MessagingCguAcceptance.objects.filter(user_id__in=participants).values_list("user_id", flat=True))
+            existing = set(
+                MessagingCguAcceptance.objects.filter(user_id__in=participants).values_list("user_id", flat=True)
+            )
             cgu = [MessagingCguAcceptance(user_id=u, accepted_at=ctx.now - datetime.timedelta(days=90))
                    for u in participants - existing]  # fmt: skip
             MessagingCguAcceptance.objects.bulk_create(cgu)
@@ -118,7 +120,9 @@ class MessagerieSeeder(Seeder):
         from apps.news.models import Article
 
         out: list[Any] = []
-        for a in ctx.tracked(Article).filter(status="published", scope_node__isnull=False).order_by("-published_at")[:6]:
+        for a in (
+            ctx.tracked(Article).filter(status="published", scope_node__isnull=False).order_by("-published_at")[:6]
+        ):
             readers = list(ctx.fideles_qs().filter(paroisse_suivie=a.scope_node).values_list("pk", flat=True)[:400])
             for u in readers:
                 out.append(Notification(user_id=u, event_type="news.published", is_read=rng.random() < 0.6,
@@ -159,7 +163,11 @@ class MessagerieSeeder(Seeder):
         from apps.messaging.models import Conversation, Message
 
         convs = ctx.tracked(Conversation)
-        minors = convs.filter(participant_b__profile__date_of_birth__gt=ctx.today.replace(year=ctx.today.year - 18)).count()
-        minors += convs.filter(participant_a__profile__date_of_birth__gt=ctx.today.replace(year=ctx.today.year - 18)).count()
+        minors = convs.filter(
+            participant_b__profile__date_of_birth__gt=ctx.today.replace(year=ctx.today.year - 18)
+        ).count()
+        minors += convs.filter(
+            participant_a__profile__date_of_birth__gt=ctx.today.replace(year=ctx.today.year - 18)
+        ).count()
         return [Check("Messagerie réservée aux majeurs (RG-13)", minors == 0,
                       f"{convs.count()} conversations, {Message.objects.filter(conversation__in=convs).count()} messages")]  # fmt: skip

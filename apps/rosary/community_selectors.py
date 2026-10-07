@@ -12,11 +12,7 @@ def community_rosary_intentions_list(*, rosary_id: int) -> QuerySet[RosaryIntent
 
 
 def community_rosary_participants_list(*, rosary_id: int) -> QuerySet[RosaryParticipant]:
-    return (
-        RosaryParticipant.objects.filter(rosary_id=rosary_id)
-        .select_related("user")
-        .order_by("joined_at")
-    )
+    return RosaryParticipant.objects.filter(rosary_id=rosary_id).select_related("user").order_by("joined_at")
 
 
 def community_rosary_participant_count(*, rosary_id: int) -> int:

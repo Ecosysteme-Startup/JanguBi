@@ -6,29 +6,31 @@ from apps.bible.services.search_service import SearchService
 
 
 class SearchServiceTests(TransactionTestCase):
-    # TransactionTestCase is needed to properly test raw SQL and vectors/tsv 
+    # TransactionTestCase is needed to properly test raw SQL and vectors/tsv
     # if we are doing raw queries that fetch outside standard ORM transactions properly.
-    
+
     def setUp(self):
         # Create test data
         t = Testament.objects.create(name="Ancien Testament", slug="ancien", order=1)
         b = Book.objects.create(name="Genèse", slug="genese", testament=t, order=1, verse_count=3)
         c = Chapter.objects.create(book=b, number=1, verse_count=3)
-        
+
         Verse.objects.create(chapter=c, number=1, text="Au commencement, Dieu créa les cieux et la terre.")
         Verse.objects.create(chapter=c, number=2, text="La terre était informe et vide: il y avait des ténèbres.")
         Verse.objects.create(chapter=c, number=3, text="Dieu dit: Que la lumière soit! Et la lumière fut.")
-        
+
         # Second book for testing testament/book filtering
         t2 = Testament.objects.create(name="Nouveau Testament", slug="nouveau", order=2)
         b2 = Book.objects.create(name="Jean", slug="jean", testament=t2, order=2, verse_count=2)
         c2 = Chapter.objects.create(book=b2, number=1, verse_count=2)
-        Verse.objects.create(chapter=c2, number=1, text="Au commencement était la Parole, et la Parole était avec Dieu.")
+        Verse.objects.create(
+            chapter=c2, number=1, text="Au commencement était la Parole, et la Parole était avec Dieu."
+        )
         Verse.objects.create(chapter=c2, number=2, text="En elle était la vie, et la vie était la lumière des hommes.")
-        
+
         # Populate TSV vector for testing raw SQL search
         with connection.cursor() as cursor:
-            cursor.execute("UPDATE bible_verse SET tsv = to_tsvector('french', text);")
+            cursor.execute("UPDATE bible_verse SET tsv = to_tsvector('fr_unaccent', text);")
 
         self.service = SearchService()
 
@@ -49,6 +51,47 @@ class SearchServiceTests(TransactionTestCase):
         self.assertEqual(results[1]["book"]["name"], "Jean")
         self.assertEqual(len(results[1]["matches"]), 1)
         self.assertEqual(results[1]["matches"][0]["verse"]["number"], 2)
+
+    def test_search_ignores_accents(self):
+        # « lumiere » sans accent trouve « lumière » (configuration fr_unaccent, ADR-018).
+        results = self.service.search("lumiere", source_file=None)
+
+        self.assertEqual([r["book"]["name"] for r in results], ["Genèse", "Jean"])
+
+    def test_accented_stop_words_are_not_indexed(self):
+        # Les mots vides sont filtrés AVANT le retrait des accents (audio.0006) : « était », « été », « à »
+        # ne deviennent plus « etait », « ete », « a » ; les mots pleins restent sans accents.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT to_tsvector('fr_unaccent', 'Il était là, à Jérusalem ; l''Église a été fondée.')::text"
+            )
+            vector = cursor.fetchone()[0]
+
+        self.assertNotIn("'etait'", vector)
+        self.assertNotIn("'ete'", vector)
+        self.assertIn("'eglis'", vector)
+        self.assertIn("'jerusalem'", vector)
+
+    def test_search_tolerates_a_typo_through_trigrams(self):
+        # « comencement » (faute) : le plein texte ne trouve rien, le repli trigramme si.
+        results = self.service.search("comencement", source_file=None)
+
+        self.assertEqual({r["book"]["name"] for r in results}, {"Genèse", "Jean"})
+
+    def test_typo_fallback_leaves_the_trigram_threshold_untouched(self):
+        # Le seuil abaissé du repli ne doit pas fuir vers les recherches trigrammes suivantes.
+        from django.db import transaction
+
+        with transaction.atomic():  # comme sous ATOMIC_REQUESTS
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW pg_trgm.word_similarity_threshold")
+                before = cursor.fetchone()[0]
+            self.service.search("comencement", source_file=None)
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW pg_trgm.word_similarity_threshold")
+                after = cursor.fetchone()[0]
+
+        self.assertEqual(after, before)
 
     def test_lexical_search_with_testament_filter(self):
         # Search "commencement", which is in both Genesis 1:1 and Jean 1:1
@@ -90,33 +133,45 @@ class SearchServiceTests(TransactionTestCase):
                 self.assertIn("no_internal_source", m)
 
     def test_search_no_internal_source_flag(self):
-        # This is hard to trigger exactly without mocking the inner lexical_search, 
+        # This is hard to trigger exactly without mocking the inner lexical_search,
         # so we will use a word that might yield a very low rank, or we mock
         # _lexical_search for a specific result.
-        
+
         # First let's check normal. "Terre"
         results = self.service.search("terre", source_file=None)
         self.assertTrue(len(results) > 0)
-        
+
         # Let's mock the internal lexical_search to force a low score
         import unittest.mock as mock
-        with mock.patch.object(self.service, '_lexical_search', return_value=[
-            {
-                "id": 99, "chapter_id": 1, "verse_number": 1, "text": "...",
-                "chapter_number": 1, "book_id": 1, "book_name": "Test",
-                "book_slug": "test", "book_order": 1, "testament_slug": "ancien",
-                "score": 0.05,  # low score
-                "no_internal_source": True
-            }
-        ]):
+
+        with mock.patch.object(
+            self.service,
+            "_lexical_search",
+            return_value=[
+                {
+                    "id": 99,
+                    "chapter_id": 1,
+                    "verse_number": 1,
+                    "text": "...",
+                    "chapter_number": 1,
+                    "book_id": 1,
+                    "book_name": "Test",
+                    "book_slug": "test",
+                    "book_order": 1,
+                    "testament_slug": "ancien",
+                    "score": 0.05,  # low score
+                    "no_internal_source": True,
+                }
+            ],
+        ):
             flagged_results = self.service.search("mocked")
             m = flagged_results[0]["matches"][0]
             self.assertTrue(m["no_internal_source"])
 
-    def test_hybrid_search_fallback_when_pgvector_disabled(self):
-        # Ensure it delegates to lexical if pgvector is off
-        self.service.pgvector_enabled = False
+    def test_hybrid_flag_is_ignored_and_search_stays_lexical(self):
+        # Plus de recherche vectorielle (ADR-018) : le drapeau des anciens clients est sans effet.
         import unittest.mock as mock
-        with mock.patch.object(self.service, '_lexical_search', return_value=[]) as mock_lexical:
+
+        with mock.patch.object(self.service, "_lexical_search", return_value=[]) as mock_lexical:
             self.service.search("test", use_hybrid=True)
             mock_lexical.assert_called_once()

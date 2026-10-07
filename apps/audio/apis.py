@@ -179,7 +179,9 @@ class SourceDetailApi(_Api):
     def patch(self, request: Request, source_id: str) -> Response:
         source = selectors.source_get(source_id=source_id)
         data = _body(AudioSourceUpdateInputSerializer, request)
-        return Response(AudioSourceSerializer(services.source_update(actor=request.user, source=source, data=data)).data)
+        return Response(
+            AudioSourceSerializer(services.source_update(actor=request.user, source=source, data=data)).data
+        )
 
 
 # --- Albums ----------------------------------------------------------------------------------
@@ -435,7 +437,10 @@ class TrackReportApi(_Api):
     def post(self, request: Request, track_id: str) -> Response:
         data = _body(AudioReportInputSerializer, request)
         report = services.report_create(
-            user=request.user, track=selectors.track_get(track_id=track_id), reason=data["motif"], comment=data["comment"]
+            user=request.user,
+            track=selectors.track_get(track_id=track_id),
+            reason=data["motif"],
+            comment=data["comment"],
         )
         return Response(AudioReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
@@ -449,7 +454,11 @@ class UploadStartApi(_Api):
         operation_id="audio_uploads_create",
         summary="Démarrer un envoi : POST présigné vers audio-raw/ (500 Mo, mp3/m4a/aac/wav/flac/ogg/opus)",
         request=AudioUploadInputSerializer,
-        responses={201: AudioUploadOutputSerializer, 400: OpenApiResponse(description="Droits non confirmés, format ou taille"), 403: _FORBIDDEN},
+        responses={
+            201: AudioUploadOutputSerializer,
+            400: OpenApiResponse(description="Droits non confirmés, format ou taille"),
+            403: _FORBIDDEN,
+        },
     )
     def post(self, request: Request) -> Response:
         data = _body(AudioUploadInputSerializer, request)
@@ -484,7 +493,9 @@ class UploadLocalApi(_Api):
     )
     def post(self, request: Request, track_id: str) -> Response:
         data = _body(AudioLocalUploadInputSerializer, request)
-        track = services.upload_local(actor=request.user, track=selectors.track_get(track_id=track_id), file_obj=data["file"])
+        track = services.upload_local(
+            actor=request.user, track=selectors.track_get(track_id=track_id), file_obj=data["file"]
+        )
         return Response(AudioStaffTrackSerializer(track).data)
 
 
@@ -568,7 +579,10 @@ class EventsApi(_PublicApi):
         operation_id="audio_events_create",
         summary="Événements d'écoute par lot (100 au plus), idempotents par client_event_id",
         request=AudioEventsInputSerializer,
-        responses={202: AudioEventsResultSerializer, 429: OpenApiResponse(description="Trop de lots : réessayer plus tard")},
+        responses={
+            202: AudioEventsResultSerializer,
+            429: OpenApiResponse(description="Trop de lots : réessayer plus tard"),
+        },
     )
     def post(self, request: Request) -> Response:
         data = _body(AudioEventsInputSerializer, request)
@@ -713,7 +727,9 @@ class PlaylistTrackRemoveApi(_Api):
     )  # fmt: skip
     def delete(self, request: Request, playlist_id: str, track_id: str) -> Response:
         playlist = selectors.playlist_get(playlist_id=playlist_id)
-        services.playlist_remove_track(actor=request.user, playlist=playlist, track=selectors.track_get(track_id=track_id))
+        services.playlist_remove_track(
+            actor=request.user, playlist=playlist, track=selectors.track_get(track_id=track_id)
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -878,7 +894,10 @@ class AlbumReportApi(_Api):
     def post(self, request: Request, album_id: str) -> Response:
         data = _body(AudioReportInputSerializer, request)
         report = services.album_report_create(
-            user=request.user, album=selectors.album_get(album_id=album_id), reason=data["motif"], comment=data["comment"]
+            user=request.user,
+            album=selectors.album_get(album_id=album_id),
+            reason=data["motif"],
+            comment=data["comment"],
         )
         return Response(AudioReportSerializer(report).data, status=status.HTTP_201_CREATED)
 
@@ -922,4 +941,3 @@ class ReportHandleApi(_Api):
             actor=request.user, report=selectors.report_get(report_id=report_id), decision=data["resolution"]
         )
         return Response(AudioReportSerializer(report).data)
-

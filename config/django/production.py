@@ -39,7 +39,7 @@ if not MESSAGING_ENCRYPTION_KEY:
         "MESSAGING_ENCRYPTION_KEY est obligatoire en production. Sans clé dédiée, "
         "les conversations sont chiffrées avec SECRET_KEY : toute rotation de "
         "celle-ci rendrait l'historique définitivement illisible. "
-        "Générer : python -c \"import secrets; print(secrets.token_hex(32))\""
+        'Générer : python -c "import secrets; print(secrets.token_hex(32))"'
     )
 
 if MESSAGING_ENCRYPTION_KEY == SECRET_KEY:

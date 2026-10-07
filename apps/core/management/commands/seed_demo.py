@@ -179,7 +179,9 @@ class Command(BaseCommand):
         from apps.news.services import article_create, article_publish
 
         place = parish.places.filter(is_main=True).first()
-        category, _ = ArticleCategory.objects.get_or_create(slug="vie-paroissiale", defaults={"name": "Vie paroissiale"})
+        category, _ = ArticleCategory.objects.get_or_create(
+            slug="vie-paroissiale", defaults={"name": "Vie paroissiale"}
+        )
         cure, vicaire = people["cure"], people["vicaire"]
         now = timezone.now()
         today = timezone.localdate()

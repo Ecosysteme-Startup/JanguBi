@@ -66,10 +66,14 @@ class AdminNodeRefSerializer(serializers.Serializer):
 
 
 class AdminAccountFilterSerializer(serializers.Serializer):
-    q = serializers.CharField(required=False, allow_blank=True, max_length=100, help_text="E-mail, prénom, nom, téléphone")
+    q = serializers.CharField(
+        required=False, allow_blank=True, max_length=100, help_text="E-mail, prénom, nom, téléphone"
+    )
     status = serializers.ChoiceField(choices=selectors_admin.STATUSES, required=False)
     role = serializers.ChoiceField(choices=selectors_admin.ROLES, required=False)
-    sync = serializers.ChoiceField(choices=selectors_admin.SYNC_STATES, required=False, help_text="État de synchronisation")
+    sync = serializers.ChoiceField(
+        choices=selectors_admin.SYNC_STATES, required=False, help_text="État de synchronisation"
+    )
     etat_de_vie = serializers.ChoiceField(choices=EtatDeVie.choices, required=False)
     node = serializers.UUIDField(required=False, help_text="Comptes rattachés à ce nœud ou à son sous-arbre")
     created_from = serializers.DateField(required=False)
@@ -256,7 +260,11 @@ class AdminAccountDetailApi(_AdminApi):
     )
     def get(self, request: Request, account_id: str) -> Response:
         account = selectors_admin.admin_account_get(actor=request.user, account_id=account_id)
-        keycloak = selectors_admin.keycloak_account_state(user=account) if scope_admin.can_manage(request.user, account) else None
+        keycloak = (
+            selectors_admin.keycloak_account_state(user=account)
+            if scope_admin.can_manage(request.user, account)
+            else None
+        )
         detail = selectors_admin.admin_account_detail(actor=request.user, user=account, keycloak=keycloak)
         return Response(AdminAccountDetailSerializer(detail).data)
 
@@ -429,7 +437,9 @@ class AdminAccountSessionRevokeApi(_AdminApi):
     )
     def delete(self, request: Request, account_id: str, session_id: str) -> Response:
         account = selectors_admin.admin_account_get(actor=request.user, account_id=account_id)
-        services_admin.account_session_revoke(actor=request.user, account=account, session_id=session_id, ip=_ip(request))
+        services_admin.account_session_revoke(
+            actor=request.user, account=account, session_id=session_id, ip=_ip(request)
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -490,7 +500,9 @@ class AdminAccountOfficeEndApi(_AdminApi):
 
         account = selectors_admin.admin_account_get(actor=request.user, account_id=account_id)
         assignment = (
-            OfficeAssignment.objects.select_related("node", "office_type").filter(pk=assignment_id, person=account).first()
+            OfficeAssignment.objects.select_related("node", "office_type")
+            .filter(pk=assignment_id, person=account)
+            .first()
         )
         if assignment is None:
             raise NotFoundError("Nomination introuvable.", {"assignment_id": assignment_id})
@@ -542,7 +554,12 @@ class AdminScopeOutputSerializer(serializers.Serializer):
 
 
 class AdminScopeApi(_AdminApi):
-    @extend_schema(tags=TAG, operation_id="admin_scope", summary="Mon périmètre d'administration", responses=AdminScopeOutputSerializer)
+    @extend_schema(
+        tags=TAG,
+        operation_id="admin_scope",
+        summary="Mon périmètre d'administration",
+        responses=AdminScopeOutputSerializer,
+    )
     def get(self, request: Request) -> Response:
         grants = [g for g in authz.grants(request.user) if g.capability == scope_admin.CAPABILITY and g.node_id]
         nodes = {g.node_id: {"id": g.node_id, "name": g.node_name} for g in grants}
@@ -590,9 +607,12 @@ class AdminAuditListApi(_AdminApi):
         filters = AdminAuditFilterSerializer(data=request.query_params)
         filters.is_valid(raise_exception=True)
         paginator = LimitOffsetPagination()
-        page = paginator.paginate_queryset(
-            selectors_admin.admin_audit_list(actor=request.user, filters=filters.validated_data), request, view=self
-        ) or []
+        page = (
+            paginator.paginate_queryset(
+                selectors_admin.admin_audit_list(actor=request.user, filters=filters.validated_data), request, view=self
+            )
+            or []
+        )
         targets = selectors_admin.audit_targets(page)
         rows = [
             {
@@ -637,7 +657,10 @@ class AdminDashboardOutputSerializer(serializers.Serializer):
 
 class AdminDashboardApi(_AdminApi):
     @extend_schema(
-        tags=TAG, operation_id="admin_dashboard", summary="Tableau de bord des comptes", responses=AdminDashboardOutputSerializer
+        tags=TAG,
+        operation_id="admin_dashboard",
+        summary="Tableau de bord des comptes",
+        responses=AdminDashboardOutputSerializer,
     )
     def get(self, request: Request) -> Response:
         return Response(AdminDashboardOutputSerializer(selectors_admin.admin_dashboard(actor=request.user)).data)
@@ -693,7 +716,12 @@ class _PlatformAdminApi(_AdminApi):
 
 
 class AdminSyncStatusApi(_PlatformAdminApi):
-    @extend_schema(tags=TAG, operation_id="admin_sync_status", summary="État de la synchronisation Keycloak", responses=SyncStatusSerializer)
+    @extend_schema(
+        tags=TAG,
+        operation_id="admin_sync_status",
+        summary="État de la synchronisation Keycloak",
+        responses=SyncStatusSerializer,
+    )
     def get(self, request: Request) -> Response:
         return Response(SyncStatusSerializer(selectors_admin.sync_status()).data)
 
@@ -719,6 +747,11 @@ class AdminSyncRunCreateApi(_PlatformAdminApi):
 
 
 class AdminSyncRunDetailApi(_PlatformAdminApi):
-    @extend_schema(tags=TAG, operation_id="admin_sync_run_retrieve", summary="Rapport d'une réconciliation", responses=SyncRunDetailSerializer)
+    @extend_schema(
+        tags=TAG,
+        operation_id="admin_sync_run_retrieve",
+        summary="Rapport d'une réconciliation",
+        responses=SyncRunDetailSerializer,
+    )
     def get(self, request: Request, run_id: int) -> Response:
         return Response(SyncRunDetailSerializer(selectors_admin.sync_run_get(run_id=run_id)).data)

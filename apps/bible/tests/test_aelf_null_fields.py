@@ -44,11 +44,7 @@ def test_psalm_without_title_does_not_raise_integrity_error():
 @pytest.mark.django_db(transaction=True)
 def test_reading_without_content_does_not_raise():
     # contenu=null (même motif clé-présente-valeur-null) → content coalescé en "".
-    data = {
-        "messes": [
-            {"lectures": [{"type": "lecture", "titre": None, "contenu": None}]}
-        ]
-    }
+    data = {"messes": [{"lectures": [{"type": "lecture", "titre": None, "contenu": None}]}]}
 
     records = async_to_sync(AELFService()._process_api_response)(D, data)
 

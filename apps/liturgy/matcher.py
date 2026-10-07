@@ -33,10 +33,10 @@ class CitationMatcher:
         """
         if not citation:
             return []
-            
+
         # Clean citation
         citation = citation.strip()
-        
+
         # 1. Very basic heuristic: extract the book abbreviation and chapters/verses.
         # This regex matches patterns like: "Lc 9, 51-62" or "Ps 15 (16), 1-2a.5"
         # Group 1: Book name/abbr (e.g. "Lc", "1 R", "Ps")
@@ -44,15 +44,15 @@ class CitationMatcher:
         match = re.search(r"^([1-4]?\s*[A-Za-zÉéÀà]+)\s+(.+)$", citation)
         if not match:
             return []
-            
+
         book_part = match.group(1).strip()
         numbers_part = match.group(2).strip()
-        
+
         # 2. Find the book
         # AELF uses abbreviations. We'll do an exact or fuzzy search on `slug` or `alt_names`
         # We lowercase and remove spaces for easier matching
         clean_book_part = book_part.lower().replace(" ", "")
-        
+
         # Try to find a matching book locally
         books = cls._get_books()
         matched_book = None
@@ -67,7 +67,7 @@ class CitationMatcher:
                     break
             if matched_book:
                 break
-                
+
         if not matched_book:
             return []
 

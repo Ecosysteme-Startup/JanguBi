@@ -194,7 +194,10 @@ class CheckoutApi(V1ApiMixin, APIView):
         summary="Préparer un don et obtenir l'URL de paiement de l'agrégateur",
         parameters=[
             OpenApiParameter(
-                "Idempotency-Key", str, OpenApiParameter.HEADER, required=False,
+                "Idempotency-Key",
+                str,
+                OpenApiParameter.HEADER,
+                required=False,
                 description="Même clé = même don (double clic, reprise réseau)",
             )  # fmt: skip
         ],
@@ -275,8 +278,9 @@ class MyDonationsApi(_AuthedApi):
         return get_paginated_response(
             pagination_class=LimitOffsetPagination,
             serializer_class=MyDonationSerializer,
-            queryset=selectors.donations_for_donor(user=request.user, fund_id=filters.get("fund"),
-                                                   year=filters.get("year")),  # fmt: skip
+            queryset=selectors.donations_for_donor(
+                user=request.user, fund_id=filters.get("fund"), year=filters.get("year")
+            ),  # fmt: skip
             request=request,
             view=self,
         )
@@ -415,9 +419,7 @@ class SummaryApi(_StaffApi):
         filters = _query(MonthQuerySerializer, request)
         node = _parish(filters["node"])
         access.require_parish_level(request.user, "dons.voir_fonds", node)
-        month = (
-            datetime.date.fromisoformat(f"{filters['month']}-01") if filters.get("month") else timezone.localdate()
-        )
+        month = datetime.date.fromisoformat(f"{filters['month']}-01") if filters.get("month") else timezone.localdate()
         return Response(ParishSummarySerializer(selectors.parish_summary(node=node, month=month)).data)
 
 

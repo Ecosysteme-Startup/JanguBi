@@ -105,7 +105,9 @@ class CounterDetailApi(_CounterApi):
         body = CounterUpdateInputSerializer(data=request.data)
         body.is_valid(raise_exception=True)
         counter = selectors_compteurs.counter_get(counter_id=counter_id)
-        counter = services_compteurs.counter_rename(actor=request.user, counter=counter, name=body.validated_data["nom"])
+        counter = services_compteurs.counter_rename(
+            actor=request.user, counter=counter, name=body.validated_data["nom"]
+        )
         return Response(CounterSerializer(counter).data)
 
     @extend_schema(

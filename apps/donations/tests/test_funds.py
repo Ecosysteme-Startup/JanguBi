@@ -37,7 +37,9 @@ def test_cure_creates_publishes_and_closes_a_campaign(world):
 
 
 def test_goal_only_for_campaigns(world):
-    fund = services.fund_create(actor=world.cure, node=world.sd, kind=FundKind.QUETE_DOMINICALE, title="Q", goal_amount=10)
+    fund = services.fund_create(
+        actor=world.cure, node=world.sd, kind=FundKind.QUETE_DOMINICALE, title="Q", goal_amount=10
+    )
     assert fund.goal_amount is None
 
 
@@ -105,7 +107,9 @@ def test_imperee_explicit_parishes_must_belong_to_the_diocese(world):
 
 def test_imperee_without_active_parish_is_refused(world):
     with pytest.raises(ApplicationError) as exc:
-        services.imperee_create(actor=world.eveque, diocese=world.thies, title="X", starts_on=datetime.date(2026, 9, 27))
+        services.imperee_create(
+            actor=world.eveque, diocese=world.thies, title="X", starts_on=datetime.date(2026, 9, 27)
+        )
     assert exc.value.code in {"no_parish", "dons_forbidden"}
 
 

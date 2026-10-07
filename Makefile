@@ -5,9 +5,8 @@ export
 .PHONY: up down restart build logs shell dbshell makemigrations migrate check test \
        init-data init-all createsuperuser import-aelf clear-cache \
 	   down-v rebuild dev-deps \
-       flush-redis flush-db link-verses musique-demo seed-realiste-musique check-embeddings seed-embeddings seed-embeddings-force seed-embeddings-async \
-       seed seed-hierarchy seed-demo seed-reset \
-       seed-realiste seed-realiste-reset seed-charge fetch-seed-assets \
+       flush-redis flush-db link-verses musique-demo \
+       seed-prod seed-recette seed-recette-reset seed-charge \
 	celery-logs celery-restart rabbitmq-stats clean-audio collectstatic reinit-bible reinit-bible-aelf import-bible-aelf \
 	ci-list ci act hooks ci-docker kc-up kc-down kc-export kc-test \
 	build-prod up-prod down-prod logs-prod
@@ -95,28 +94,8 @@ flush-db:
 	docker compose exec django python manage.py flush --no-input
 
 # ==============================================================================
-# BIBLE & RAG UTILS
+# BIBLE (plein texte, sans IA : ADR-018)
 # ==============================================================================
-check-embeddings:
-	docker compose exec django python manage.py check_embeddings
-
-# Génère les embeddings MANQUANTS (synchrone). Prérequis : EMBEDDING_PROVIDER=local
-# + PGVECTOR_ENABLED=True dans .env, puis `make restart`. 1er usage : télécharge
-# le modèle local (~1 Go) dans FASTEMBED_CACHE_DIR.
-# Rattache les lectures du jour aux versets de la Bible locale (après un import de la Bible).
-link-verses:
-	docker compose exec django python manage.py liturgy_link_verses
-
-seed-embeddings:
-	docker compose exec django python manage.py seed_embeddings
-
-# Recalcule TOUS les embeddings (écrase d'éventuels vecteurs stub/zéro).
-seed-embeddings-force:
-	docker compose exec django python manage.py seed_embeddings --force
-
-# Dispatche le calcul en arrière-plan via Celery (gros corpus / prod).
-seed-embeddings-async:
-	docker compose exec django python manage.py seed_embeddings --async
 
 import-bible-aelf:
 	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source AELF
@@ -155,77 +134,46 @@ clean-audio:
 # INITIALISATION DU PROJET (cross-platform, ne requiert pas bash sur l'hôte)
 # ==============================================================================
 init-data:
-	@echo "==========================================================="
-	@echo "   Initialisation de la base de donnees Bible"
-	@echo "==========================================================="
-	@echo "1. Application des migrations Django..."
+	@echo "1. Migrations Django..."
 	docker compose exec django python manage.py migrate
-	@echo "2. Importation du format A (bible-fr.json)..."
-	docker compose exec django python manage.py import_bible init/bibles/format/json/bible-fr-aelf.json --source bible_fr
-	@echo "3. Execution du script conditionnel pgvector..."
+	@echo "2. Script conditionnel pgvector..."
 	docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < init/postgresql/pgvector_conditional.sql
-	@echo "4. Creation des buckets MinIO (audio du Rosaire public, fichiers prives)..."
+	@echo "3. Buckets MinIO (audio du Rosaire public, fichiers prives)..."
 	docker compose exec minio sh -c "mc alias set local $(AWS_S3_ENDPOINT_URL) $(MINIO_ROOT_USER) $(MINIO_ROOT_PASSWORD) && mc mb local/rosary-audio || true && mc anonymous set public local/rosary-audio && mc mb --ignore-existing local/$(AWS_STORAGE_BUCKET_NAME)"
-	@echo "5. Importation des donnees du Rosaire..."
-	docker compose exec django python manage.py seed_rosary
-	@echo "6. Importation de la liturgie du jour (AELF)..."
-	docker compose exec django python manage.py import_aelf --start "$$(date +%Y-%m-%d)" --end "$$(python3 -c 'from datetime import datetime, timedelta; print((datetime.now() + timedelta(days=(6 - datetime.now().weekday()))).date())')"
-	docker compose exec django python manage.py liturgy_link_verses
-	@echo "==========================================================="
-	@echo "   Importation et Indexation terminees !"
-	@echo "==========================================================="
-
-# ── Seed (structure territoriale + donnees de demo) ──────────────────────────
-# Référentiel V1 (apps/hierarchy) : types, province, 7 diocèses, doyennés de Dakar,
-# paroisse pilote et ses horaires. Idempotent.
-seed-hierarchy:
-	docker compose exec django python manage.py seed_hierarchy_profile senegal
-
-seed-demo:
-	docker compose exec django python manage.py seed_demo
-
-seed-reset:
-	docker compose exec django python manage.py seed_demo --reset
-
-# Référentiel puis démonstration (paroisse pilote). Idempotent.
-seed: seed-hierarchy seed-demo
-	@echo "==========================================================="
-	@echo "   Seed termine (référentiel + démonstration sur la paroisse pilote)"
-	@echo "==========================================================="
 
 # ==============================================================================
-# DONNÉES DE TEST RÉALISTES (docs/DONNEES-DE-TEST.md) — jamais en production
+# SEEDS — deux commandes seulement
 # ==============================================================================
-# Options supplémentaires : make seed-realiste SEED_ARGS="--graine 7 --medias-dossier /chemin/album --bible-json …"
-SEED_ARGS ?=
+# seed-prod    : données RÉELLES (référentiel territorial, Bible, Rosaire, liturgie AELF
+#                rattachée aux versets). Production et recette. Idempotent.
+# seed-recette : seed-prod + personnes de démonstration + données de test réalistes +
+#                musique de démo (seed_assets/musique-demo/ ou dossier seed-assets/ du bucket de l'app).
+#                JAMAIS en production. Défaut local : échelle petite (serveur : moyenne).
+# Options : make seed-recette SEED_ARGS="--echelle moyenne --sans-musique --hors-ligne"
+# Sur le serveur : python manage.py seed_prod / SEED_ALLOWED=true python manage.py seed_recette
+SEED_ARGS ?= --echelle petite
 
-# Local : échelle petite, médias légers, vérification des invariants (< 1 min).
-seed-realiste:
-	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier $(SEED_ARGS)
+seed-prod:
+	docker compose exec django python manage.py seed_prod
 
-seed-realiste-reset:
-	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --reset $(SEED_ARGS)
+seed-recette:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_recette $(SEED_ARGS)
+
+# Retire les données de test et de démonstration (les données réelles restent). MANUEL.
+seed-recette-reset:
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_recette --reset
+
+# Musique de démo (une fois) : pack décompressé dans seed_assets/, jamais commité.
+# En recette : ajouter --publier pour la garder sous seed-assets/ dans le bucket de l'app.
+musique-demo:
+	docker compose exec django python manage.py prepare_musique_demo $(MUSIQUE_ARGS)
 
 # Tests de charge : échelle grande (COPY en masse), sans fichiers audio.
 seed-charge:
-	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier $(SEED_ARGS)
+	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle grande --medias aucun --verifier
 
-# Musique de démonstration (seed_assets/musique-demo.yaml) : pack décompressé dans seed_assets/, jamais commité.
-musique-demo:
-	docker compose exec django python manage.py prepare_musique_demo
-
-seed-realiste-musique:
-	docker compose exec -e SEED_ALLOWED=true django python manage.py seed_realiste --profil local --echelle petite --medias complets --medias-dossier /app/seed_assets/musique-demo --verifier $(SEED_ARGS)
-
-fetch-seed-assets:
-	docker compose exec django python manage.py fetch_seed_assets
-
-# Recette : sur le serveur, par le dépôt Infrastructure — make seed-realiste APP=jangubi ENV=staging
-# (voir docs/RECETTE.md).
-
-# Le référentiel (types, province, diocèses, doyennés, paroisse pilote) fait partie de
-# l'initialisation : sans lui, personne ne peut choisir sa paroisse. Idempotent.
-init-all: init-data seed-hierarchy
+# Base neuve : migrations, pgvector, buckets, puis les données réelles.
+init-all: init-data seed-prod
 
 
 # ==============================================================================

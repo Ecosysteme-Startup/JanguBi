@@ -59,7 +59,12 @@ def _resolve_refs(events: list[dict[str, Any]]) -> tuple[dict[int, Verse], dict[
 
 
 def _build_event(
-    *, user: Any, raw: dict[str, Any], verses: dict[int, Verse], chapters: dict[tuple[int, int], Chapter], now: datetime.datetime
+    *,
+    user: Any,
+    raw: dict[str, Any],
+    verses: dict[int, Verse],
+    chapters: dict[tuple[int, int], Chapter],
+    now: datetime.datetime,
 ) -> ReadingEvent | None:
     start = verses.get(raw.get("verset_debut_id") or 0)
     end = verses.get(raw.get("verset_fin_id") or 0)
@@ -97,9 +102,7 @@ def reading_events_record(*, user: Any, events: list[dict[str, Any]]) -> dict[st
     rejetés un par un, sans bloquer le lot : la file hors ligne du téléphone se vide quand même.
     """
     if len(events) > MAX_EVENTS_PER_BATCH:
-        raise ApplicationError(
-            f"Au plus {MAX_EVENTS_PER_BATCH} événements par envoi.", code="too_many_events"
-        )
+        raise ApplicationError(f"Au plus {MAX_EVENTS_PER_BATCH} événements par envoi.", code="too_many_events")
     received = len(events)
     if not personnalisation_enabled(user=user):
         return {"recus": received, "enregistres": 0, "rejetes": [], "personnalisation_parole": False}

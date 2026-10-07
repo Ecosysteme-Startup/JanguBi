@@ -24,10 +24,9 @@ ENV PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
-# Librairies SYSTÈME runtime : libpq5 (psycopg2), libgomp1 (onnxruntime/fastembed), ffmpeg (apps/audio).
+# Librairies SYSTÈME runtime : libpq5 (psycopg2), ffmpeg (apps/audio).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
-        libgomp1 \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 

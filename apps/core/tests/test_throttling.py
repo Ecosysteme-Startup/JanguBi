@@ -84,8 +84,7 @@ def test_class_does_not_hardcode_its_own_rate():
     """La classe redéfinissait `THROTTLE_RATES` en dur, ce qui rendait le
     réglage par settings inopérant alors que sa docstring l'annonçait."""
     assert "THROTTLE_RATES" not in LoginRateThrottle.__dict__, (
-        "THROTTLE_RATES ne doit plus être redéfini sur la classe : le taux vient "
-        "des settings."
+        "THROTTLE_RATES ne doit plus être redéfini sur la classe : le taux vient des settings."
     )
 
 

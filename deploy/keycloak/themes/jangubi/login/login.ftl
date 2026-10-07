@@ -1,5 +1,5 @@
 <#import "template.ftl" as layout>
-<#import "passkeys.ftl" as passkeys>
+<#-- Pas de passkeys.ftl : absent du thème de base de Keycloak 26.0 (importé, il cassait la page de connexion). -->
 <#-- WEB-Connexion : carte de 440 px, alerte, e-mail, mot de passe, « Rester connecté », création de compte,
      note au personnel sous la carte. -->
 <#assign credentialsError = messagesPerField.existsError('username','password')>
@@ -51,7 +51,6 @@
                 <button class="jb-btn jb-btn-primary jb-btn-block" name="login" id="kc-login" type="submit">${msg("doLogIn")}</button>
             </form>
         </#if>
-        <@passkeys.conditionalUIData />
         <script type="module" src="${url.resourcesPath}/js/passwordVisibility.js"></script>
     <#elseif section = "info">
         ${msg("noAccount")} <a href="${url.registrationUrl}">${msg("doRegister")}</a>

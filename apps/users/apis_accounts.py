@@ -29,7 +29,9 @@ MFA_CHOICES = (MFA_TOTP, MFA_WEBAUTHN, MFA_NONE)
 class AccountFilterSerializer(serializers.Serializer):
     q = serializers.CharField(required=False, allow_blank=True, max_length=100, help_text="E-mail, prénom ou nom")
     role = serializers.ChoiceField(choices=selectors_accounts.ROLES, required=False, help_text="Rôle de realm")
-    mfa = serializers.ChoiceField(choices=selectors_accounts.MFA_FILTERS, required=False, help_text="MFA configurée ou non")
+    mfa = serializers.ChoiceField(
+        choices=selectors_accounts.MFA_FILTERS, required=False, help_text="MFA configurée ou non"
+    )
     status = serializers.ChoiceField(choices=selectors_accounts.STATUSES, required=False, help_text="Statut du compte")
 
 
@@ -41,7 +43,9 @@ class AccountOutputSerializer(serializers.Serializer):
     mfa = serializers.ChoiceField(choices=MFA_CHOICES)
     last_login = serializers.DateTimeField(allow_null=True, help_text="Dernière activité connue")
     status = serializers.ChoiceField(choices=selectors_accounts.STATUSES)
-    node_label = serializers.CharField(allow_null=True, help_text="Nœud de la nomination principale, ou paroisse suivie")
+    node_label = serializers.CharField(
+        allow_null=True, help_text="Nœud de la nomination principale, ou paroisse suivie"
+    )
 
 
 class AccountOfficeSerializer(serializers.Serializer):
@@ -105,9 +109,7 @@ class AccountDetailApi(_PlatformApi):
         return Response(AccountDetailOutputSerializer(selectors_accounts.account_detail(user=account)).data)
 
 
-def _action_view(
-    *, service: Callable[..., Any], operation_id: str, summary: str
-) -> type[_PlatformApi]:
+def _action_view(*, service: Callable[..., Any], operation_id: str, summary: str) -> type[_PlatformApi]:
     class _AccountActionApi(_PlatformApi):
         @extend_schema(
             tags=TAG,

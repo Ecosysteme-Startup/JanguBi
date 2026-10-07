@@ -111,7 +111,11 @@ def community_rosary_end(*, rosary, user):
 def community_rosary_list_active():
     from apps.rosary.models import CommunityRosary
 
-    return CommunityRosary.objects.filter(status="active").select_related("initiator", "mystery_group").order_by("-started_at")
+    return (
+        CommunityRosary.objects.filter(status="active")
+        .select_related("initiator", "mystery_group")
+        .order_by("-started_at")
+    )
 
 
 def community_rosary_get(*, rosary_id: int):

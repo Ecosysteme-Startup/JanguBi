@@ -37,29 +37,25 @@ Première mise en recette et livraisons : `apps/jangubi/README.md` du dépôt In
 En bref : un push sur la branche `stage` construit l'image (runner `ceac`) et prévient
 l'Infrastructure ; sur le serveur, `make deployer APP=jangubi ENV=staging`.
 
-### Données de démonstration
+### Seeds
+
+Deux commandes, dans le conteneur de l'API (`make shell APP=jangubi ENV=staging` depuis
+`/opt/mctn/infrastructure`) :
 
 ```bash
-# Sur le serveur, depuis /opt/mctn/infrastructure :
-make seed APP=jangubi ENV=staging     # référentiel territorial + personnes de démonstration
-make shell APP=jangubi ENV=staging    # puis import_bible, seed_rosary, import_aelf si besoin
+python manage.py seed_prod                               # données réelles (aussi en production)
+SEED_ALLOWED=true python manage.py seed_recette          # recette complète (échelle moyenne)
+SEED_ALLOWED=true python manage.py seed_recette --reset  # retire les données de test, MANUEL uniquement
 ```
+
+`seed_recette` = `seed_prod` + personnes de démonstration + monde de test réaliste (12 paroisses,
+5 000 fidèles, dons sur douze mois, sonothèque encodée par le vrai pipeline) + musique de démo.
+Musique de démo, **une seule fois** : RAR décompressé dans `seed_assets/`, puis
+`python manage.py prepare_musique_demo --publier` (dossier privé `seed-assets/musique-demo/` du bucket de l'app) ; les
+`seed_recette` suivants la reprennent seuls. Détails : `docs/DONNEES-DE-TEST.md`.
 
 Les comptes Keycloak se gèrent depuis l'administration de l'app (synchronisés avec le realm) :
-ils ne sont pas créés par la commande ci-dessus.
-
-### Données de test réalistes
-
-Pour une recette peuplée (12 paroisses, 5 000 fidèles, dons sur douze mois, sonothèque encodée par le vrai
-pipeline, écoutes et recommandations), sur le serveur :
-
-```bash
-make seed-realiste APP=jangubi ENV=staging              # médias du manifeste (bucket) + échelle moyenne
-make seed-realiste APP=jangubi ENV=staging RESET=1      # remise à zéro, MANUELLE uniquement
-```
-
-Détails : `docs/DONNEES-DE-TEST.md`. Bible, Rosaire et liturgie du jour : `import_bible`, `seed_rosary`,
-`import_aelf` depuis `make shell APP=jangubi ENV=staging`.
+ils ne sont pas créés par ces commandes.
 
 ## Comptes
 

@@ -43,7 +43,8 @@ class KeycloakWebhookApi(V1ApiMixin, APIView):
         ),
         responses={
             202: inline_serializer(
-                name="KeycloakWebhookAck", fields={"status": serializers.CharField(), "duplicate": serializers.BooleanField()}
+                name="KeycloakWebhookAck",
+                fields={"status": serializers.CharField(), "duplicate": serializers.BooleanField()},
             ),
             403: OpenApiResponse(description="Signature absente ou invalide"),
             404: OpenApiResponse(description="Webhook désactivé (KEYCLOAK_WEBHOOK_ENABLED)"),

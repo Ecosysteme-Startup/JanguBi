@@ -3493,8 +3493,10 @@ paths:
   /api/v1/bible/search/:
     get:
       operationId: v1_bible_search_list
-      description: Search endpoint using lexical/hybrid search.
-      summary: Lexical and hybrid search across all verses
+      description: 'Recherche dans les versets : plein texte + trigrammes (ADR-018,
+        sans recherche vectorielle).'
+      summary: Recherche plein texte (sans accents, tolérante aux fautes) dans les
+        versets
       parameters:
       - in: query
         name: book_slug
@@ -3511,6 +3513,7 @@ paths:
         schema:
           type: boolean
           default: false
+        description: Sans effet (conservé pour compatibilité).
       - in: query
         name: limit
         schema:

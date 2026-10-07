@@ -33,7 +33,18 @@ class BaseUserAdmin(admin.ModelAdmin):
         (_("Conformité"), {"fields": ("consent_version", "consent_at", "last_seen_on", "last_mfa_on")}),
         (_("Technique"), {"fields": ("created_at", "updated_at"), "classes": ("collapse",)}),
     )
-    readonly_fields = ("keycloak_sub", "email", "is_active", "is_verified", "consent_version", "consent_at", "last_seen_on", "last_mfa_on", "created_at", "updated_at")
+    readonly_fields = (
+        "keycloak_sub",
+        "email",
+        "is_active",
+        "is_verified",
+        "consent_version",
+        "consent_at",
+        "last_seen_on",
+        "last_mfa_on",
+        "created_at",
+        "updated_at",
+    )
 
     def has_add_permission(self, request) -> bool:  # type: ignore[no-untyped-def]
         # Création et suppression passent par l'API d'administration (synchronisée avec

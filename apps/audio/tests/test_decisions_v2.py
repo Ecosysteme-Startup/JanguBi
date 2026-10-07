@@ -109,9 +109,10 @@ def test_download_returns_a_short_signed_mp3_url_and_a_30_day_license(world):
     assert licence["paroisse_requise"] == {"id": str(world.sd.pk), "name": "Saint-Dominique"}
 
     public = ready_track(world.chorale, "Kyrie", album=world.messe)
-    assert client_for(world.autre).post(f"{API}/pistes/{public.pk}/telechargement/").json()["licence"][
-        "paroisse_requise"
-    ] is None
+    assert (
+        client_for(world.autre).post(f"{API}/pistes/{public.pk}/telechargement/").json()["licence"]["paroisse_requise"]
+        is None
+    )
     refused = client_for(world.autre).post(f"{API}/pistes/{homelie.pk}/telechargement/")
     assert refused.status_code == 403 and refused.json()["error"]["code"] == "reserve_paroissiens"
     assert client_for().post(f"{API}/pistes/{public.pk}/telechargement/").status_code in (401, 403)

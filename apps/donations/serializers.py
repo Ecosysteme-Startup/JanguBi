@@ -55,10 +55,15 @@ class NodeQuerySerializer(serializers.Serializer):
 class CheckoutInputSerializer(serializers.Serializer):
     fund_id = serializers.UUIDField()
     amount = serializers.IntegerField(help_text="Montant du don en FCFA (entier)")
-    fees_covered = serializers.BooleanField(default=False, help_text="Le donateur couvre les frais (décoché par défaut)")
+    fees_covered = serializers.BooleanField(
+        default=False, help_text="Le donateur couvre les frais (décoché par défaut)"
+    )
     anonymous = serializers.BooleanField(default=False)
     email = serializers.EmailField(
-        required=False, allow_blank=True, default="", help_text="Sans compte seulement : envoi du reçu, effacé après 90 jours"
+        required=False,
+        allow_blank=True,
+        default="",
+        help_text="Sans compte seulement : envoi du reçu, effacé après 90 jours",
     )
     source = serializers.ChoiceField(  # type: ignore[assignment]  # champ nommé « source » (API)
         choices=DonationSource.choices, required=False, default=DonationSource.INCONNU,
@@ -95,7 +100,10 @@ class FundCreateInputSerializer(serializers.Serializer):
     authorization_ref = serializers.CharField(required=False, allow_blank=True, default="", max_length=120)
     image_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     place_id = serializers.IntegerField(
-        required=False, allow_null=True, default=None, help_text="Lieu de culte propre au fonds (campagne d'une chapelle)"
+        required=False,
+        allow_null=True,
+        default=None,
+        help_text="Lieu de culte propre au fonds (campagne d'une chapelle)",
     )
 
 
@@ -115,7 +123,9 @@ class FundNewsInputSerializer(serializers.Serializer):
 
 
 class MonthQuerySerializer(NodeQuerySerializer):
-    month = serializers.RegexField(r"^\d{4}-(0[1-9]|1[0-2])$", required=False, help_text="AAAA-MM (défaut : mois courant)")
+    month = serializers.RegexField(
+        r"^\d{4}-(0[1-9]|1[0-2])$", required=False, help_text="AAAA-MM (défaut : mois courant)"
+    )
 
 
 class OperationsFilterSerializer(NodeQuerySerializer):
@@ -445,7 +455,9 @@ class ParishSummarySerializer(serializers.Serializer):
     online = serializers.IntegerField()
     cash = serializers.IntegerField()
     fees = serializers.IntegerField()
-    count = serializers.IntegerField(help_text="Obsolète : additionne dons en ligne et quêtes. Utiliser les deux champs suivants.")
+    count = serializers.IntegerField(
+        help_text="Obsolète : additionne dons en ligne et quêtes. Utiliser les deux champs suivants."
+    )
     online_count = serializers.IntegerField(help_text="Dons en ligne")
     cash_collections_count = serializers.IntegerField(help_text="Quêtes en espèces validées")
     pending_count = serializers.IntegerField(help_text="Paiements lancés ce mois encore en attente")

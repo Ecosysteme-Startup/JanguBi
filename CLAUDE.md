@@ -1,6 +1,6 @@
 # CLAUDE.md — JanguBi (backend Django), refonte V1
 
-Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (broker RabbitMQ), PostgreSQL + pgvector, Redis, MinIO, **Keycloak** (à partir du lot L3).
+Backend de **Jàngu Bi** : Django 5.2 + DRF, ASGI (Daphne), Channels, Celery (broker RabbitMQ), PostgreSQL (plein texte + pg_trgm ; aucune IA, ADR-018), Redis, MinIO, **Keycloak** (à partir du lot L3).
 
 > **Source de vérité de la V1 : `docs/v1/`.** Lire `docs/v1/00-LIRE-D-ABORD.md` au début de chaque session.
 > Les anciens SRS (`docs/archive/`) et `../memory/*.md` sont **obsolètes** : ne pas s'en servir comme référence.
@@ -105,10 +105,11 @@ Prompts prêts à l'emploi : `docs/v1/05-PROMPTS-CLAUDE-CODE.md`.
 ```bash
 make up / down / logs / shell
 make makemigrations / migrate / check / test
-make init-all                         # migrate + seed Bible/Rosaire/AELF + admin
+make init-all                         # migrate + pgvector + buckets + seed-prod
+make seed-prod                        # données réelles : référentiel, Bible, Rosaire, liturgie (prod et recette)
+make seed-recette                     # seed-prod + démonstration + données de test + musique de démo (jamais en prod)
 docker compose exec django pytest apps/<app>/tests/test_services.py -v
 docker compose exec django python manage.py spectacular --file schema.yml
-docker compose exec django python manage.py seed_hierarchy_profile senegal   # à partir de L1
 ```
 
 ## 10. Ajouter une app

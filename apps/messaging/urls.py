@@ -32,7 +32,9 @@ urlpatterns = [
     path("conversations/", ConversationListApi.as_view(), name="conversation-list"),
     path("conversations/create/", ConversationCreateApi.as_view(), name="conversation-create"),
     path("conversations/<uuid:conversation_id>/cgu/", ConversationCguApi.as_view(), name="conversation-cgu"),
-    path("conversations/<uuid:conversation_id>/archive/", ConversationArchiveApi.as_view(), name="conversation-archive"),
+    path(
+        "conversations/<uuid:conversation_id>/archive/", ConversationArchiveApi.as_view(), name="conversation-archive"
+    ),
     path("conversations/<uuid:conversation_id>/", ConversationDetailApi.as_view(), name="conversation-detail"),
     path("conversations/<uuid:conversation_id>/export/", ConversationExportApi.as_view(), name="conversation-export"),
     # Messages

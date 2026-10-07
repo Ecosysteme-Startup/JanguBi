@@ -1,8 +1,8 @@
 """Réconciliation Keycloak ↔ application (docs/ADMIN-KEYCLOAK.md).
 
-    manage.py sync_keycloak --dry-run      # rapport seulement
-    manage.py sync_keycloak                # corrige les écarts
-    manage.py sync_keycloak --dry-run --json
+manage.py sync_keycloak --dry-run      # rapport seulement
+manage.py sync_keycloak                # corrige les écarts
+manage.py sync_keycloak --dry-run --json
 """
 
 import json
@@ -24,7 +24,9 @@ class Command(BaseCommand):
         if run.error:
             raise CommandError(f"Réconciliation impossible : {run.error}")
         if json:
-            self.stdout.write(_dumps({"id": run.pk, "dry_run": run.dry_run, "counts": run.counts, "report": run.report}))
+            self.stdout.write(
+                _dumps({"id": run.pk, "dry_run": run.dry_run, "counts": run.counts, "report": run.report})
+            )
             return
         mode = "SIMULATION" if dry_run else "CORRECTION"
         self.stdout.write(f"{mode} — réconciliation n° {run.pk}")

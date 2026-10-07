@@ -33,4 +33,6 @@ class NotificationPreferenceApi(V1ApiMixin, ApiAuthMixin, APIView):
     def put(self, request: Request) -> Response:
         serializer = NotificationPreferenceSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        return Response(NotificationPreferenceSerializer(preferences_update(user=request.user, data=serializer.validated_data)).data)
+        return Response(
+            NotificationPreferenceSerializer(preferences_update(user=request.user, data=serializer.validated_data)).data
+        )

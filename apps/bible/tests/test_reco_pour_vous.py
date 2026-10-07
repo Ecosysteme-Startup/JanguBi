@@ -1,15 +1,16 @@
 """« Pour vous aujourd'hui » (plan V2 §6) : signaux, signets, réglage, précalcul, repli.
 
-Fournisseur d'embeddings « stub » : aucun modèle n'est chargé, les vecteurs des versets sont
-posés à la main pour rendre la géométrie lisible :
-- axe 0 : suivre Jésus (Luc 9, Luc 10, Actes, Jean 15) ;
-- axe 1 : faire la volonté du Père (évangile du jour, Mt 21, 28-32) ;
-- axe 2, 3 : autres thèmes.
+Proximité lexicale, sans modèle (ADR-018) : les versets du jeu d'essai partagent des mots rares
+pour rendre les voisinages lisibles :
+- suivre Jésus, porter sa croix, disciples, chemin (Luc 9, Luc 10, Actes 1 ; un peu Jean 15) ;
+- faire la volonté du Père (évangile du jour, Mt 21, 28-32 ; Mt 7, 21) ;
+- mettre la parole en pratique (Jacques 1).
 """
 
 import datetime
 
 import pytest
+from django.db import connection
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -42,20 +43,60 @@ pytestmark = [
 
 @pytest.fixture
 def frozen():
-    with override_settings(EMBEDDING_PROVIDER="stub", BIBLE_EDITION="", LITURGY_ZONE="afrique"):
+    # Jeu d'essai de 25 versets : « croix » y est dans 20 % des versets ; on relève le plafond des mots
+    # courants (5 % sur la vraie Bible), sans quoi aucun mot ne départagerait les versets.
+    with override_settings(BIBLE_EDITION="", LITURGY_ZONE="afrique", PAROLE_RECO_MAX_DF_RATIO=0.5):
         with freeze_time(NOW):
             yield
 
 
-def vec(**axes):
-    v = [0.0] * 768
-    for key, value in axes.items():
-        v[int(key[1:])] = value
-    return v
+def index_verses():
+    """Remplit ``tsv`` comme l'import (même configuration que la recherche)."""
+    with connection.cursor() as cursor:
+        cursor.execute("UPDATE bible_verse SET tsv = to_tsvector('fr_unaccent', text)")
 
 
 class World:
     pass
+
+
+LUC_9 = {
+    1: "Si quelqu'un veut marcher derrière moi, qu'il renonce à lui-même.",
+    2: "Qu'il prenne sa croix chaque jour et qu'il me suive.",
+    3: "Celui qui veut sauver sa vie la perdra, à cause de moi.",
+    4: "Le disciple qui me suit porte sa croix sur le chemin.",
+    5: "Le Fils de l'homme n'a pas où reposer la tête.",
+}
+LUC_10 = {
+    1: "Le Seigneur désigna encore soixante-douze disciples et les envoya sur le chemin.",
+    2: "Allez ! Je vous envoie comme des agneaux ; prenez votre croix.",
+    3: "Ne portez ni bourse, ni sac, ni sandales en chemin.",
+}
+MATTHIEU_7 = {
+    21: "Ce n'est pas en me disant Seigneur, Seigneur qu'on entrera dans le royaume des cieux, "
+    "mais en faisant la volonté de mon Père.",
+}
+MATTHIEU_21 = {
+    28: "Un homme avait deux fils ; il dit au premier : Mon enfant, va travailler à la vigne.",
+    29: "Celui-ci répondit : Je ne veux pas. Mais ensuite, s'étant repenti, il y alla.",
+    30: "Il alla trouver le second fils et lui parla de la même manière ; il répondit : Oui, Seigneur ! "
+    "et il n'y alla pas.",
+    31: "Lequel des deux a fait la volonté du père ?",
+    32: "Jean est venu à vous sur le chemin de la justice, et vous n'avez pas cru à sa parole.",
+}
+JEAN_15 = {
+    1: "Ce qui fait la gloire de Dieu, c'est que vous deveniez mes disciples.",
+    2: "Demeurez dans mon amour comme je demeure en vous.",
+    3: "Il n'y a pas de plus grand amour que de donner sa vie pour ses amis.",
+}
+ACTES_1 = {
+    1: "Les disciples suivaient le chemin et portaient leur croix avec joie.",
+    2: "Ils renoncèrent à leurs biens pour suivre le Seigneur sur le chemin.",
+    3: "Les disciples persévéraient dans la prière, unis de cœur.",
+}
+JACQUES_1 = {
+    22: "Mettez la parole en pratique ; ne vous contentez pas de l'écouter.",
+}
 
 
 @pytest.fixture
@@ -70,19 +111,17 @@ def world():
 
     def chapter(book, number, verses):
         ch = Chapter.objects.create(book=book, number=number, verse_count=len(verses))
-        out = {}
-        for n, embedding in verses.items():
-            out[n] = Verse.objects.create(chapter=ch, number=n, text=f"{book.name} {number}, {n}", embedding=embedding)
+        out = {n: Verse.objects.create(chapter=ch, number=n, text=text) for n, text in verses.items()}
         return ch, out
 
-    # Noise on axes 10+ keeps each verse distinct.
-    w.lc9, w.lc9v = chapter(w.lc, 9, {n: vec(d0=1.0, **{f"d{10 + n}": 0.1}) for n in range(1, 6)})
-    w.lc10, w.lc10v = chapter(w.lc, 10, {n: vec(d0=1.0, d1=0.2, **{f"d{20 + n}": 0.1}) for n in range(1, 4)})
-    w.mt7, w.mt7v = chapter(w.mt, 7, {21: vec(d0=0.7, d1=0.7)})
-    w.mt21, w.mt21v = chapter(w.mt, 21, {n: vec(d1=1.0, d0=0.3, **{f"d{30 + n - 28}": 0.1}) for n in range(28, 33)})
-    w.jn15, w.jn15v = chapter(w.jn, 15, {n: vec(d0=1.0, d2=0.5, **{f"d{40 + n}": 0.1}) for n in range(1, 4)})
-    w.ac1, w.ac1v = chapter(w.ac, 1, {n: vec(d0=0.9, d3=0.3, **{f"d{50 + n}": 0.1}) for n in range(1, 4)})
-    w.jc1, w.jc1v = chapter(w.jc, 1, {22: vec(d3=1.0)})
+    w.lc9, w.lc9v = chapter(w.lc, 9, LUC_9)
+    w.lc10, w.lc10v = chapter(w.lc, 10, LUC_10)
+    w.mt7, w.mt7v = chapter(w.mt, 7, MATTHIEU_7)
+    w.mt21, w.mt21v = chapter(w.mt, 21, MATTHIEU_21)
+    w.jn15, w.jn15v = chapter(w.jn, 15, JEAN_15)
+    w.ac1, w.ac1v = chapter(w.ac, 1, ACTES_1)
+    w.jc1, w.jc1v = chapter(w.jc, 1, JACQUES_1)
+    index_verses()
 
     # 26e dimanche du temps ordinaire (année A) : évangile Mt 21, 28-32.
     day = LiturgicalDate.objects.create(date=TODAY, zone="afrique", day_name="26e dimanche du temps ordinaire")
@@ -179,11 +218,40 @@ def test_no_signal_gives_no_payload(world):
     assert reco.recommendation_compute(user=world.mt_user, ctx=reco.reco_context_build(today=TODAY)) is None
 
 
-def test_stub_zero_vectors_are_ignored(world):
-    zero = Verse.objects.create(chapter=world.jc1, number=1, text="sans vecteur", embedding=[0.0] * 768)
-    lu(world.mt_user, chapter=world.jc1, start=zero, days_ago=1)
+def test_verse_without_meaningful_words_gives_no_payload(world):
+    # Que des mots vides (« et », « nous », « avec ») : rien pour situer le fidèle, pas de charge utile.
+    empty = Verse.objects.create(chapter=world.jc1, number=1, text="Et nous, nous sommes avec vous.")
+    index_verses()
+    lu(world.mt_user, chapter=world.jc1, start=empty, days_ago=1)
 
     assert reco.recommendation_compute(user=world.mt_user, ctx=reco.reco_context_build(today=TODAY)) is None
+
+
+def test_profile_weighs_rare_words_over_common_ones(world):
+    lu(world.mt_user, chapter=world.lc9, start=world.lc9v[2], end=world.lc9v[4], days_ago=1)
+    ctx = reco.reco_context_build(today=TODAY)
+
+    profile = reco.reading_profile_build(user=world.mt_user, now=timezone.now(), ctx=ctx)
+
+    # « croix » (5 versets sur 24) est plus rare que « chemin » (7 sur 24) : il pèse plus, et il
+    # fait partie des mots retenus pour le profil.
+    assert ctx.idf("croix") > ctx.idf("chemin")
+    assert "croix" in profile.terms
+    assert profile.terms["croix"] == max(profile.terms.values())
+    assert ctx.liturgy.terms  # mots de l'évangile du jour
+
+
+def test_too_common_words_are_left_out_of_the_profile(world):
+    lu(world.mt_user, chapter=world.lc9, days_ago=1)  # tout le chapitre
+    ctx = reco.reco_context_build(today=TODAY)
+
+    with override_settings(PAROLE_RECO_MAX_DF_RATIO=0.25):
+        profile = reco.reading_profile_build(user=world.mt_user, now=timezone.now(), ctx=ctx)
+
+    # « chemin » est dans 7 versets sur 25 (28 %) : trop courant, même lu cinq fois ; « croix » (20 %) reste.
+    assert ctx.idf("chemin") > 0  # sous le plafond du jeu d'essai (50 %)
+    assert "chemin" not in profile.terms
+    assert "croix" in profile.terms
 
 
 def test_finished_chapter_suggests_the_next_one(world):
@@ -285,7 +353,9 @@ def test_delete_history_keeps_bookmarks(client, world):
 
 def test_bookmark_crud(client, world):
     url = reverse("api:bible:bookmark-list-create")
-    created = client.post(url, {"verset_id": world.lc9v[3].pk, "couleur": "jaune", "note": "Porter sa croix"}, format="json")
+    created = client.post(
+        url, {"verset_id": world.lc9v[3].pk, "couleur": "jaune", "note": "Porter sa croix"}, format="json"
+    )
     assert created.status_code == 201, created.data
     assert created.data["type"] == "surligne"
     assert created.data["reference"] == "Luc 9, 3"
@@ -340,7 +410,9 @@ def test_disabling_personalisation(client, world):
     assert not DailyRecommendation.objects.exists()
 
     posted = client.post(
-        reverse("api:bible:reading-events"), {"evenements": [event("z", livre_id=world.lc.pk, chapitre=10)]}, format="json"
+        reverse("api:bible:reading-events"),
+        {"evenements": [event("z", livre_id=world.lc.pk, chapitre=10)]},
+        format="json",
     )
     assert posted.data["enregistres"] == 0 and posted.data["personnalisation_parole"] is False
     assert not ReadingEvent.objects.filter(client_event_id="z").exists()

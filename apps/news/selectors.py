@@ -25,7 +25,15 @@ from apps.hierarchy.models import Node
 from apps.hierarchy.selectors import node_ancestors
 from apps.news.models import Article, ArticleCategory, ArticleReaction, ArticleRead
 
-_BASE_RELATED = ("category", "author", "author__profile", "scope_node", "scope_node__type", "scope_place", "cover_image")
+_BASE_RELATED = (
+    "category",
+    "author",
+    "author__profile",
+    "scope_node",
+    "scope_node__type",
+    "scope_place",
+    "cover_image",
+)
 
 
 def category_list(*, active_only: bool = True) -> QuerySet[ArticleCategory]:
@@ -99,9 +107,11 @@ def article_list_published(
 
 
 def article_get_published(*, article_id: Any, viewer: Any = None) -> Article:
-    qs = annotate_pinned(annotate_reactions(
-        Article.objects.filter(status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED), viewer=viewer
-    ))
+    qs = annotate_pinned(
+        annotate_reactions(
+            Article.objects.filter(status=Article.Status.PUBLISHED).select_related(*_BASE_RELATED), viewer=viewer
+        )
+    )
     try:
         return qs.get(pk=article_id)
     except (Article.DoesNotExist, ValueError) as exc:

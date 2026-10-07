@@ -6,28 +6,36 @@ recalcul des recommandations. Reproductible (graine), réversible (`--reset`), *
 
 Plan de référence : `JanguBIMobileApp/docs/PLAN-DONNEES-DE-TEST.md` (décisions de l'utilisateur ci-dessous).
 
-## Démarrer
+## Démarrer : deux seeds
+
+| Seed | Contenu | Où |
+|---|---|---|
+| `seed_prod` | données **réelles** : référentiel territorial, Bible (si absente), Rosaire, liturgie AELF des 7 prochains jours rattachée aux versets. Idempotent. | production **et** recette |
+| `seed_recette` | `seed_prod` + personnes de démonstration (`seed_demo`) + médias libres du manifeste + monde de test (`seed_realiste`, vérifié) + musique de démo si publiée. | recette et local, **jamais en production** |
 
 ```bash
-make seed-realiste                 # local : échelle petite, médias légers, vérification (< 1 min)
-make seed-realiste-reset           # retire exactement le lot (graine 2026 par défaut)
-make seed-charge                   # échelle grande (COPY en masse), sans fichiers audio
-make seed-realiste APP=jangubi ENV=staging          # (serveur, dépôt Infrastructure) médias puis échelle moyenne
-make seed-realiste APP=jangubi ENV=staging RESET=1   # (serveur, dépôt Infrastructure) remise à zéro MANUELLE
-make seed-realiste APP=jangubi ENV=staging TRAFIC=10min  # (serveur) dons et écoutes simulés en continu
+make seed-prod                     # local : données réelles
+make seed-recette                  # local : recette complète, échelle petite
+make seed-recette SEED_ARGS="--echelle moyenne --sans-musique --hors-ligne"
+make seed-recette-reset            # retire données de test et de démonstration (les réelles restent)
+make seed-charge                   # tests de charge : échelle grande, sans fichiers audio
 ```
 
-Hors Docker :
+Sur le serveur (conteneur de l'API) :
 
 ```bash
-SEED_ALLOWED=true python manage.py seed_realiste --profil local --echelle petite --medias legers --verifier
+python manage.py seed_prod                                  # production et recette
+SEED_ALLOWED=true python manage.py seed_recette             # recette : échelle moyenne
+SEED_ALLOWED=true python manage.py seed_recette --reset     # remise à zéro MANUELLE
 ```
+
+`seed_realiste` reste disponible seul pour les réglages fins (graine, modules, `--simuler-trafic 10min`).
 
 Options (`--help`) :
 
 | Option | Rôle |
 |---|---|
-| `--profil local\|recette` | recette : comptes Keycloak des personas, médias lus dans le bucket MinIO `seed-assets` |
+| `--profil local\|recette` | recette : comptes Keycloak des personas, médias lus sous `seed-assets/` dans le bucket MinIO de l'app |
 | `--echelle petite\|moyenne\|grande` | volumes ci-dessous |
 | `--graine 2026` | même graine, mêmes données (noms, montants, dates relatives au jour du semis) ; le lot s'appelle `realiste-<graine>` |
 | `--modules tous\|socle,dons,vie,audio,parole` | sous-ensemble ; les dépendances sont ajoutées d'office |
@@ -52,11 +60,16 @@ crédits) est versionnée dans `seed_assets/musique-demo.yaml` ; le pack reste s
 # 1. Décompresser Polyphonic.Elements6.rar dans seed_assets/ (ignoré par Git) :
 #    seed_assets/The Polyphonic Elements Vol.6/...
 make musique-demo              # → seed_assets/musique-demo/ : 10 FLAC + credits.yaml
-make seed-realiste-musique     # sonothèque de démo avec cette musique (--medias complets)
+make seed-recette              # la prend automatiquement (--medias complets)
 ```
 
 Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --sortie <dossier>`, puis
-`seed_realiste --medias-dossier <dossier>`. En `--medias legers`, seules les 4 premières pistes servent (extraits
+`seed_realiste --medias-dossier <dossier>`.
+
+**En recette, une seule fois** : `prepare_musique_demo --publier` copie les 10 FLAC et `credits.yaml` dans le
+dossier `seed-assets/musique-demo/` du bucket MinIO de l'app (bucket privé, jamais servi au public ; pas de bucket à part : la clé de recette n'ouvre que celui de l'app). Ensuite, même après
+une remise à zéro de la base, `seed_recette` reprend la musique dans ce bucket : plus besoin du pack. `--musique-demo` lit d'abord `seed_assets/musique-demo/` s'il
+existe, sinon le bucket. Si le dossier `seed-assets/` est vidé, repartir du RAR (copie de référence hors Git). En `--medias legers`, seules les 4 premières pistes servent (extraits
 de 30 s) ; en `--medias complets`, les 10.
 
 ## Échelles
@@ -156,8 +169,8 @@ Sources, par ordre de préférence :
 
 2. **Manifeste** `seed_assets/manifest.yaml` (domaine public, CC0, CC BY/BY-SA ; pochettes Unsplash comme
    l'app) : `python manage.py fetch_seed_assets` télécharge une fois, vérifie les sha256 et range dans
-   `~/.cache/jangubi-seed/` (local, `JANGUBI_SEED_CACHE` pour changer) ou dans le bucket MinIO
-   **`seed-assets`** de la recette (`--profil recette`). `--epingler` écrit les sha256 manquants.
+   `~/.cache/jangubi-seed/` (local, `JANGUBI_SEED_CACHE` pour changer) ou, en recette
+   (`--profil recette`), sous **`seed-assets/`** dans le bucket MinIO de l'app. `--epingler` écrit les sha256 manquants.
    Aucun binaire dans Git.
 3. **Voix** (homélies, lectures, retraites) : synthèse vocale **Piper** si le binaire `piper` et une voix
    (`--piper-voix` ou `PIPER_VOICE`, `PIPER_BIN`) sont disponibles, lisant des textes rédigés pour le projet
@@ -175,9 +188,9 @@ données fictives ».
 Rien n'est généré. La Bible vient de `import_bible` (`--bible-json`, ex. `init/bibles/format/json/bible-fr-aelf.json`,
 source `AELF` par défaut, `--bible-source` pour changer) ; les lectures viennent de la synchronisation AELF
 réelle. Sans réseau (ou `--hors-ligne`), l'étape est sautée et signalée ; la « lecture du jour » des profils
-quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare des embeddings : avec
-`EMBEDDING_PROVIDER=stub` (tests, poste local par défaut), il reste vide et le rapport le dit ; en recette,
-`EMBEDDING_PROVIDER=local`, `seed_embeddings`, puis `seed_realiste --modules parole`.
+quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare les mots des versets
+(plein texte PostgreSQL, sans modèle, ADR-018) : il est calculé partout, poste local compris, dès que la
+Bible est importée.
 
 ## Vérification (`--verifier`)
 
@@ -187,15 +200,15 @@ quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) c
 - une paroisse principale par fidèle, `paroisse_suivie` à jour, curé et économe dans chaque paroisse ;
 - pistes `pret` avec leurs 3 débits HLS (et fichiers présents dans le stockage hors `aucun`) ;
 - événements d'écoute dans les partitions mensuelles (aucun dans la partition par défaut) ;
-- recommandations audio calculées ; « Pour vous » (Parole) calculé quand les embeddings le permettent ;
+- recommandations audio calculées ; « Pour vous » (Parole) calculé (au moins un fidèle) quand la Bible est là ;
 - adresses en `@demo.jangubi.sn`, messagerie sans mineur.
 
 ## Local, recette, clients
 
-- **Local** : `make seed-realiste` ; web `NEXT_PUBLIC_API_MOCKING=false` ; mobile `USE_MOCKS=false` avec
+- **Local** : `make seed-recette` ; web `NEXT_PUBLIC_API_MOCKING=false` ; mobile `USE_MOCKS=false` avec
   `API_URL=http://10.0.2.2:8000/api` (émulateur Android) ou l'IP du poste.
-- **Recette** : `make seed-realiste APP=jangubi ENV=staging` sur le serveur (voir `docs/RECETTE.md`). Remise à zéro **manuelle uniquement**
-  (`RESET=1`, puis `SEED_ARGS="--graine 2027"` pour une nouvelle graine) ;
+- **Recette** : `SEED_ALLOWED=true python manage.py seed_recette` sur le serveur (voir `docs/RECETTE.md`).
+  Remise à zéro **manuelle uniquement** (`seed_recette --reset`, puis `--graine 2027` pour une nouvelle graine) ;
   aucune tâche planifiée.
 - Les écoutes semées tombent dans les partitions mensuelles ; celles de plus de 13 mois sont purgées par
   la tâche mensuelle, comme en production.

@@ -89,7 +89,10 @@ def active_assignments(*, user: Any, on: Any = None) -> QuerySet[OfficeAssignmen
 def _grants_compute(user: Any) -> list[Grant]:
     grants: list[Grant] = []
     if is_platform_admin(user):
-        grants += [Grant(c, None, "Plateforme", "", True, "plateforme", "plateforme", "Administrateur plateforme") for c in sorted(PLATFORM_ADMIN_CAPABILITIES)]
+        grants += [
+            Grant(c, None, "Plateforme", "", True, "plateforme", "plateforme", "Administrateur plateforme")
+            for c in sorted(PLATFORM_ADMIN_CAPABILITIES)
+        ]
 
     assignments = list(active_assignments(user=user).prefetch_related("office_type__capabilities"))
     if not assignments:

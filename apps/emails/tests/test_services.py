@@ -354,7 +354,7 @@ def test_send_multi_format_email_creates_email_record_with_sending_status():
         mock_render.side_effect = [
             "Verify your email",  # subject template
             "<p>Click here</p>",  # html template
-            "Click here",         # plain_text template
+            "Click here",  # plain_text template
         ]
         with patch("apps.emails.services.email_send_task"):
             send_multi_format_email(

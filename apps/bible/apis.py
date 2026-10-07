@@ -14,6 +14,7 @@ def _error(exc: ApplicationError) -> Response:
 
 # ─── Serializers ──────────────────────────────────────────────────────────────
 
+
 class HomilieNoteInputSerializer(serializers.Serializer):
     passage_start_id = serializers.IntegerField()
     passage_end_id = serializers.IntegerField(required=False, allow_null=True)
@@ -72,6 +73,7 @@ class ReadingPlanOutputSerializer(serializers.Serializer):
 
 
 # ─── APIs ─────────────────────────────────────────────────────────────────────
+
 
 class HomilieNoteListCreateApi(ApiAuthMixin, APIView):
     @extend_schema(
@@ -251,8 +253,7 @@ class ReadingPlanDetailApi(ApiAuthMixin, APIView):
         tags=["Bible — Avancé"],
         summary="Publier un plan de lecture",
         description=(
-            "Aucun corps de requête : publier est une simple bascule d'état, "
-            "réservée à l'auteur du parcours."
+            "Aucun corps de requête : publier est une simple bascule d'état, réservée à l'auteur du parcours."
         ),
     )
     def post(self, request, plan_id: int):
@@ -300,8 +301,7 @@ class ReadingPlanUnsubscribeApi(ApiAuthMixin, APIView):
         tags=["Bible — Avancé"],
         summary="Se désinscrire d'un parcours de lecture",
         description=(
-            "Aucun corps de requête. Idempotent : se désinscrire d'un parcours "
-            "auquel on n'est pas inscrit renvoie 200."
+            "Aucun corps de requête. Idempotent : se désinscrire d'un parcours auquel on n'est pas inscrit renvoie 200."
         ),
     )
     def post(self, request, plan_id: int):

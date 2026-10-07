@@ -82,8 +82,14 @@ def push_deliver(self, *, device_ids, title, body, data, collapse_id=""):
     result = push_deliver_now(device_ids=device_ids, title=title, body=body, data=data, collapse_id=collapse_id)
     if result["retry"] and self.request.retries < self.max_retries:
         self.retry(
-            kwargs={"device_ids": result["retry"], "title": title, "body": body, "data": data, "collapse_id": collapse_id},
-            countdown=60 * (2 ** self.request.retries),
+            kwargs={
+                "device_ids": result["retry"],
+                "title": title,
+                "body": body,
+                "data": data,
+                "collapse_id": collapse_id,
+            },
+            countdown=60 * (2**self.request.retries),
             throw=False,
         )
     logger.info("push_delivered", sent=len(result["sent"]), invalid=len(result["invalid"]), retry=len(result["retry"]))

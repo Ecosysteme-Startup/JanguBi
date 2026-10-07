@@ -103,14 +103,20 @@ class HierarchieSeeder(Seeder):
                 if place.is_main:
                     MassSchedule.objects.create(place=place, kind="messe", weekday=5, start_time=SATURDAY_EVENING)
                     for wd in range(5):
-                        MassSchedule.objects.create(place=place, kind="messe", weekday=wd, start_time=datetime.time(7, 0))
+                        MassSchedule.objects.create(
+                            place=place, kind="messe", weekday=wd, start_time=datetime.time(7, 0)
+                        )
                     MassSchedule.objects.create(
                         place=place, kind="confession", weekday=5, start_time=datetime.time(16, 0),
                         end_time=datetime.time(18, 0),
                     )  # fmt: skip
             ctx.track(Node, created_nodes)
             ctx.track(PlaceOfWorship, created_places)
-        return {"paroisses": len(ctx.parishes()), "nouvelles_paroisses": len(created_nodes), "lieux": len(created_places)}
+        return {
+            "paroisses": len(ctx.parishes()),
+            "nouvelles_paroisses": len(created_nodes),
+            "lieux": len(created_places),
+        }
 
     def reset(self, ctx: SeedContext) -> dict[str, Any]:
         from apps.hierarchy.models import Node, PlaceOfWorship
@@ -269,7 +275,9 @@ class AppartenancesSeeder(Seeder):
         return [
             Check("Une paroisse principale par fidèle", bad == 0 and total > 0, f"{total} fidèles, {bad} en écart"),
             Check("paroisse_suivie = principale", mismatch == 0, f"{mismatch} écart(s)"),
-            Check("Curé et économe dans chaque paroisse peuplée", staffed == len(parishes), f"{staffed}/{len(parishes)}"),
+            Check(
+                "Curé et économe dans chaque paroisse peuplée", staffed == len(parishes), f"{staffed}/{len(parishes)}"
+            ),
         ]
 
 

@@ -9,6 +9,7 @@ et ordonnés par le registre (``apps.core.seeding.registry``). Voir ``docs/DONNE
 
 from __future__ import annotations
 
+import pathlib
 import re
 import time
 from typing import Any
@@ -43,9 +44,13 @@ class Command(BaseCommand):
         parser.add_argument("--historique", type=int, default=12, help="Mois d'historique (dons, écoutes).")
         parser.add_argument("--reset", action="store_true", help="Supprime exactement le lot de cette graine.")
         parser.add_argument("--verifier", action="store_true", help="Contrôle les invariants et affiche le rapport.")
-        parser.add_argument("--simuler-trafic", dest="trafic", default=None, help="Ex. 10min : dons et écoutes en continu.")
+        parser.add_argument(
+            "--simuler-trafic", dest="trafic", default=None, help="Ex. 10min : dons et écoutes en continu."
+        )
         parser.add_argument("--medias-dossier", dest="medias_dossier", default=None,
                             help="Album libre fourni (jamais commité) ; credits.yaml optionnel dans ce dossier.")  # fmt: skip
+        parser.add_argument("--musique-demo", dest="musique_demo", action="store_true",
+                            help="Album = musique de démo : seed_assets/musique-demo/, sinon seed-assets/ du bucket de l'app.")  # fmt: skip
         parser.add_argument("--bible-json", dest="bible_json", default=None,
                             help="JSON de la Bible (AELF) à importer par import_bible si la Bible est absente.")  # fmt: skip
         parser.add_argument("--bible-source", dest="bible_source", default="AELF")
@@ -58,6 +63,8 @@ class Command(BaseCommand):
             check_allowed(profil=o["profil"])
         except SeedRefused as exc:
             raise CommandError(str(exc)) from exc
+        if o["musique_demo"]:
+            o["medias_dossier"] = self._musique_demo(o["profil"])
         registry.autodiscover()
         ctx = SeedContext(
             profil=o["profil"], scale=SCALES[o["echelle"]], graine=o["graine"], medias=o["medias"],
@@ -91,7 +98,10 @@ class Command(BaseCommand):
                 self.stdout.write(f"- {seeder.name} …")
                 result = seeder.seed(ctx)
                 if not seeder.always:
-                    ctx.mark_done(seeder.name)
+                    if seeder.produced(result or {}):
+                        ctx.mark_done(seeder.name)
+                    else:
+                        ctx.note(f"{seeder.name} : rien produit, non marqué fait — repris au prochain passage.")
                 summary = ", ".join(f"{k} {v}" for k, v in (result or {}).items())
                 self.stdout.write(f"  {seeder.name} : {summary} ({time.monotonic() - t0:.1f} s)")
         if dropped:
@@ -133,6 +143,25 @@ class Command(BaseCommand):
                 self.stdout.write(f"  {mark} [{seeder.name}] {check.label} — {check.detail}")
                 failures += 0 if check.ok else 1
         return failures
+
+    def _musique_demo(self, profil: str) -> str:
+        """Dossier de la musique de démo : ``seed_assets/musique-demo/`` s'il est prêt, sinon le bucket."""
+        from django.conf import settings
+
+        from apps.audio.seed_medias import DEMO_PREFIX, cache_dir, restore_folder, store_for
+
+        local = pathlib.Path(settings.BASE_DIR) / "seed_assets" / DEMO_PREFIX
+        if (local / "credits.yaml").exists():
+            return str(local)
+        store = store_for(profil)
+        folder = restore_folder(store, cache_dir() / DEMO_PREFIX)
+        if folder is None:
+            raise CommandError(
+                f"Musique de démo introuvable ({local}, {store.kind}). "
+                "Lancez d'abord prepare_musique_demo (--publier en recette)."
+            )
+        self.stdout.write(f"Musique de démo reprise depuis {store.kind}.")
+        return str(folder)
 
     def _reset(self, ctx: SeedContext) -> None:
         from apps.core.models import SeedRecord

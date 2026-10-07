@@ -127,8 +127,13 @@ def donor_summary(*, user: Any, year: int) -> dict[str, Any]:
         "total": totals["total"],
         "count": totals["count"],
         "by_fund": [
-            {"fund_id": r["fund_id"], "title": r["fund__title"], "parish": r["fund__node__name"],
-             "total": r["total"], "count": r["count"]}
+            {
+                "fund_id": r["fund_id"],
+                "title": r["fund__title"],
+                "parish": r["fund__node__name"],
+                "total": r["total"],
+                "count": r["count"],
+            }
             for r in by_fund
         ],  # fmt: skip
     }
@@ -218,8 +223,14 @@ def parish_summary(*, node: Node, month: datetime.date) -> dict[str, Any]:
         "closed_at": closing.created_at if closing else None,
         "by_destination": {"paroisse": destinations.get("paroisse", 0), "curie": destinations.get("curie", 0)},
         "by_fund": [
-            {"fund_id": r["fund_id"], "title": r["fund__title"], "kind": r["fund__kind"],
-             "destination": r["fund__destination"], "total": r["s"], "count": r["n"]}
+            {
+                "fund_id": r["fund_id"],
+                "title": r["fund__title"],
+                "kind": r["fund__kind"],
+                "destination": r["fund__destination"],
+                "total": r["s"],
+                "count": r["n"],
+            }
             for r in by_fund
         ],  # fmt: skip
         "by_method": [{"method": r["payment_method"], "total": r["s"], "count": r["n"]} for r in by_method],
@@ -259,7 +270,9 @@ def operations_for_parish(
 
 
 def operation_get(*, donation_id: UUID | str) -> Donation:
-    donation = Donation.objects.select_related("fund__node__type", "donor__profile", "place").filter(pk=donation_id).first()
+    donation = (
+        Donation.objects.select_related("fund__node__type", "donor__profile", "place").filter(pk=donation_id).first()
+    )
     if donation is None:
         raise NotFoundError("Opération introuvable.")
     return donation
@@ -320,9 +333,7 @@ def parish_reconciliation(*, node: Node, date_from: datetime.date, date_to: date
         node=node, status=CashCollectionStatus.SAISIE, mass_date__lte=timezone.localdate() - datetime.timedelta(days=7)
     ):
         issues.append({"kind": "quete_non_validee", "reference": f"Q-{c.pk}", "date": c.mass_date})
-    for p in Payout.objects.filter(
-        status=PayoutStatus.ECART, lines__attempt__donation__fund__node=node
-    ).distinct():
+    for p in Payout.objects.filter(status=PayoutStatus.ECART, lines__attempt__donation__fund__node=node).distinct():
         issues.append({"kind": "reversement_ecart", "reference": p.external_ref, "date": p.paid_at.date()})
     return {"date_from": date_from, "date_to": date_to, **totals, "issues": issues}
 
@@ -386,7 +397,9 @@ def imperees_for_diocese(*, diocese: Node) -> QuerySet[Fund]:
     return (
         Fund.objects.filter(node=diocese, kind=FundKind.QUETE_IMPEREE, parent__isnull=True)
         .annotate(
-            raised=_sum("parish_funds__donations__net_amount", Q(parish_funds__donations__status=DonationStatus.CONFIRME)),
+            raised=_sum(
+                "parish_funds__donations__net_amount", Q(parish_funds__donations__status=DonationStatus.CONFIRME)
+            ),
             parishes_count=Count("parish_funds", distinct=True),
         )
         .order_by("-starts_on", "-created_at")
@@ -421,10 +434,14 @@ def imperee_follow(*, fund: Fund) -> list[dict[str, Any]]:
         Fund.objects.filter(parent=fund)
         .values("id", "node_id", "node__name", "status")
         .annotate(
-            online=_sum("donations__net_amount", Q(donations__status=DonationStatus.CONFIRME,
-                                                   donations__channel=DonationChannel.EN_LIGNE)),
-            cash=_sum("donations__net_amount", Q(donations__status=DonationStatus.CONFIRME,
-                                                 donations__channel=DonationChannel.ESPECES)),
+            online=_sum(
+                "donations__net_amount",
+                Q(donations__status=DonationStatus.CONFIRME, donations__channel=DonationChannel.EN_LIGNE),
+            ),
+            cash=_sum(
+                "donations__net_amount",
+                Q(donations__status=DonationStatus.CONFIRME, donations__channel=DonationChannel.ESPECES),
+            ),
             count=Count("donations", filter=Q(donations__status=DonationStatus.CONFIRME)),
         )  # fmt: skip
         .order_by("node__name")
@@ -471,8 +488,9 @@ def remittances_for(*, node: Node, status: str | None = None) -> QuerySet[CuriaR
 
 def remittance_get(*, remittance_id: int) -> CuriaRemittance:
     remittance = (
-        CuriaRemittance.objects.select_related("fund__parent__node", "node__type", "declared_by__profile",
-                                               "confirmed_by__profile")  # fmt: skip
+        CuriaRemittance.objects.select_related(
+            "fund__parent__node", "node__type", "declared_by__profile", "confirmed_by__profile"
+        )  # fmt: skip
         .filter(pk=remittance_id)
         .first()
     )
@@ -493,9 +511,7 @@ def platform_health(*, now: datetime.datetime | None = None) -> dict[str, Any]:
     now = now or timezone.now()
     day, week = now - datetime.timedelta(hours=24), now - datetime.timedelta(days=7)
     events = PaymentWebhookEvent.objects.all()
-    by_status = {
-        s: events.filter(received_at__gte=week, status=s).count() for s in WebhookStatus.values
-    }
+    by_status = {s: events.filter(received_at__gte=week, status=s).count() for s in WebhookStatus.values}
     pending = PaymentAttempt.objects.filter(donation__status=DonationStatus.EN_ATTENTE)
     oldest = pending.order_by("created_at").values_list("created_at", flat=True).first()
     last_event = events.order_by("-received_at").values_list("received_at", flat=True).first()
@@ -557,7 +573,9 @@ def adjustments_for_parish(*, node: Node) -> QuerySet[DonationAdjustment]:
 
 
 def incidents_for_parish(*, node: Node, status: str | None = None) -> QuerySet[PaymentIncident]:
-    qs = PaymentIncident.objects.filter(donation__fund__node=node).select_related("donation__fund", "resolved_by__profile")
+    qs = PaymentIncident.objects.filter(donation__fund__node=node).select_related(
+        "donation__fund", "resolved_by__profile"
+    )
     if status:
         qs = qs.filter(status=status)
     return qs.order_by("-created_at")

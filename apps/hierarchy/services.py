@@ -116,7 +116,9 @@ def node_update(*, node: Node, data: dict[str, Any]) -> Node:
     if unknown:
         raise ApplicationError("Champs non modifiables.", {"fields": sorted(unknown)}, code="field_not_updatable")
     if "code" in data and Node.objects.filter(code=data["code"]).exclude(pk=node.pk).exists():
-        raise ApplicationError(f"Le code « {data['code']} » est déjà utilisé.", {"code": data["code"]}, code="code_taken")
+        raise ApplicationError(
+            f"Le code « {data['code']} » est déjà utilisé.", {"code": data["code"]}, code="code_taken"
+        )
     if data.get("located_in") is not None and data["located_in"].pk == node.pk:
         raise ApplicationError("Un nœud ne peut pas être situé dans lui-même.", code="invalid_location")
 
@@ -254,9 +256,7 @@ def schedule_exception_create(
     actor: Any = None,
 ) -> ScheduleException:
     if not cancelled and start_time is None:
-        raise ApplicationError(
-            "Un horaire supplémentaire doit avoir une heure de début.", code="exception_needs_time"
-        )
+        raise ApplicationError("Un horaire supplémentaire doit avoir une heure de début.", code="exception_needs_time")
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_schedule")
     try:

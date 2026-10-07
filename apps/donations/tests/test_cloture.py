@@ -128,20 +128,27 @@ def test_month_close_freezes_the_month(world, fund, django_capture_on_commit_cal
         services.donation_refund(donation=selectors.operation_get(donation_id=donation.pk), actor=world.econome)
         adjustment = DonationAdjustment.objects.get()
         assert (adjustment.kind, adjustment.amount, adjustment.value_date) == (
-            AdjustmentKind.REMBOURSEMENT, -10_000, datetime.date(2026, 10, 5)
+            AdjustmentKind.REMBOURSEMENT,
+            -10_000,
+            datetime.date(2026, 10, 5),
         )
         assert selectors.parish_summary(node=world.sd, month=SEPT)["total"] == 59_800
         assert selectors.parish_summary(node=world.sd, month=OCT)["total"] == -9_800
-        sept = client_for(world.econome).get(
-            "/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk), "date": "2026-09"}
-        ).json()
+        sept = (
+            client_for(world.econome)
+            .get("/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk), "date": "2026-09"})
+            .json()
+        )
         assert sept["synthese"]["collecte"] == 60_000
         with pytest.raises(ApplicationError) as exc:
             services_cloture.month_close(node=world.sd, month=SEPT, actor=world.econome)
         assert exc.value.code == "month_already_closed"
-        assert client_for(world.cure).get(f"/api/v1/staff/dons/synthese/?node={world.sd.pk}&month=2026-09").json()[
-            "closed"
-        ] is True
+        assert (
+            client_for(world.cure)
+            .get(f"/api/v1/staff/dons/synthese/?node={world.sd.pk}&month=2026-09")
+            .json()["closed"]
+            is True
+        )
 
 
 def test_correction_of_a_closed_month_is_an_adjustment_entry(world, fund):
@@ -180,9 +187,11 @@ def test_automatic_close_waits_for_the_day_and_for_pending_cash(world, fund):
 def test_month_to_close_appears_in_to_do(world, fund):
     DonationActivation.objects.filter(node=world.sd).update(authorization_date=datetime.date(2026, 8, 1))
     with freeze_time("2026-10-03 10:00:00"):
-        todo = client_for(world.econome).get(
-            "/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk), "date": "2026-10"}
-        ).json()["a_traiter"]
+        todo = (
+            client_for(world.econome)
+            .get("/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk), "date": "2026-10"})
+            .json()["a_traiter"]
+        )
     assert {"type": "cloture_mois", "echeance": "2026-10-10", "objet_id": "2026-09"}.items() <= todo[0].items()
 
 
@@ -207,9 +216,11 @@ def test_late_payment_is_persisted_once_then_integrated(world, fund, django_capt
     services.payment_state_apply(attempt=attempt, state=FakeProvider().fetch_status(external_ref=attempt.external_ref),
                                  source=StatusSource.RECONCILIATION)  # fmt: skip
     assert PaymentIncident.objects.count() == 1
-    todo = client_for(world.econome).get(
-        "/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk)}
-    ).json()["a_traiter"]
+    todo = (
+        client_for(world.econome)
+        .get("/api/v1/staff/dons/analyse/", {"niveau": "paroisse", "noeud": str(world.sd.pk)})
+        .json()["a_traiter"]
+    )
     assert "paiement_tardif" in [t["type"] for t in todo]
     listing = client_for(world.econome).get(f"/api/v1/staff/dons/incidents/?node={world.sd.pk}").json()
     assert listing[0]["reference"] == donation.reference and listing[0]["donation_status"] == "expire"

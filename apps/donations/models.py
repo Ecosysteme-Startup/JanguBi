@@ -80,9 +80,7 @@ class Fund(BaseModel):
     status = models.CharField(max_length=10, choices=FundStatus.choices, default=FundStatus.BROUILLON, db_index=True)
     # Quête impérée : fonds diocésain (parent) décliné sur chaque paroisse concernée.
     parent = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="parish_funds")
-    decided_by = models.ForeignKey(
-        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
-    )
+    decided_by = models.ForeignKey("users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
     decided_by_office = models.CharField(_("office qui décide"), max_length=60, blank=True, default="")
     authorization_ref = models.CharField(_("référence de l'autorisation"), max_length=120, blank=True, default="")
     image = models.ForeignKey("files.File", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
@@ -352,7 +350,9 @@ class Donation(BaseModel):
         ordering = ["-created_at"]
         constraints = [
             models.CheckConstraint(condition=Q(amount__gt=0), name="dons_donation_amount_positive"),
-            models.CheckConstraint(condition=Q(net_amount__lte=F("charged_amount")), name="dons_donation_net_le_charged"),
+            models.CheckConstraint(
+                condition=Q(net_amount__lte=F("charged_amount")), name="dons_donation_net_le_charged"
+            ),
             models.CheckConstraint(
                 condition=Q(channel=DonationChannel.EN_LIGNE) | Q(cash_collection__isnull=False),
                 name="dons_donation_cash_has_collection",
@@ -475,9 +475,7 @@ class DonationAdjustment(BaseModel):
 
     node = models.ForeignKey("hierarchy.Node", on_delete=models.PROTECT, related_name="donation_adjustments")
     fund = models.ForeignKey(Fund, on_delete=models.PROTECT, related_name="adjustments")
-    donation = models.ForeignKey(
-        Donation, on_delete=models.PROTECT, null=True, blank=True, related_name="adjustments"
-    )
+    donation = models.ForeignKey(Donation, on_delete=models.PROTECT, null=True, blank=True, related_name="adjustments")
     kind = models.CharField(max_length=15, choices=AdjustmentKind.choices)
     channel = models.CharField(max_length=10, choices=DonationChannel.choices)
     source = models.CharField(max_length=12, choices=DonationSource.choices, null=True, blank=True)
@@ -489,9 +487,7 @@ class DonationAdjustment(BaseModel):
     net_amount = models.IntegerField(_("montant affecté (signé)"))
     value_date = models.DateField(_("date de valeur"), db_index=True)
     reason = models.CharField(_("motif"), max_length=300)
-    created_by = models.ForeignKey(
-        "users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
-    )
+    created_by = models.ForeignKey("users.BaseUser", on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
 
     class Meta:
         verbose_name = _("ajustement")

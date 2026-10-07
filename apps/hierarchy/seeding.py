@@ -37,7 +37,9 @@ def _node_find(*, spec: NodeSpec, parent: Node | None) -> Node | None:
 
 def _profile(profile: str) -> Profile:
     if profile not in PROFILES:
-        raise ApplicationError(f"Profil inconnu : « {profile} ».", {"profiles": sorted(PROFILES)}, code="unknown_profile")
+        raise ApplicationError(
+            f"Profil inconnu : « {profile} ».", {"profiles": sorted(PROFILES)}, code="unknown_profile"
+        )
     return PROFILES[profile]
 
 

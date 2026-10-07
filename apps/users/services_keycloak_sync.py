@@ -56,7 +56,9 @@ def _names(user: BaseUser) -> tuple[str, str]:
     return (profile.first_name, profile.last_name) if profile else ("", "")
 
 
-def keycloak_representation(user: BaseUser, *, first_name: str | None = None, last_name: str | None = None) -> dict[str, Any]:
+def keycloak_representation(
+    user: BaseUser, *, first_name: str | None = None, last_name: str | None = None
+) -> dict[str, Any]:
     first, last = _names(user)
     return {
         "username": user.email,
@@ -306,7 +308,9 @@ def keycloak_event_process(*, event_id: int, client: Any = None) -> str:
     try:
         result = account_pull(keycloak_id=event.keycloak_user_id, client=client)
     except KeycloakAdminError:
-        KeycloakEvent.objects.filter(pk=event_id).update(status=KeycloakEventStatus.ECHEC, result="keycloak_injoignable")
+        KeycloakEvent.objects.filter(pk=event_id).update(
+            status=KeycloakEventStatus.ECHEC, result="keycloak_injoignable"
+        )
         raise
     KeycloakEvent.objects.filter(pk=event_id).update(
         status=KeycloakEventStatus.TRAITE, result=result.action, processed_at=timezone.now()
@@ -359,9 +363,13 @@ def _fetch_since(fetch: Any, floor_ms: int, limit: int) -> list[dict[str, Any]]:
 def _process_pending(client: Any, counts: dict[str, int], done: dict[str, str]) -> None:
     """Traite les événements reçus (ou en échec, dans la limite des tentatives), un seul
     relecture par compte et par passe."""
-    pending = KeycloakEvent.objects.filter(
-        status__in=[KeycloakEventStatus.RECU, KeycloakEventStatus.ECHEC], attempts__lt=FAILED_EVENTS_MAX_ATTEMPTS
-    ).exclude(keycloak_user_id="").order_by("received_at", "pk")
+    pending = (
+        KeycloakEvent.objects.filter(
+            status__in=[KeycloakEventStatus.RECU, KeycloakEventStatus.ECHEC], attempts__lt=FAILED_EVENTS_MAX_ATTEMPTS
+        )
+        .exclude(keycloak_user_id="")
+        .order_by("received_at", "pk")
+    )
     for event in pending:
         user_id = event.keycloak_user_id
         if user_id in done:
@@ -387,7 +395,10 @@ def keycloak_events_poll(*, client: Any = None) -> dict[str, int]:
     counts = {"lus": 0, "nouveaux": 0, "traites": 0, "echecs": 0}
     now_ms = int(timezone.now().timestamp() * 1000)
     lookback_ms = settings.KEYCLOAK_EVENTS_INITIAL_LOOKBACK_HOURS * 3600 * 1000
-    streams = (("utilisateur", client.events, _normalize_user_event), ("admin", client.admin_events, _normalize_admin_event))
+    streams = (
+        ("utilisateur", client.events, _normalize_user_event),
+        ("admin", client.admin_events, _normalize_admin_event),
+    )
     for name, fetch, normalize in streams:
         cursor, _ = KeycloakSyncCursor.objects.get_or_create(name=name)
         floor = cursor.last_event_ms - EVENTS_OVERLAP_MS if cursor.last_event_ms else now_ms - lookback_ms
@@ -478,7 +489,9 @@ def keycloak_reconcile(
             changes = _diff(user, rep, is_admin)
             if not changes:
                 continue
-            ecart = Ecart(ECART_CHAMPS, keycloak_id, str(user.pk), _mask(user.email), sorted(changes), "aligner_sur_keycloak")
+            ecart = Ecart(
+                ECART_CHAMPS, keycloak_id, str(user.pk), _mask(user.email), sorted(changes), "aligner_sur_keycloak"
+            )
         else:
             ecart = Ecart(ECART_KEYCLOAK_SEUL, keycloak_id, "", _mask(rep.get("email") or ""), [], "lier_ou_creer")
         if not dry_run:

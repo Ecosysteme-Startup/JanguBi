@@ -49,6 +49,9 @@ AUDIO_HLS_SEGMENT_SECONDS = env.int("AUDIO_HLS_SEGMENT_SECONDS", default=6)
 AUDIO_WAVEFORM_PEAKS = 200
 AUDIO_TRANSCODE_MAX_RETRIES = 3
 AUDIO_TRANSCODE_LOCK_SECONDS = env.int("AUDIO_TRANSCODE_LOCK_SECONDS", default=1800)
+# Encodage « interrompu » (worker tué, tâche perdue) : au-delà de ce délai sans fin, relancé par
+# audio_transcode_stalled_task. Plus long que le verrou, pour ne jamais doubler un encodage vivant.
+AUDIO_TRANSCODE_STALL_SECONDS = env.int("AUDIO_TRANSCODE_STALL_SECONDS", default=2700)
 # Durée maximale d'un enregistrement (une retraite entière : 4 h).
 AUDIO_MAX_DURATION_SECONDS = env.int("AUDIO_MAX_DURATION_SECONDS", default=4 * 3600)
 

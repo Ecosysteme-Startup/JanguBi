@@ -110,7 +110,9 @@ class InvitationValidateApi(V1ApiMixin, APIView):
         serializer.is_valid(raise_exception=True)
         token = serializer.validated_data["token"]
         invitation = services.invitation_from_token(token=token)
-        return Response(InvitationPublicOutputSerializer(invitation_public_payload(invitation=invitation, token=token)).data)
+        return Response(
+            InvitationPublicOutputSerializer(invitation_public_payload(invitation=invitation, token=token)).data
+        )
 
 
 class InvitationAcceptApi(V1ApiMixin, ApiAuthMixin, APIView):
@@ -189,7 +191,9 @@ class ValidatedAccountsApi(_ManagerApi):
         return get_paginated_response(
             pagination_class=LimitOffsetPagination,
             serializer_class=ClergyAccountOutputSerializer,
-            queryset=selectors.accounts_list(user=request.user, filters={**filters.validated_data, "statut": "verifie"}),
+            queryset=selectors.accounts_list(
+                user=request.user, filters={**filters.validated_data, "statut": "verifie"}
+            ),
             request=request,
             view=self,
         )
