@@ -87,7 +87,9 @@ class MessagerieSeeder(Seeder):
                 avail.append(MessagingAvailability(
                     user_id=p, accepts_new_conversations=rng.random() > 0.1,
                     absent_until=ctx.today + datetime.timedelta(days=rng.randint(3, 15)) if absent else None,
-                    reply_windows=[{"jours": [1, 2, 3, 4, 5], "debut": "17:00", "fin": "19:00"}],
+                    reply_windows=[
+                        {"weekday": d, "start": "17:00", "end": "19:00"} for d in (1, 2, 3, 4, 5)
+                    ],
                     note="En retraite annuelle, je réponds à mon retour." if absent else "",
                 ))  # fmt: skip
             MessagingAvailability.objects.bulk_create(avail)

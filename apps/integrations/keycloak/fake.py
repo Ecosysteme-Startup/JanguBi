@@ -160,6 +160,11 @@ class FakeKeycloakAdmin:
         if action not in user["requiredActions"]:
             self.user_update(user_id, {"requiredActions": sorted({*user["requiredActions"], action})})
 
+    def remove_required_action(self, user_id: str, action: str) -> None:
+        user = self._user(user_id)
+        if action in user["requiredActions"]:
+            self.user_update(user_id, {"requiredActions": sorted(set(user["requiredActions"]) - {action})})
+
     def set_required_actions(self, user_id: str, actions: list[str]) -> None:
         self.user_update(user_id, {"requiredActions": sorted(set(actions))})
 

@@ -1,4 +1,5 @@
 import datetime
+import re
 import uuid
 from typing import Any
 from urllib.parse import urlencode
@@ -41,6 +42,21 @@ class RequestCreateInputSerializer(serializers.Serializer):
     )
     consent_given = serializers.BooleanField()
     attachment_file_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # JB-WEB-028 : la date du sacrement ne peut pas précéder la naissance.
+        # ``sacrament_approximate_date`` est un texte libre approximatif (« 2005 »,
+        # « vers 2005 », « 12/06/2005 ») : on en extrait la première année sur 4 chiffres
+        # et on la compare à l'année de naissance. Faute d'année lisible, on ne bloque pas.
+        birth = attrs.get("date_of_birth")
+        raw = (attrs.get("sacrament_approximate_date") or "").strip()
+        if birth is not None and raw:
+            match = re.search(r"\b(\d{4})\b", raw)
+            if match and int(match.group(1)) < birth.year:
+                raise serializers.ValidationError(
+                    {"sacrament_approximate_date": "La date du sacrement ne peut pas précéder la date de naissance."}
+                )
+        return attrs
 
 
 class SupplementInputSerializer(serializers.Serializer):

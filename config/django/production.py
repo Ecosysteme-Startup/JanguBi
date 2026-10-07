@@ -109,15 +109,14 @@ SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
 # HSTS — impose HTTPS côté NAVIGATEUR, en plus de SECURE_SSL_REDIRECT côté serveur.
 # Différence importante : la redirection serveur se désactive instantanément, alors
-# qu'un en-tête HSTS reste mémorisé par le navigateur pendant toute sa durée. Une
-# valeur longue posée trop tôt rend le domaine inaccessible en HTTP pour cette durée
-# si le certificat casse.
-# D'où la rampe : 1 heure par défaut, sans risque. Une fois TLS confirmé stable en
-# production, passer SECURE_HSTS_SECONDS à 31536000 (1 an) dans l'environnement.
-# `includeSubDomains` et `preload` restent opt-in : ils engagent TOUS les
-# sous-domaines, y compris ceux qui ne sont pas encore en HTTPS.
-SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=3600)
-SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False)
+# qu'un en-tête HSTS reste mémorisé par le navigateur pendant toute sa durée.
+# JB-API-004 : un an par défaut (en-tête court auparavant : 1 h), includeSubDomains activé.
+# Pilotable par l'environnement si un sous-domaine n'est pas encore en HTTPS (abaisser
+# SECURE_HSTS_SECONDS ou couper includeSubDomains le temps de la bascule). `preload` reste
+# opt-in : il engage le domaine dans la liste de préchargement des navigateurs (irréversible
+# à chaud).
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=False)
 
 # https://docs.djangoproject.com/en/dev/ref/settings/#secure-proxy-ssl-header
@@ -126,3 +125,13 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
 # https://docs.djangoproject.com/en/dev/ref/middleware/#x-content-type-options-nosniff
 SECURE_CONTENT_TYPE_NOSNIFF = env.bool("SECURE_CONTENT_TYPE_NOSNIFF", default=True)
+
+# JB-API-007 : le schéma OpenAPI et Swagger/Redoc ne doivent pas être publics hors
+# développement (ils décrivent toute la surface de l'API). Le client typé front se régénère
+# hors ligne (`manage.py spectacular`), pas via cet endpoint : on le réserve donc aux
+# utilisateurs authentifiés. Réouvrable par l'environnement si besoin ponctuel.
+if not env.bool("API_SCHEMA_PUBLIC", default=False):
+    SPECTACULAR_SETTINGS = {  # noqa: F405
+        **SPECTACULAR_SETTINGS,  # noqa: F405
+        "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAuthenticated"],
+    }

@@ -475,6 +475,15 @@ def keycloak_reconcile(
     # 1. Comptes Keycloak : présents des deux côtés (champs) ou Keycloak seul.
     for keycloak_id, rep in kc_users.items():
         is_admin = keycloak_id in platform_admins
+        # JB-WEB-037/043 : un platform_admin doit avoir un second facteur (comme le staff).
+        # S'il n'a pas encore d'OTP, on exige sa configuration à la prochaine connexion.
+        # Idempotent (l'action n'est posée qu'une fois) : ne crée aucun écart.
+        if is_admin and not dry_run and not rep.get("totp"):
+            if "CONFIGURE_TOTP" not in (rep.get("requiredActions") or []):
+                try:
+                    client.add_required_action(keycloak_id, "CONFIGURE_TOTP")
+                except KeycloakAdminError:
+                    logger.warning("keycloak.reconcile.totp_action_failed")
         user = linked.get(keycloak_id)
         if user is not None:
             changes = _diff(user, rep, is_admin)

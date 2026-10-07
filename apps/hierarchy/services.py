@@ -253,13 +253,14 @@ def schedule_exception_create(
     start_time: time | None = None,
     end_time: time | None = None,
     note: str = "",
+    actor: Any = None,
 ) -> ScheduleException:
     if not cancelled and start_time is None:
         raise ApplicationError("Un horaire supplémentaire doit avoir une heure de début.", code="exception_needs_time")
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_schedule")
     try:
-        return ScheduleException.objects.create(
+        exception = ScheduleException.objects.create(
             place=place,
             date=date,
             kind=kind,
@@ -270,8 +271,29 @@ def schedule_exception_create(
         )
     except IntegrityError as exc:  # pragma: no cover - doublé par la validation ci-dessus
         raise ApplicationError("Exception d'horaire invalide.", code="invalid_schedule") from exc
+    # JB-WEB-031 : action sensible → journal d'audit (rubrique Horaires).
+    audit_log(
+        actor=actor,
+        action="horaires.exception_creee",
+        target=exception,
+        node=place.node,
+        metadata={"place_id": place.pk, "date": date.isoformat(), "kind": kind, "cancelled": cancelled},
+    )
+    return exception
 
 
 @transaction.atomic
-def schedule_exception_delete(*, exception: ScheduleException) -> None:
+def schedule_exception_delete(*, exception: ScheduleException, actor: Any = None) -> None:
+    # JB-WEB-031 : on journalise AVANT la suppression (Django remet la pk à None après delete).
+    audit_log(
+        actor=actor,
+        action="horaires.exception_supprimee",
+        target=exception,
+        node=exception.place.node,
+        metadata={
+            "place_id": exception.place_id,
+            "date": exception.date.isoformat(),
+            "kind": exception.kind,
+        },
+    )
     exception.delete()

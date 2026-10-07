@@ -44,6 +44,31 @@ def cash(world, fund, mass_date, amount=50_000, label="Messe de 18 h 30"):
     )  # fmt: skip
 
 
+def test_funds_close_past_closes_funds_whose_period_is_over(world):
+    """JB-WEB-042 : un fonds ouvert dont ends_on est passé est clôturé automatiquement."""
+    from apps.donations.enums import FundStatus
+    from apps.donations.models import Fund
+    from apps.donations.tests.conftest import open_fund
+
+    today = datetime.date(2026, 10, 6)
+    expired = open_fund(
+        world, title="Grand Séminaire", starts_on=datetime.date(2026, 9, 27), ends_on=datetime.date(2026, 10, 4)
+    )
+    current = open_fund(
+        world, title="Journée missionnaire", starts_on=datetime.date(2026, 10, 19), ends_on=datetime.date(2026, 10, 26)
+    )
+    perpetual = open_fund(world, title="Contribution annuelle", starts_on=datetime.date(2026, 1, 1), ends_on=None)
+
+    assert services.funds_close_past(today=today) == 1
+
+    assert Fund.objects.get(pk=expired.pk).status == FundStatus.CLOS
+    assert Fund.objects.get(pk=expired.pk).closed_at is not None
+    assert Fund.objects.get(pk=current.pk).status == FundStatus.OUVERT  # période à venir : reste ouvert
+    assert Fund.objects.get(pk=perpetual.pk).status == FundStatus.OUVERT  # sans date de fin : non touché
+    # Idempotent : un second passage ne reclôt rien.
+    assert services.funds_close_past(today=today) == 0
+
+
 # --- Synthèse corrigée ----------------------------------------------------------------------
 
 

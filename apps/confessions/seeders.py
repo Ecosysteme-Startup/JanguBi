@@ -37,7 +37,10 @@ class ConfessionsSeeder(Seeder):
             if ctx.persona("vicaire") in priests:
                 priests = [staff_of(parish, "cure")]  # le vicaire persona a déjà sa règle (seed_demo)
             for k, priest in enumerate(priests):
-                weekday, hour = [(5, 10), (2, 18), (4, 17)][k % 3]
+                # JB-WEB-018 : le samedi, les créneaux tombent dans la permanence de confession
+                # affichée (16 h-18 h) au lieu de 10 h ; les autres jours restent des créneaux
+                # supplémentaires en soirée.
+                weekday, hour = [(5, 16), (2, 18), (4, 17)][k % 3]
                 rule = ConfessionSlotRule(priest=priest, place=place, weekday=weekday, start_time=datetime.time(hour, 0),
                                           end_time=datetime.time(hour + 1, 0), slot_minutes=15,
                                           valid_from=ctx.today - datetime.timedelta(days=60))  # fmt: skip

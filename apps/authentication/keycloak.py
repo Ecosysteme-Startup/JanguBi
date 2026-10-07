@@ -160,6 +160,10 @@ def person_from_identity(identity: KeycloakIdentity) -> Any:
     User = get_user_model()
     person = _person_by_sub(User, identity.sub)
     if person is not None:
+        # JB-API-003 : la synchro du profil (téléphone, date de naissance depuis le jeton)
+        # doit aussi s'exécuter pour un utilisateur déjà connu, pas seulement à la création.
+        # `_profile_ensure` ne remplit que les champs vides : rien n'est jamais écrasé.
+        _profile_ensure(person, identity)
         return person
     if identity.email and identity.email_verified:
         person = (

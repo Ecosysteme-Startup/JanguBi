@@ -172,6 +172,22 @@ def test_birthdate_from_token_never_overwrites_a_saved_birthdate(keys):
     assert Profile.objects.get(user=empty).date_of_birth == datetime.date(1992, 3, 12)
 
 
+def test_profile_sync_runs_for_an_existing_user_found_by_sub(keys):
+    """JB-API-003 : un utilisateur déjà connu par son sub mais au profil incomplet doit
+    voir sa date de naissance remplie depuis le jeton à une connexion ultérieure."""
+    from apps.users.models import Profile
+
+    sub = str(uuid.uuid4())
+    # 1re connexion sans date de naissance → compte + profil incomplet.
+    assert api(keys.token(sub=sub, email="retour@test.sn")).get(ME).status_code == 200
+    user = get_user_model().objects.get(keycloak_sub=sub)
+    assert Profile.objects.get(user=user).date_of_birth is None
+
+    # 2e connexion (même sub) avec la date de naissance dans le jeton → le profil est complété.
+    assert api(keys.token(sub=sub, email="retour@test.sn", birthdate="1990-07-04")).get(ME).status_code == 200
+    assert Profile.objects.get(user=user).date_of_birth == datetime.date(1990, 7, 4)
+
+
 @pytest.mark.parametrize(
     ("overrides", "reason"),
     [
@@ -443,6 +459,9 @@ class FakeAdmin:
     def add_required_action(self, user_id, action):
         self.actions.setdefault(user_id, set()).add(action)
 
+    def remove_required_action(self, user_id, action):
+        self.actions.get(user_id, set()).discard(action)
+
 
 def test_staff_role_follows_active_assignments(keys):
     tree = Tree()
@@ -458,6 +477,8 @@ def test_staff_role_follows_active_assignments(keys):
     assignment.save()
     authz.invalidate_user(secretary.pk)
     assert keycloak_staff_role_sync(person=secretary, admin=admin) == "removed"
+    # JB-WEB-039 : l'obligation CONFIGURE_TOTP en attente est retirée avec le rôle staff.
+    assert admin.actions["kc-sec"] == set()
 
 
 def test_staff_sync_skips_unlinked_people(keys):
@@ -627,7 +648,63 @@ def test_realm_declares_the_web_client_with_exact_redirects_and_logout():
     assert client["webOrigins"] == ["${KC_WEB_ORIGIN:http://localhost:3000}"]
 
 
+def test_realm_birthdate_is_required_and_admin_only_edit():
+    """JB-WEB-014 (RG-13) : date de naissance obligatoire à l'inscription et non éditable
+    par l'utilisateur (seul l'admin peut la modifier)."""
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    provider = realm["components"]["org.keycloak.userprofile.UserProfileProvider"][0]
+    config = json.loads(provider["config"]["kc.user.profile.config"][0])
+    birthdate = next(a for a in config["attributes"] if a["name"] == "birthdate")
+    assert birthdate["required"] == {"roles": ["user"]}
+    assert birthdate["permissions"]["edit"] == ["admin"]
+    assert "user" not in birthdate["permissions"]["edit"]
+
+
+def test_realm_declares_configure_totp_and_conditional_otp_login():
+    """JB-WEB-037/043 : CONFIGURE_TOTP est une action requise disponible, et le flux de
+    connexion exige l'OTP dès qu'un compte en a un (CONDITIONAL sur user-configured)."""
+    import json
+    from pathlib import Path
+
+    from django.conf import settings
+
+    realm = json.loads((Path(settings.BASE_DIR) / "infra/keycloak/realm-jangubi.json").read_text())
+    actions = {a["alias"]: a for a in realm.get("requiredActions", [])}
+    assert actions["CONFIGURE_TOTP"]["enabled"] is True
+    assert realm["browserFlow"] == "browser-mfa"
+    otp_flow = next(f for f in realm["authenticationFlows"] if f["alias"] == "browser-mfa forms")
+    otp = next(e for e in otp_flow["authenticationExecutions"] if e.get("flowAlias") == "browser-mfa otp")
+    assert otp["requirement"] == "CONDITIONAL"
+
+
 def test_cors_allows_the_last_event_id_header():
     from django.conf import settings
 
     assert "last-event-id" in settings.CORS_ALLOW_HEADERS
+
+
+def test_cors_allows_the_idempotency_key_header():
+    from django.conf import settings
+
+    assert "idempotency-key" in settings.CORS_ALLOW_HEADERS
+
+
+@pytest.mark.django_db
+def test_cors_preflight_authorises_idempotency_key(client):
+    from django.conf import settings
+
+    origin = settings.CORS_ALLOWED_ORIGINS[0]
+    resp = client.options(
+        "/api/v1/dons/checkout/",
+        HTTP_ORIGIN=origin,
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="idempotency-key,content-type",
+    )
+    assert resp.status_code == 200
+    allowed = resp.headers["access-control-allow-headers"].lower()
+    assert "idempotency-key" in allowed

@@ -71,41 +71,59 @@ class CitationMatcher:
         if not matched_book:
             return []
 
-        # 3. Parse chapter and verses
-        # Typically formatted as <Chapter>, <Verses>
-        # Or just <Chapter> if whole chapter.
-        # Handle Psalm numbering quirk: Ps 15 (16) -> mostly we care about 16 for liturgical text or 15 for Heb.
-        # Let's clean out the parenthesis first for Psalms by taking the first number
-        parts = numbers_part.split(",", 1)  # Only split on the FIRST comma
-        if len(parts) < 2:
-            return []  # Too complex to parse without chapter/verse separator
+        # 3. Parse chapter(s) and verses.
+        # Une citation peut couvrir plusieurs chapitres, séparés par « ; » (changement de
+        # chapitre/référence) : « Jb 38, 1.12-21 ; 40, 3-5 » = 38,1 ; 38,12-21 ; 40,3-5.
+        # Chaque référence est « <chapitre>, <versets> » (quirk des Psaumes : « 15 (16) » →
+        # on prend le premier nombre). Une référence sans virgule continue le chapitre courant
+        # (versets supplémentaires) ou, faute de chapitre courant, vaut un chapitre entier.
+        chapter_ranges: list[tuple[int, list[tuple[int, int]]]] = []
+        current_chapter: int | None = None
+        for reference in numbers_part.split(";"):
+            reference = reference.strip()
+            if not reference:
+                continue
+            if "," in reference:
+                chapter_str, verses_str = reference.split(",", 1)
+                chapter_match = re.search(r"(\d+)", chapter_str)
+                if not chapter_match:
+                    continue
+                current_chapter = int(chapter_match.group(1))
+                ranges = cls._parse_verse_ranges(verses_str)
+            elif current_chapter is not None:
+                # Suite de versets rattachée au chapitre courant (pas de nouvelle virgule).
+                ranges = cls._parse_verse_ranges(reference)
+            else:
+                # Chapitre entier (pas de versets) : on ignore, trop large pour un rattachement fiable.
+                continue
+            if ranges:
+                chapter_ranges.append((current_chapter, ranges))
 
-        chapter_str = parts[0].strip()
-        verses_str = parts[1].strip()
-
-        # Extract the integer chapter (ignoring parentheses like in Psalms)
-        chapter_match = re.search(r"(\d+)", chapter_str)
-        if not chapter_match:
+        if not chapter_ranges:
             return []
-        chapter_num = int(chapter_match.group(1))
 
-        # 4. Plages de versets : « 1-12.14-16 », « 10bc-11, 12-13, 14-15 », « 5a.8 ». Chaque segment
-        # (séparé par « . » ou « , ») est une plage ou un verset seul ; les lettres (demi-versets)
-        # sont ignorées. On garde les trous (Jb 9, 1-12.14-16 n'inclut pas le verset 13).
+        # 4. Bring it together into a Verse QuerySet (multi-chapitres éventuels).
+        overall = Q()
+        for chapter_num, ranges in chapter_ranges:
+            in_ranges = Q()
+            for low, high in ranges:
+                in_ranges |= Q(number__gte=low, number__lte=high)
+            overall |= Q(chapter__number=chapter_num) & in_ranges
+
+        qs = edition_filter(
+            Verse.objects.filter(overall, chapter__book=matched_book)
+        ).order_by("chapter__number", "number")
+
+        return list(qs)
+
+    @staticmethod
+    def _parse_verse_ranges(verses_str: str) -> list[tuple[int, int]]:
+        """Plages de versets : « 1-12.14-16 », « 10bc-11, 12-13 », « 5a.8 ». Chaque segment
+        (séparé par « . » ou « , ») est une plage « a-b » ou un verset seul ; les lettres
+        (demi-versets) sont ignorées. On garde les trous (« 1-12.14-16 » exclut le verset 13)."""
         ranges: list[tuple[int, int]] = []
         for segment in re.split(r"[.,]", verses_str):
             bounds = [int(n) for n in re.findall(r"\d+", segment)]
             if bounds:
                 ranges.append((min(bounds), max(bounds)))
-        if not ranges:
-            return []
-        in_ranges = Q()
-        for low, high in ranges:
-            in_ranges |= Q(number__gte=low, number__lte=high)
-
-        # 5. Bring it together into a Verse QuerySet
-        qs = edition_filter(
-            Verse.objects.filter(in_ranges, chapter__book=matched_book, chapter__number=chapter_num)
-        ).order_by("number")
-
-        return list(qs)
+        return ranges

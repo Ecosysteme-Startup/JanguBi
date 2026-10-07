@@ -40,6 +40,10 @@ OFFICES = [("cure", "cure", "parish", "cure"), ("vicaire", "vicaire_paroissial",
            ("admin_paroissial", "cure", "parish2", "administrateur"),
            ("econome", "econome_paroissial", "parish", ""), ("econome_dio", "econome_diocesain", "diocese", "")]  # fmt: skip
 SECOND_PARISH_CODE = "DEMO-STE-THERESE"
+# JB-WEB-040 : l'office « doyen » ne s'exerce que sur un doyenné. La paroisse pilote étant
+# rattachée directement à l'archidiocèse, on crée un doyenné de démonstration et on y rattache
+# la paroisse, pour que le doyen ne voie bien que son doyenné (et que la contrainte soit respectée).
+DEMO_DEANERY_CODE = "DEMO-DOYENNE"
 
 
 class Command(BaseCommand):
@@ -59,9 +63,10 @@ class Command(BaseCommand):
         if parish is None:
             raise CommandError("Paroisse pilote absente : lancez d'abord seed_hierarchy_profile senegal.")
         with transaction.atomic():
+            parish, deanery = self._ensure_deanery(parish)
             people = self._people(parish)
-            self._memberships(people, parish)
-            self._offices(people, parish)
+            self._memberships(people, parish, deanery)
+            self._offices(people, parish, deanery)
             self._content(people, parish)
             self._donations(people, parish)
         self.stdout.write(self.style.SUCCESS(f"Démo prête : comptes *@{DOMAIN} (connexion par Keycloak)."))
@@ -92,11 +97,34 @@ class Command(BaseCommand):
             people[key] = user
         return people
 
-    def _offices(self, people: dict[str, Any], parish: Any) -> None:
+    def _ensure_deanery(self, parish: Any) -> tuple[Any, Any]:
+        """Garantit que la paroisse pilote est sous un doyenné (JB-WEB-040), pour que l'office
+        « doyen » porte sur un vrai doyenné et que le doyen ne voie que son doyenné. Idempotent."""
+        from apps.hierarchy.models import Node, NodeType
+        from apps.hierarchy.services import node_create
+
+        parent = parish.get_parent()
+        if parent is not None and parent.type.code == "doyenne":
+            return parish, parent
+        diocese = next(n for n in reversed(parish.get_ancestors()) if n.type.code == "diocese")
+        deanery = Node.objects.filter(code=DEMO_DEANERY_CODE).first()
+        if deanery is None:
+            deanery = node_create(
+                node_type=NodeType.objects.get(code="doyenne"),
+                name="Doyenné de démonstration",
+                parent=diocese,
+                code=DEMO_DEANERY_CODE,
+                city="Dakar",
+                is_active_on_platform=True,
+            )
+        parish.move(deanery, pos="last-child")
+        # Le chemin treebeard a changé : on relit la paroisse pour éviter un objet périmé.
+        return Node.objects.get(pk=parish.pk), Node.objects.get(pk=deanery.pk)
+
+    def _offices(self, people: dict[str, Any], parish: Any, deanery: Any) -> None:
         from apps.hierarchy import authz
         from apps.hierarchy.models import OfficeAssignment, OfficeType
 
-        deanery = parish.get_parent()
         diocese = next(n for n in reversed(parish.get_ancestors()) if n.type.code == "diocese")
         nodes = {"parish": parish, "deanery": deanery, "diocese": diocese, "parish2": self._second_parish(deanery)}
         for key, office_code, where, quality in OFFICES:
@@ -113,7 +141,7 @@ class Command(BaseCommand):
             )
             authz.invalidate_user(people[key].pk)
 
-    def _memberships(self, people: dict[str, Any], parish: Any) -> None:
+    def _memberships(self, people: dict[str, Any], parish: Any, deanery: Any) -> None:
         """Paroisses multiples (décisions 6-8) : la paroisse pilote est la principale de chacun ;
         la fidèle de démo suit aussi Sainte-Thérèse de Grand-Dakar en paroisse secondaire."""
         from apps.hierarchy.services_memberships import membership_join
@@ -121,7 +149,7 @@ class Command(BaseCommand):
         for user in people.values():
             if user.paroisse_suivie_id:
                 membership_join(user=user, node=user.paroisse_suivie)
-        membership_join(user=people["fidele"], node=self._second_parish(parish.get_parent()))
+        membership_join(user=people["fidele"], node=self._second_parish(deanery))
 
     def _second_parish(self, deanery: Any) -> Any:
         from apps.hierarchy.models import Node, NodeType
@@ -187,12 +215,15 @@ class Command(BaseCommand):
                 max_participants=80,
             )
         if place and not ConfessionSlotRule.objects.filter(priest=vicaire).exists():
+            # JB-WEB-018 : les créneaux réservables tombent DANS la permanence de confession
+            # affichée sur « Ma paroisse » (samedi 16 h-18 h, propre « senegal »), au lieu d'un
+            # samedi 10 h-11 h incohérent avec l'horaire annoncé.
             rule_create(
                 priest=vicaire,
                 place=place,
                 weekday=5,
-                start_time=datetime.time(10, 0),
-                end_time=datetime.time(11, 0),
+                start_time=datetime.time(16, 0),
+                end_time=datetime.time(18, 0),
                 slot_minutes=15,
             )
         if not DocumentRequest.objects.filter(requester=people["fidele"]).exists():
@@ -288,6 +319,17 @@ class Command(BaseCommand):
             DonationActivation.objects.filter(authorization_ref="DEMO-ARCH-DAK-2026").delete()
             OfficeAssignment.objects.filter(person__in=people).delete()
             Node.objects.filter(code=SECOND_PARISH_CODE).delete()
+            # JB-WEB-040 : avant de supprimer le doyenné de démonstration, on remonte la paroisse
+            # pilote sous son diocèse (sinon la suppression du doyenné emporterait son sous-arbre).
+            from apps.hierarchy.profiles import PILOT_PARISH_CODE
+
+            demo_deanery = Node.objects.filter(code=DEMO_DEANERY_CODE).first()
+            if demo_deanery is not None:
+                pilot = Node.objects.filter(code=PILOT_PARISH_CODE).first()
+                if pilot is not None and pilot.get_parent() is not None and pilot.get_parent().pk == demo_deanery.pk:
+                    diocese = next(n for n in reversed(pilot.get_ancestors()) if n.type.code == "diocese")
+                    pilot.move(diocese, pos="last-child")
+                Node.objects.get(pk=demo_deanery.pk).delete()
             count = people.count()
             people.delete()
         self.stdout.write(self.style.SUCCESS(f"{count} compte(s) de démonstration supprimé(s)."))

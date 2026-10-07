@@ -298,6 +298,26 @@ def fund_close(*, fund: Fund, actor: Any) -> Fund:
 
 
 @transaction.atomic
+def funds_close_past(*, today: datetime.date | None = None) -> int:
+    """JB-WEB-042 : clôture automatique des fonds ouverts dont la période est révolue
+    (``ends_on`` passé) — quêtes dominicales et impérées restées « En cours » après leur fin.
+    Les fonds sans date de fin et les fonds déjà clos ne sont pas touchés ; une clôture manuelle
+    est donc respectée (on ne réouvre jamais). Renvoie le nombre de fonds clôturés."""
+    today = today or timezone.localdate()
+    now = timezone.now()
+    expired = list(
+        Fund.objects.filter(status=FundStatus.OUVERT, ends_on__isnull=False, ends_on__lt=today)
+    )
+    for fund in expired:
+        fund.status = FundStatus.CLOS
+        fund.closed_at = now
+        fund.save(update_fields=["status", "closed_at", "updated_at"])
+        audit_log(actor=None, action="dons.fonds_cloture_auto", target=fund, node=fund.node,
+                  metadata={"ends_on": fund.ends_on.isoformat() if fund.ends_on else None})  # fmt: skip
+    return len(expired)
+
+
+@transaction.atomic
 def fund_news_post(*, fund: Fund, actor: Any, body: str) -> FundUpdate:
     access.require_parish_level(actor, "dons.gerer_fonds", fund.node)
     if fund.kind != FundKind.CAMPAGNE:
@@ -399,6 +419,25 @@ def _check_fund_open(fund: Fund) -> DonationActivation:
     return activation
 
 
+ADULT_AGE = 18
+MINOR_DONATION_MESSAGE = (
+    "Les dons en ligne sont réservés aux personnes majeures. "
+    "Un mineur peut faire un don à sa paroisse accompagné d'un adulte."
+)
+
+
+def _donor_adult_check(donor: Any) -> None:
+    """RG-13 : refuse côté serveur un don d'un donateur connecté mineur. Un donateur anonyme
+    (non connecté) n'a pas de date de naissance : il n'est pas concerné par ce contrôle."""
+    birth = getattr(getattr(donor, "profile", None), "date_of_birth", None)
+    if birth is None:
+        return
+    today = timezone.localdate()
+    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+    if age < ADULT_AGE:
+        raise PermissionDeniedError(MINOR_DONATION_MESSAGE, code="minor")
+
+
 def checkout_create(
     *,
     fund: Fund,
@@ -423,6 +462,8 @@ def checkout_create(
     if source not in DonationSource.values:
         source = DonationSource.INCONNU
     donor = donor if getattr(donor, "is_authenticated", False) else None
+    if donor is not None:
+        _donor_adult_check(donor)
     if idempotency_key:
         existing = PaymentAttempt.objects.select_related("donation").filter(idempotency_key=idempotency_key).first()
         if existing is not None:
@@ -729,6 +770,8 @@ def donations_reconcile(*, now: datetime.datetime | None = None) -> dict[str, in
     check_before = now - datetime.timedelta(minutes=settings.DONATIONS_PENDING_CHECK_MINUTES)
     expire_before = now - datetime.timedelta(hours=settings.DONATIONS_EXPIRE_HOURS)
     counts = {"verifies": 0, "confirmes": 0, "expires": 0, "erreurs": 0}
+    # JB-WEB-042 : clôture des fonds dont la période est révolue (statut cohérent avec les dates).
+    counts["fonds_clotures"] = funds_close_past(today=timezone.localdate())
     pending = PaymentAttempt.objects.filter(
         donation__status__in=[DonationStatus.INITIE, DonationStatus.EN_ATTENTE],
         external_ref__isnull=False,
