@@ -5,9 +5,9 @@ from django.core.exceptions import ImproperlyConfigured
 from config.env import env
 
 # Source des lectures du jour :
-# - "crampon_refs" (défaut) : références du jour, texte tiré de la Bible locale (BIBLE_EDITION) ;
-# - "aelf" : texte AELF, UNIQUEMENT avec un accord écrit de l'AELF.
-LITURGY_SOURCE = env("LITURGY_SOURCE", default="crampon_refs")
+# - "aelf" (défaut, local/recette/production) : réponse de l'API AELF servie telle quelle ;
+# - "crampon_refs" (option explicite) : références du jour, texte tiré de la Bible locale (BIBLE_EDITION).
+LITURGY_SOURCE = env("LITURGY_SOURCE", default="aelf")
 if LITURGY_SOURCE not in ("aelf", "crampon_refs"):
     raise ImproperlyConfigured("LITURGY_SOURCE doit valoir 'aelf' ou 'crampon_refs'.")
 LITURGY_ZONE = env("LITURGY_ZONE", default="afrique")

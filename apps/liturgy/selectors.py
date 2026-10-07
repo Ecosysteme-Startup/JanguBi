@@ -1,8 +1,10 @@
 """Jour liturgique V1 (SRS EF-PAR-01, -02, -05 ; ADR-008).
 
 Le calendrier (temps, couleur, célébration, cycles) est calculé localement. Les lectures
-viennent de la source configurée : en ``crampon_refs``, seules les références du jour sont
-reprises et le texte est celui de la Bible locale ; le texte AELF n'est servi qu'en ``aelf``.
+viennent de la source configurée :
+- ``aelf`` (défaut) : la réponse de l'API AELF telle quelle — ``text`` = ``contenu`` et ``aelf`` = l'objet
+  lecture AELF stocké sans transformation (titre, intro_lue, refrain_psalmique, verset_evangile…) ;
+- ``crampon_refs`` : seules les références du jour sont reprises, le texte est celui de la Bible locale.
 """
 
 import datetime
@@ -61,6 +63,8 @@ def _reading(reading: Reading, *, source: str) -> dict[str, Any]:
         "citation": reading.citation,
         "text": reading.text if source == "aelf" else None,
         "verses": verses,
+        # Objet lecture AELF tel que reçu (Reading.raw_metadata), sans renommage ni reconstruction.
+        "aelf": (reading.raw_metadata or {}) if source == "aelf" else None,
     }
 
 

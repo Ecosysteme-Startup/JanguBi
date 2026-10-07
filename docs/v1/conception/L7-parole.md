@@ -18,7 +18,7 @@ Retirées (ADR-013, et ADR-008 : relais du texte AELF sans accord) : `liturgy/v1
 
 | Réglage | Défaut | Rôle |
 |---|---|---|
-| `LITURGY_SOURCE` | `crampon_refs` | `aelf` seulement avec l'accord écrit de l'AELF |
+| `LITURGY_SOURCE` | `aelf` | `aelf` : réponse AELF telle quelle (local, recette, production) ; `crampon_refs` : option explicite |
 | `LITURGY_ZONE` | `afrique` | zone AELF des références |
 | `BIBLE_EDITION` | vide | `Verse.source_file` servi ; **à positionner à `crampon1923` après l'import** |
 | `LITURGY_EPIPHANY_ON_SUNDAY` / `LITURGY_ASCENSION_ON_SUNDAY` / `LITURGY_CORPUS_CHRISTI_ON_SUNDAY` | vrai / faux / vrai | usages à confirmer par la Conférence épiscopale |
@@ -30,7 +30,8 @@ Retirées (ADR-013, et ADR-008 : relais du texte AELF sans accord) : `liturgy/v1
 ## 4. Lectures du jour (EF-PAR-01)
 
 - `crampon_refs` : les **références** du jour viennent de la synchronisation quotidienne (les citations sont des faits, pas des textes protégés) ; le texte est celui des versets locaux rapprochés par `CitationMatcher`, restreints à `BIBLE_EDITION`. Le texte AELF stocké n'est jamais renvoyé.
-- `aelf` : texte et audio AELF, avec la mention de l'AELF.
+- `aelf` (défaut) : réponse de l'API AELF utilisée telle quelle, rien d'inventé ni reconstruit. Chaque lecture : `type` et `citation` (`ref`) AELF, `text` = `contenu` HTML AELF, `verses` = `[]`, `aelf` = l'objet lecture AELF stocké (`Reading.raw_metadata`) sans renommage (titre, intro_lue, refrain_psalmique, verset_evangile…). Toutes les lectures, dans l'ordre AELF. Audio AELF et mention de l'AELF.
+- En `crampon_refs`, `aelf` vaut `null`.
 - Plus d'appel à l'AELF pendant une requête : si le jour n'est pas synchronisé, l'API renvoie le calendrier et `readings_available=false`.
 - **Limite** : les références dépendent encore de l'API AELF. Si son usage même devait cesser, il faudrait un lectionnaire local (tables de références par cycle) : hors V1.
 

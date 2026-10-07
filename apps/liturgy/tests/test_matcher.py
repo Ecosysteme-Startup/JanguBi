@@ -115,12 +115,14 @@ def test_an_empty_book_list_is_not_cached(job_9):
 
 
 @pytest.mark.django_db
-def test_readings_are_served_and_relinked_after_a_bible_reimport(job_9, client):
+def test_readings_are_served_and_relinked_after_a_bible_reimport(job_9, client, settings):
     import datetime
 
     from apps.liturgy.models import LiturgicalDate, Reading
     from apps.liturgy.selectors import liturgy_day
     from apps.liturgy.services import readings_link_verses
+
+    settings.LITURGY_SOURCE = "crampon_refs"  # rattachement local : propre au mode crampon_refs
 
     day = datetime.date(2026, 9, 30)
     ld = LiturgicalDate.objects.create(date=day, zone="afrique")
