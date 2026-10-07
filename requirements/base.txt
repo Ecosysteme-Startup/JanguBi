@@ -1,54 +1,54 @@
-Django==5.2.16
-django-environ==0.12.0
-psycopg2==2.9.11
-djangorestframework==3.16.1
+Django==6.1.1
+django-environ==0.14.0
+psycopg2==2.9.13
+djangorestframework==3.18.1
 
-celery==5.5.3
+celery==5.6.3
 django-celery-results==2.6.0
-django-celery-beat==2.8.1
+django-celery-beat==2.9.0
 
-whitenoise==6.11.0
+whitenoise==6.12.0
 
 # pgvector : importé par les migrations initiales (colonnes vectorielles d'avant ADR-018) ; aucun
 # usage à l'exécution. Pas de modèle d'embeddings : aucune IA dans la plateforme (ADR-018).
-pgvector==0.4.2
+pgvector==0.5.0
 # Sonothèque : forme d'onde audio.
-numpy==2.4.6
+numpy==2.5.3
 
-django-filter==25.2
-django-treebeard==4.8.0
+django-filter==26.2
+django-treebeard==7.0.2
 django-extensions==4.1
 django-cors-headers==4.9.0
 django-storages==1.14.6
-django-structlog[celery]==9.1.1
-django-redis==6.0.0
-drf-spectacular==0.29.0
+django-structlog[celery]==10.1.0
+django-redis==7.0.0
+drf-spectacular==0.30.0
 
-PyJWT[crypto]==2.12.1
+PyJWT[crypto]==2.15.1
 
-boto3==1.40.52
-attrs==25.4.0
+boto3==1.43.108
+attrs==26.1.0
 
-gunicorn==23.0.0
-sentry-sdk==2.42.0
+gunicorn==26.2.0
+sentry-sdk==2.71.0
 
 requests==2.34.2
 httpx==0.28.1
 # HTTP/2 pour APNs (push iOS, apps/messaging/push_providers.py).
-h2>=4.1,<5
+h2>=4.4.1,<5
 PyYAML==6.0.3
-Pillow>=12.2.0,<13
+Pillow>=12.3.0,<13
 tenacity==9.1.4
-beautifulsoup4==4.14.3
+beautifulsoup4==4.15.0
 #google-api-python-client==2.184.0
 #google-auth==2.41.1
 #google-auth-httplib2==0.2.0
 #google-auth-oauthlib==1.2.2
 
-django-phonenumber-field[phonenumbers]>=7.3.0
+django-phonenumber-field[phonenumbers]>=8.5.0
 
 channels==4.3.2
-daphne==4.2.2
+daphne==4.2.3
 channels_redis==4.3.0
 # Borne haute volontaire. Cette bibliothèque porte le chiffrement Fernet des
 # conversations pastorales (apps/messaging/fields.py) : avec un simple
@@ -56,9 +56,9 @@ channels_redis==4.3.0
 # version majeure jamais testée sur du code qui déchiffre des données réelles.
 # Les correctifs de la branche restent pris ; changer de majeure devient un
 # acte délibéré, accompagné d'un passage de tests.
-cryptography>=48.0.1,<49
-reportlab==4.4.1
-nh3==0.2.*
+cryptography>=50.0.2,<51
+reportlab==5.0.1
+nh3==0.3.*
 
 # Exploitation (lot B2) : /metrics Prometheus.
-django-prometheus==2.4.1
+django-prometheus==2.5.0
