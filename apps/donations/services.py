@@ -313,7 +313,7 @@ def funds_close_past(*, today: datetime.date | None = None) -> int:
         fund.closed_at = now
         fund.save(update_fields=["status", "closed_at", "updated_at"])
         audit_log(actor=None, action="dons.fonds_cloture_auto", target=fund, node=fund.node,
-                  metadata={"ends_on": fund.ends_on.isoformat()})  # fmt: skip
+                  metadata={"ends_on": fund.ends_on.isoformat() if fund.ends_on else None})  # fmt: skip
     return len(expired)
 
 
