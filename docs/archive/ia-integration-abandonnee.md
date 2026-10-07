@@ -1,3 +1,6 @@
+> **Obsolète — archivé.** L'app `rag` a été supprimée (ADR-016) et la plateforme n'embarque aucune IA (ADR-018,
+> `docs/v1/03-DECISIONS-ADR.md`). Ce document décrit un état abandonné ; il est gardé pour l'historique.
+
 # Intégration de l'Intelligence Artificielle (JanguBi)
 
 Ce document explique aux équipes métier, marketing et développeurs pourquoi et comment nous avons injecté l'Intelligence Artificielle de Google (Gemini) dans le cœur de JanguBi.

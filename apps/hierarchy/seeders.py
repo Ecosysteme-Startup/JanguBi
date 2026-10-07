@@ -15,7 +15,12 @@ from django.db.models import Count, Q
 from apps.core.seeding import names
 from apps.core.seeding.context import DOMAIN, SeedContext
 from apps.core.seeding.registry import Check, Phase, Seeder, register
-from apps.core.seeding.world import EXTRA_PARISHES, SEED_PARISH_PREFIX
+from apps.core.seeding.world import (
+    DEFAULT_DEANERY_CODE,
+    EXTRA_PARISHES,
+    SEED_PARISH_PREFIX,
+    deanery_code_for_quarter,
+)
 
 # Horaires types d'une paroisse de Dakar : messe anticipée le samedi soir, trois ou quatre le dimanche.
 SUNDAY_TIMES = [datetime.time(7, 0), datetime.time(9, 30), datetime.time(11, 30), datetime.time(18, 30)]
@@ -54,7 +59,11 @@ class HierarchieSeeder(Seeder):
             call_command("seed_demo", verbosity=0)
         rng = ctx.rng(self.name)
         parish_type = NodeType.objects.get(code="paroisse")
-        deaneries = list(Node.objects.filter(type__code="doyenne", code__startswith="DAK-D-").order_by("code"))
+        # JB-WEB-006 : rattachement par quartier (plus de round-robin géographiquement faux).
+        deaneries_by_code = {
+            d.code: d for d in Node.objects.filter(type__code="doyenne", code__startswith="DAK-D-")
+        }
+        fallback = deaneries_by_code.get(DEFAULT_DEANERY_CODE) or next(iter(deaneries_by_code.values()))
         created_nodes, created_places = [], []
         codes = [c for c in _codes(ctx) if c.startswith(SEED_PARISH_PREFIX)]
         with transaction.atomic():
@@ -62,8 +71,9 @@ class HierarchieSeeder(Seeder):
                 if Node.objects.filter(code=code).exists():
                     continue
                 name, quarter, chapels = EXTRA_PARISHES[i % len(EXTRA_PARISHES)]
+                deanery = deaneries_by_code.get(deanery_code_for_quarter(quarter), fallback)
                 node = node_create(
-                    node_type=parish_type, name=name, parent=deaneries[i % len(deaneries)], code=code,
+                    node_type=parish_type, name=name, parent=deanery, code=code,
                     city="Dakar", address=quarter, is_active_on_platform=True,
                 )  # fmt: skip
                 created_nodes.append(node.pk)
@@ -93,14 +103,20 @@ class HierarchieSeeder(Seeder):
                 if place.is_main:
                     MassSchedule.objects.create(place=place, kind="messe", weekday=5, start_time=SATURDAY_EVENING)
                     for wd in range(5):
-                        MassSchedule.objects.create(place=place, kind="messe", weekday=wd, start_time=datetime.time(7, 0))
+                        MassSchedule.objects.create(
+                            place=place, kind="messe", weekday=wd, start_time=datetime.time(7, 0)
+                        )
                     MassSchedule.objects.create(
                         place=place, kind="confession", weekday=5, start_time=datetime.time(16, 0),
                         end_time=datetime.time(18, 0),
                     )  # fmt: skip
             ctx.track(Node, created_nodes)
             ctx.track(PlaceOfWorship, created_places)
-        return {"paroisses": len(ctx.parishes()), "nouvelles_paroisses": len(created_nodes), "lieux": len(created_places)}
+        return {
+            "paroisses": len(ctx.parishes()),
+            "nouvelles_paroisses": len(created_nodes),
+            "lieux": len(created_places),
+        }
 
     def reset(self, ctx: SeedContext) -> dict[str, Any]:
         from apps.hierarchy.models import Node, PlaceOfWorship
@@ -259,7 +275,9 @@ class AppartenancesSeeder(Seeder):
         return [
             Check("Une paroisse principale par fidèle", bad == 0 and total > 0, f"{total} fidèles, {bad} en écart"),
             Check("paroisse_suivie = principale", mismatch == 0, f"{mismatch} écart(s)"),
-            Check("Curé et économe dans chaque paroisse peuplée", staffed == len(parishes), f"{staffed}/{len(parishes)}"),
+            Check(
+                "Curé et économe dans chaque paroisse peuplée", staffed == len(parishes), f"{staffed}/{len(parishes)}"
+            ),
         ]
 
 

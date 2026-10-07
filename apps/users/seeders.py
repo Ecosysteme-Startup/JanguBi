@@ -95,7 +95,9 @@ class PersonnesSeeder(Seeder):
 
         qs = BaseUser.objects.filter(pk__in=ctx.tracked_ids(BaseUser))
         outside = qs.exclude(email__endswith=f"@{DOMAIN}").count()
-        return [Check(f"Adresses en @{DOMAIN} uniquement", outside == 0, f"{qs.count()} comptes, {outside} hors domaine")]
+        return [
+            Check(f"Adresses en @{DOMAIN} uniquement", outside == 0, f"{qs.count()} comptes, {outside} hors domaine")
+        ]
 
 
 @register
@@ -117,7 +119,9 @@ class ComptesKeycloakSeeder(Seeder):
             return {"comptes": "profil local : non créés (scripts infra/keycloak/seed-demo-users.sh)"}
         password = os.environ.get("KC_DEMO_PASSWORD", "")
         if not ctx.reseau or not password or not getattr(settings, "KEYCLOAK_ADMIN_CLIENT_SECRET", ""):
-            ctx.note("Comptes Keycloak des personas non créés : KC_DEMO_PASSWORD ou KEYCLOAK_ADMIN_CLIENT_SECRET absent.")
+            ctx.note(
+                "Comptes Keycloak des personas non créés : KC_DEMO_PASSWORD ou KEYCLOAK_ADMIN_CLIENT_SECRET absent."
+            )
             return {"comptes": "sautés"}
         from apps.authentication.keycloak_admin import KeycloakAdmin
         from apps.core.management.commands.seed_demo import PEOPLE

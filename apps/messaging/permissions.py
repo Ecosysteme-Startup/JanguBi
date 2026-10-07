@@ -17,10 +17,7 @@ class IsParticipant(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         if isinstance(obj, Conversation):
-            return (
-                obj.participant_a_id == request.user.id
-                or obj.participant_b_id == request.user.id
-            )
+            return obj.participant_a_id == request.user.id or obj.participant_b_id == request.user.id
         return False
 
 

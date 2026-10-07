@@ -58,10 +58,24 @@ def test_paydunya_checkout_and_status(http):
     assert sent["url"].startswith("https://app.paydunya.com/sandbox-api/v1/checkout-invoice/create")
     assert sent["headers"]["PAYDUNYA-MASTER-KEY"] == "master" and sent["json"]["invoice"]["total_amount"] == 5100
     assert sent["json"]["custom_data"]["allocation_key"] == "SD01" and sent["timeout"]
-    responses.append({"status": "completed", "invoice": {"total_amount": "5100"}, "mode": "wave-senegal"})
+    # JB-API-008 : « mode » = environnement PayDunya (test/live), jamais le moyen de paiement.
+    # Le canal effectif remonte dans customer.payment_method.
+    responses.append({
+        "status": "completed", "invoice": {"total_amount": "5100"}, "mode": "test",
+        "customer": {"payment_method": "wave-senegal"},
+    })
     state = PayDunyaProvider().fetch_status(external_ref="abc")
     assert (state.status, state.amount, state.method) == (ProviderStatus.COMPLETED, 5100, PaymentMethod.WAVE)
     assert PayDunyaProvider().list_payouts(since=timezone.now()) == []
+
+
+@override_settings(**KEYS)
+def test_paydunya_mode_is_not_the_payment_method(http):
+    """JB-API-008 : « mode » (test/live) ne doit JAMAIS être pris pour le moyen de paiement."""
+    calls, responses = http
+    responses.append({"status": "completed", "invoice": {"total_amount": "5100"}, "mode": "live"})
+    state = PayDunyaProvider().fetch_status(external_ref="abc")
+    assert state.method == PaymentMethod.INCONNU
 
 
 @override_settings(**KEYS, PAYDUNYA_MODE="live")
@@ -84,11 +98,15 @@ def test_paydunya_ipn_form_and_json():
     good = hashlib.sha512(b"master").hexdigest()
     form = urlencode(
         {"data[hash]": good, "data[status]": "completed", "data[invoice][token]": "abc",
-         "data[invoice][total_amount]": "5100", "data[mode]": "orange-money-senegal"}
+         "data[invoice][total_amount]": "5100", "data[mode]": "test",
+         "data[customer][payment_method]": "orange-money-senegal"}
     ).encode()  # fmt: skip
     state = PayDunyaProvider().verify_callback(headers={}, body=form)
     assert (state.external_ref, state.status, state.amount, state.method) == (
-        "abc", ProviderStatus.COMPLETED, 5100, PaymentMethod.ORANGE_MONEY
+        "abc",
+        ProviderStatus.COMPLETED,
+        5100,
+        PaymentMethod.ORANGE_MONEY,
     )
     as_json = json.dumps({"data": {"hash": good, "status": "cancelled", "invoice": {"token": "abc"}}}).encode()
     assert PayDunyaProvider().verify_callback(headers={}, body=as_json).status == ProviderStatus.CANCELLED
@@ -111,7 +129,9 @@ def test_paydunya_requires_configuration_and_unknown_provider():
 @pytest.mark.django_db
 def test_tasks_run_the_services(world, fund):
     donation, _, _ = services.checkout_create(fund=fund, amount=5000, fees_covered=False, anonymous=False)
-    assert tasks.donations_reconcile_task() == {"verifies": 0, "confirmes": 0, "expires": 0, "erreurs": 0}
+    assert tasks.donations_reconcile_task() == {
+        "verifies": 0, "confirmes": 0, "expires": 0, "erreurs": 0, "fonds_clotures": 0
+    }
     assert tasks.donations_payouts_sync_task() == 0
     assert tasks.donations_donor_email_purge_task() == 0
     pay(donation)  # hors capture on_commit : l'événement reste « reçu »
@@ -156,9 +176,12 @@ def test_selector_filters(world, fund, django_capture_on_commit_callbacks):
     )  # fmt: skip
     assert ops.count() == 1
     assert selectors.cash_collections_for_parish(node=world.sd, status="saisie").count() == 0
-    assert selectors.export_rows(node=world.sd, date_from=today, date_to=today, fund_id=fund.pk, with_names=False)[0][
-        "donateur"
-    ] == "Donateur"
+    assert (
+        selectors.export_rows(node=world.sd, date_from=today, date_to=today, fund_id=fund.pk, with_names=False)[0][
+            "donateur"
+        ]
+        == "Donateur"
+    )
 
 
 @pytest.mark.django_db
@@ -170,7 +193,9 @@ def test_reconciliation_issues_and_health(world, fund):
             counter_one="A", counter_two="B", entered_by=world.secretaire,
         )  # fmt: skip
     today = timezone.localdate()
-    report = selectors.parish_reconciliation(node=world.sd, date_from=today - datetime.timedelta(days=30), date_to=today)
+    report = selectors.parish_reconciliation(
+        node=world.sd, date_from=today - datetime.timedelta(days=30), date_to=today
+    )
     assert {i["kind"] for i in report["issues"]} == {"paiement_en_attente", "quete_non_validee"}
     client_headers = {"HTTP_X_FAKE_SIGNATURE": "faux"}
     from apps.donations.tests.conftest import client_for

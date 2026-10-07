@@ -20,13 +20,12 @@ semaphore = asyncio.Semaphore(CONCURRENCY)
 AELF_BASE_URL = "https://api.aelf.org"
 
 # Headers reflecting identity
-HEADERS = {
-    "User-Agent": "JanguBi/1.0 (contact@jangubi.org)"
-}
+HEADERS = {"User-Agent": "JanguBi/1.0 (contact@jangubi.org)"}
 
 
 class AelfApiError(Exception):
     """Custom exception when AELF API returns unexpected or persistent errors."""
+
     pass
 
 
@@ -61,7 +60,7 @@ class AelfAsyncClient:
         and Tenacity wrapping for transient errors/rate-limits.
         """
         url = f"{AELF_BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
-        
+
         async with semaphore:
             try:
                 response = await client.get(url, timeout=15.0)
@@ -73,13 +72,13 @@ class AelfAsyncClient:
                 if is_retryable_error(e):
                     logger.warning(f"Transient error fetching {url}. Retrying... ({str(e)})")
                     raise  # triggers @retry
-                
+
                 # If it's a 4xx error (like 404), do not retry, just evaluate
                 if isinstance(e, httpx.HTTPStatusError):
                     logger.info(f"Non-retryable HTTP error {e.response.status_code} on {url}: {e.response.text}")
                     # Return empty to allow processing to continue gracefully (e.g. no office on a given date)
                     return {}
-                    
+
                 logger.error(f"Fatal error fetching {url}: {str(e)}")
                 raise AelfApiError(f"Failed to fetch {url}: {str(e)}")
 
@@ -109,13 +108,13 @@ class AelfAsyncClient:
         endpoints = {
             "informations": f"/v1/informations/{date_str}/{zone}",
             "messes": f"/v1/messes/{date_str}/{zone}",
-            "lectures": f"/v1/lectures/{date_str}/{zone}", # Office des lectures
+            "lectures": f"/v1/lectures/{date_str}/{zone}",  # Office des lectures
             "laudes": f"/v1/laudes/{date_str}/{zone}",
             "tierce": f"/v1/tierce/{date_str}/{zone}",
             "sexte": f"/v1/sexte/{date_str}/{zone}",
             "none": f"/v1/none/{date_str}/{zone}",
             "vepres": f"/v1/vepres/{date_str}/{zone}",
-            "complies": f"/v1/complies/{date_str}/{zone}"
+            "complies": f"/v1/complies/{date_str}/{zone}",
         }
 
         results: Dict[str, Dict[str, Any]] = {}
@@ -123,15 +122,15 @@ class AelfAsyncClient:
             # Create list of tasks
             keys = list(endpoints.keys())
             tasks = [cls._fetch(client, endpoints[k]) for k in keys]
-            
+
             # Execute concurrently
             responses = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             for key, response in zip(keys, responses):
                 if isinstance(response, BaseException):
                     logger.error(f"Error fetching {key} concurrently: {str(response)}")
                     results[key] = {}
                 else:
                     results[key] = response
-                    
+
         return results

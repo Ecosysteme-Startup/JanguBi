@@ -133,7 +133,9 @@ class DonsSeeder(Seeder):
         self.used_refs = set(Donation.objects.values_list("reference", flat=True))
         from apps.donations.models import DonationActivation
 
-        self.used_prefixes = {p.upper() for p in DonationActivation.objects.values_list("receipt_prefix", flat=True) if p}
+        self.used_prefixes = {
+            p.upper() for p in DonationActivation.objects.values_list("receipt_prefix", flat=True) if p
+        }
         self.diocese = _diocese()
         self.econome_dio = ctx.persona("econome_dio")
         parishes = ctx.parishes()
@@ -168,7 +170,9 @@ class DonsSeeder(Seeder):
         ctx, rng = self.ctx, self.rng
         places = list(node.places.filter(is_active=True).order_by("-is_main", "name"))
         activation = DonationActivation.objects.filter(node=node).first()
-        prefix = "".join(w[0] for w in names.slug(node.name.removeprefix("Paroisse ")).split("-") if w)[:4].upper() or "P"
+        prefix = (
+            "".join(w[0] for w in names.slug(node.name.removeprefix("Paroisse ")).split("-") if w)[:4].upper() or "P"
+        )
         base, k = prefix[:6], 1
         while prefix in self.used_prefixes:  # les numéros de reçu sont uniques sur toute la plateforme
             k += 1
@@ -213,9 +217,13 @@ class DonsSeeder(Seeder):
                 status=FundStatus.OUVERT if year == ctx.today.year else FundStatus.CLOS,
             )  # fmt: skip
             if plan.contrib[year].status == FundStatus.CLOS and not plan.contrib[year].closed_at:
-                Fund.objects.filter(pk=plan.contrib[year].pk).update(closed_at=ctx.aware(datetime.date(year, 12, 31), 23))
+                Fund.objects.filter(pk=plan.contrib[year].pk).update(
+                    closed_at=ctx.aware(datetime.date(year, 12, 31), 23)
+                )
         demo_camp = (
-            Fund.objects.filter(node=node, kind=FundKind.CAMPAGNE, title__startswith="Toiture").first() if is_pilot else None
+            Fund.objects.filter(node=node, kind=FundKind.CAMPAGNE, title__startswith="Toiture").first()
+            if is_pilot
+            else None
         )
         if demo_camp is not None:
             # Jeu de septembre : la campagne court depuis juin (950 000 avant septembre dans la spec).
@@ -237,7 +245,9 @@ class DonsSeeder(Seeder):
         c_start = ctx.start + datetime.timedelta(days=rng.randint(10, 40))
         plan.camp_closed = fund(kind=FundKind.CAMPAGNE, title=title, description=description, goal_amount=goal,
                                 starts_on=c_start, ends_on=c_start + datetime.timedelta(days=75), status=FundStatus.CLOS)  # fmt: skip
-        Fund.objects.filter(pk=plan.camp_closed.pk).update(closed_at=ctx.aware(c_start + datetime.timedelta(days=75), 18))
+        Fund.objects.filter(pk=plan.camp_closed.pk).update(
+            closed_at=ctx.aware(c_start + datetime.timedelta(days=75), 18)
+        )
         ctx.track(Fund, created)
         return plan
 
@@ -340,7 +350,9 @@ class DonsSeeder(Seeder):
                     mass_label = f"Messe {label}de {hh}"
                     recent = (ctx.today - day).days <= 2
                     status = "saisie" if recent and rng.random() < 0.5 else "validee"
-                    validated_at = ctx.aware(day + datetime.timedelta(days=rng.choice([0, 1, 1, 2])), 20, rng.randint(0, 59))
+                    validated_at = ctx.aware(
+                        day + datetime.timedelta(days=rng.choice([0, 1, 1, 2])), 20, rng.randint(0, 59)
+                    )
                     c = CashCollection(
                         node=plan.node, fund=fund, place=place, mass_date=day, mass_label=mass_label, amount=amount,
                         counter_one=" ".join(names.person(rng)[:2]), counter_two=" ".join(names.person(rng)[:2]),
@@ -370,11 +382,24 @@ class DonsSeeder(Seeder):
                 continue
             donations.append(
                 Donation(
-                    id=_uuid(rng), reference=_reference(rng, self.used_refs), fund=c.fund, amount=c.amount,
-                    fee_amount=0, charged_amount=c.amount, net_amount=c.amount, anonymous=True,
-                    channel=DonationChannel.ESPECES, payment_method="especes", source=None, place=c.place,
-                    value_date=c.mass_date, status=DonationStatus.CONFIRME, status_changed_at=c.validated_at,
-                    confirmed_at=c.validated_at, cash_collection=c, created_at=c.validated_at,
+                    id=_uuid(rng),
+                    reference=_reference(rng, self.used_refs),
+                    fund=c.fund,
+                    amount=c.amount,
+                    fee_amount=0,
+                    charged_amount=c.amount,
+                    net_amount=c.amount,
+                    anonymous=True,
+                    channel=DonationChannel.ESPECES,
+                    payment_method="especes",
+                    source=None,
+                    place=c.place,
+                    value_date=c.mass_date,
+                    status=DonationStatus.CONFIRME,
+                    status_changed_at=c.validated_at,
+                    confirmed_at=c.validated_at,
+                    cash_collection=c,
+                    created_at=c.validated_at,
                 )  # fmt: skip
             )
             if c.fund.kind == FundKind.QUETE_IMPEREE:
@@ -419,10 +444,14 @@ class DonsSeeder(Seeder):
             confirmed = rng.random() < 0.9
             remittances.append(
                 CuriaRemittance(
-                    fund=fund, node_id=node_id, amount=sum(i.amount for i in items), remitted_on=remitted_on,
+                    fund=fund,
+                    node_id=node_id,
+                    amount=sum(i.amount for i in items),
+                    remitted_on=remitted_on,
                     mode=rng.choice(["especes", "especes", "virement", "compensation"]),
                     reference=f"CURIE-{remitted_on:%Y%m%d}-{plan.prefix}",
-                    status="confirmee" if confirmed else "declaree", declared_by=plan.econome,
+                    status="confirmee" if confirmed else "declaree",
+                    declared_by=plan.econome,
                     confirmed_by=self.econome_dio if confirmed else None,
                     confirmed_at=ctx.aware(remitted_on + datetime.timedelta(days=2), 10) if confirmed else None,
                     created_at=ctx.aware(remitted_on, 10),
@@ -449,7 +478,6 @@ class DonsSeeder(Seeder):
         return out
 
     def _online(self, plans: list[ParishPlan], target: int) -> list[Any]:
-
         ctx, rng = self.ctx, self.rng
         days: list[tuple[ParishPlan, datetime.date]] = []
         weights: list[float] = []
@@ -726,29 +754,43 @@ class DonsSeeder(Seeder):
 
         rng = self.rng
         attempts = []
-        failed = [d for d in online if d.status in (DonationStatus.ECHOUE, DonationStatus.EXPIRE, DonationStatus.EN_ATTENTE)]
+        failed = [
+            d for d in online if d.status in (DonationStatus.ECHOUE, DonationStatus.EXPIRE, DonationStatus.EN_ATTENTE)
+        ]
         status_of = {"echoue": "echoue", "expire": "expire", "en_attente": "en_attente"}
         for d in failed:
             attempts.append(
                 PaymentAttempt(
-                    donation_id=d.pk, provider="fake", external_ref=f"test_{d.reference}",
-                    idempotency_key=f"test-{d.pk}", checkout_url=f"https://paiement.exemple.test/checkout/{d.reference}",
-                    status=status_of[d.status], expires_at=d.created_at + datetime.timedelta(hours=1),
+                    donation_id=d.pk,
+                    provider="fake",
+                    external_ref=f"test_{d.reference}",
+                    idempotency_key=f"test-{d.pk}",
+                    checkout_url=f"https://paiement.exemple.test/checkout/{d.reference}",
+                    status=status_of[d.status],
+                    expires_at=d.created_at + datetime.timedelta(hours=1),
                     created_at=d.created_at,
                 )  # fmt: skip
             )
         PaymentAttempt.objects.bulk_create(attempts, batch_size=2000)
         pilot_sept = {d.pk for d in getattr(self, "_sept_extra", [])}
-        candidates = [a for a, d in zip(attempts, failed, strict=True) if d.status == DonationStatus.ECHOUE and d.pk not in pilot_sept]
+        candidates = [
+            a
+            for a, d in zip(attempts, failed, strict=True)
+            if d.status == DonationStatus.ECHOUE and d.pk not in pilot_sept
+        ]
         incidents = []
         for i, a in enumerate(candidates[:3]):
             kind = "late_payment" if i != 1 else "amount_mismatch"
             resolved = i == 2
             incidents.append(
                 PaymentIncident(
-                    attempt=a, donation_id=a.donation_id, kind=kind, status="resolu" if resolved else "ouvert",
+                    attempt=a,
+                    donation_id=a.donation_id,
+                    kind=kind,
+                    status="resolu" if resolved else "ouvert",
                     reported_amount=None if kind == "late_payment" else 4_900,
-                    resolution="sans_suite" if resolved else "", note="Vérifié chez l'agrégateur." if resolved else "",
+                    resolution="sans_suite" if resolved else "",
+                    note="Vérifié chez l'agrégateur." if resolved else "",
                     resolved_at=self.ctx.now - datetime.timedelta(days=rng.randint(1, 20)) if resolved else None,
                 )  # fmt: skip
             )
@@ -804,7 +846,9 @@ class DonsSeeder(Seeder):
             None,
         )  # fmt: skip
         if target is not None:
-            Donation.objects.filter(pk=target.pk).update(status=DonationStatus.REMBOURSE, status_changed_at=ctx.aware(month_ago, 10))
+            Donation.objects.filter(pk=target.pk).update(
+                status=DonationStatus.REMBOURSE, status_changed_at=ctx.aware(month_ago, 10)
+            )
             DonationStatusChange.objects.create(donation_id=target.pk, from_status="confirme", to_status="rembourse",
                                                 source="staff", actor=others[0].econome, note="Double paiement du donateur.")  # fmt: skip
             created.append(DonationAdjustment.objects.create(
@@ -840,14 +884,32 @@ class DonsSeeder(Seeder):
     def _closings(self, plans: list[ParishPlan]) -> int:
         from apps.core.exceptions import ApplicationError
         from apps.donations.models import MonthClosing
+        from apps.donations.selectors_analyse import month_totals
         from apps.donations.services_cloture import month_close
+        from apps.hierarchy.models import AuditEvent
 
         created = []
+        tracked = set(self.ctx.tracked_ids(MonthClosing))
         current = self.ctx.today.replace(day=1)
         for plan in plans:
             for month in calendrier.month_iter(self.ctx.start, current - datetime.timedelta(days=1)):
-                if MonthClosing.objects.filter(node=plan.node, month=month).exists():
-                    continue
+                existing = MonthClosing.objects.filter(node=plan.node, month=month).first()
+                if existing is not None:
+                    # Clôture AUTOMATIQUE (tâche de nuit, sans auteur) figée avant que le seed ne remplisse le
+                    # mois — recette du 30/09/2026 : août clos à 0 à 03:40 sur une base vide. On la refait,
+                    # suivie par le lot (le reset la retire, la tâche de nuit reclôt sur les vraies données).
+                    # Une clôture faite à la main n'est jamais touchée.
+                    stale = (
+                        existing.closed_by_id is None and str(existing.pk) not in tracked
+                        and existing.totals.get("collecte") != month_totals(node=plan.node, month=month)["collecte"]
+                    )  # fmt: skip
+                    if not stale:
+                        continue
+                    AuditEvent.objects.filter(action="dons.cloture_mois", target_id=existing.pk).delete()
+                    existing.delete()
+                    self.ctx.note(
+                        f"Clôture automatique {month:%Y-%m} de {plan.node.name} périmée (antérieure au seed) : refaite."
+                    )
                 try:
                     created.append(month_close(node=plan.node, month=month).pk)
                 except ApplicationError as exc:
@@ -876,7 +938,9 @@ class DonsSeeder(Seeder):
         closing_ids = ctx.tracked_ids(MonthClosing)
         AuditEvent.objects.filter(action="dons.cloture_mois", target_id__in=closing_ids).delete()
         MonthClosing.objects.filter(pk__in=closing_ids).delete()
-        DonationAdjustment.objects.filter(Q(pk__in=ctx.tracked_ids(DonationAdjustment)) | Q(fund_id__in=fund_ids)).delete()
+        DonationAdjustment.objects.filter(
+            Q(pk__in=ctx.tracked_ids(DonationAdjustment)) | Q(fund_id__in=fund_ids)
+        ).delete()
         n_dons = 0
         for qs in (Donation.objects.filter(fund_id__in=fund_ids), ctx.tracked(Donation)):
             n_dons += qs.count()
@@ -924,14 +988,22 @@ class DonsSeeder(Seeder):
                   f"{months} mois-paroisses contrôlés" + (f", écarts : {', '.join(mismatches[:5])}" if mismatches else ""))
         )  # fmt: skip
         if ctx.start <= SEPT_FIRST and ctx.today >= SEPT_LAST_SUNDAY:
-            s = donations_analysis(node=parishes[0], level="paroisse", period=period_parse("mois", "2026-09"))["synthese"]
+            s = donations_analysis(node=parishes[0], level="paroisse", period=period_parse("mois", "2026-09"))[
+                "synthese"
+            ]
             got = (s["collecte"], s["en_ligne"], s["especes"], s["nombre_dons_en_ligne"], s["nombre_quetes"])
             checks.append(Check("Septembre 2026 à Saint-Dominique = jeu de la spec", got == (1_214_830, 356_330, 858_500, 47, 9),
                                 f"collecté {_n(got[0])} (en ligne {_n(got[1])}, espèces {_n(got[2])}), {got[3]} dons, {got[4]} quêtes"))  # fmt: skip
         total = Donation.objects.filter(fund__node__in=parishes).count()
         failed = Donation.objects.filter(fund__node__in=parishes, status__in=[S.ECHOUE, S.EXPIRE]).count()
         online = Donation.objects.filter(fund__node__in=parishes, channel="en_ligne").count()
-        checks.append(Check("Volume des dons", total > 0, f"{total} dons, dont {online} en ligne ; {failed} échoués ou expirés ({100 * failed // max(online, 1)} % des paiements en ligne)"))
+        checks.append(
+            Check(
+                "Volume des dons",
+                total > 0,
+                f"{total} dons, dont {online} en ligne ; {failed} échoués ou expirés ({100 * failed // max(online, 1)} % des paiements en ligne)",
+            )
+        )
         return checks
 
 

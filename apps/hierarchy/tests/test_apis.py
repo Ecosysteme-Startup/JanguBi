@@ -4,7 +4,7 @@ import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from rest_framework.test import APIClient
 
-from apps.hierarchy.models import MassSchedule, Node, PlaceOfWorship
+from apps.hierarchy.models import AuditEvent, MassSchedule, Node, PlaceOfWorship
 from apps.hierarchy.services import schedule_exception_create, schedule_replace
 from apps.hierarchy.tests.factories import make_place
 from apps.users.tests.factories import BaseUserFactory, SuperAdminFactory
@@ -45,8 +45,13 @@ def test_node_types_are_public(anon, tree):
     assert paroisse["holds_registers"] is True
 
 
-def test_node_list_is_public_paginated_and_filterable(anon, tree):
-    response = anon.get(f"{BASE}/nodes/", {"type": "paroisse", "within": str(tree.dakar.pk)})
+def test_node_list_requires_authentication(anon, tree):
+    # JB-API-001 : la liste des nœuds n'est plus publique (l'annuaire public est public/nodes/).
+    assert anon.get(f"{BASE}/nodes/").status_code == 401
+
+
+def test_node_list_is_paginated_and_filterable_for_authenticated_users(fidele, tree):
+    response = fidele.get(f"{BASE}/nodes/", {"type": "paroisse", "within": str(tree.dakar.pk)})
 
     assert response.status_code == 200
     assert response.data["count"] == 2
@@ -56,11 +61,11 @@ def test_node_list_is_public_paginated_and_filterable(anon, tree):
     assert "legacy_id" not in first
 
 
-def test_node_list_does_not_query_parents_one_by_one(anon, tree, django_assert_max_num_queries):
+def test_node_list_does_not_query_parents_one_by_one(fidele, tree, django_assert_max_num_queries):
     # 7 nœuds listés : un N+1 sur les parents dépasserait largement ce plafond
     # (transaction ATOMIC_REQUESTS + comptage + page + parents en une requête).
     with django_assert_max_num_queries(6):
-        response = anon.get(f"{BASE}/nodes/")
+        response = fidele.get(f"{BASE}/nodes/")
     assert response.data["count"] == 7
 
 
@@ -129,10 +134,11 @@ def test_invalid_payload_returns_validation_error(admin, tree):
     assert "name" in response.data["error"]["details"]
 
 
-def test_deleted_nodes_are_not_listed_to_anonymous(anon, admin, tree):
+def test_deleted_nodes_are_not_listed_to_non_admin(anon, fidele, admin, tree):
     admin.patch(f"{BASE}/nodes/{tree.sainte_therese.pk}/", {"status": "supprime"}, format="json")
 
-    assert anon.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 403
+    assert anon.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 401
+    assert fidele.get(f"{BASE}/nodes/", {"status": "supprime"}).status_code == 403
     assert admin.get(f"{BASE}/nodes/", {"status": "supprime"}).data["count"] == 1
 
 
@@ -190,18 +196,26 @@ def test_exceptions_create_list_delete(admin, anon, tree):
     place = make_place(tree.saint_dominique, "Église", is_main=True)
     url = f"{BASE}/places/{place.pk}/exceptions/"
 
-    created = admin.post(url, {"date": "2099-12-24", "kind": "messe", "start_time": "23:00", "note": "Veillée"}, format="json")
+    created = admin.post(
+        url, {"date": "2099-12-24", "kind": "messe", "start_time": "23:00", "note": "Veillée"}, format="json"
+    )
     listing = anon.get(url)
+    # JB-WEB-031 : la création apparaît au journal d'audit (rubrique Horaires).
+    assert AuditEvent.objects.filter(action="horaires.exception_creee").count() == 1
     deleted = admin.delete(f"{url}{created.data['id']}/")
 
     assert created.status_code == 201
     assert [e["note"] for e in listing.data] == ["Veillée"]
     assert deleted.status_code == 204
+    # JB-WEB-031 : la suppression aussi.
+    assert AuditEvent.objects.filter(action="horaires.exception_supprimee").count() == 1
 
 
 def test_public_week(anon, tree):
     place = make_place(tree.saint_dominique, "Église", is_main=True)
-    schedule_replace(place=place, items=[{"weekday": 6, "start_time": time(9, 30)}, {"weekday": 6, "start_time": time(11, 30)}])
+    schedule_replace(
+        place=place, items=[{"weekday": 6, "start_time": time(9, 30)}, {"weekday": 6, "start_time": time(11, 30)}]
+    )
     schedule_exception_create(place=place, date=date(2026, 10, 4), cancelled=True, start_time=time(11, 30))
 
     response = anon.get(f"/api/v1/public/nodes/{tree.saint_dominique.pk}/week/", {"start": "2026-09-28"})

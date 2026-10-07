@@ -150,11 +150,17 @@ class AssignmentDetailApi(AuthedV1Api):
         action = serializer.validated_data["action"]
         if action == "terminer":
             assignment = services_offices.assignment_terminate(
-                actor=request.user, assignment=assignment, end_date=serializer.validated_data.get("end_date"), ip=_ip(request)
+                actor=request.user,
+                assignment=assignment,
+                end_date=serializer.validated_data.get("end_date"),
+                ip=_ip(request),
             )
         elif action == "qualifier":
             assignment = services_offices.assignment_quality_set(
-                actor=request.user, assignment=assignment, quality=serializer.validated_data.get("quality", ""), ip=_ip(request)
+                actor=request.user,
+                assignment=assignment,
+                quality=serializer.validated_data.get("quality", ""),
+                ip=_ip(request),
             )
         else:
             assignment = services_offices.assignment_cancel(actor=request.user, assignment=assignment, ip=_ip(request))
@@ -271,7 +277,9 @@ class VerificationDecisionApi(AuthedV1Api):
 class CapabilityOverrideListCreateApi(AuthedV1Api):
     permission_classes = (IsAuthenticated, _StaffMfa, HasCapability("plateforme.admin"))
 
-    @extend_schema(tags=TAG, summary="Retraits de capacités par diocèse", responses=CapabilityOverrideSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Retraits de capacités par diocèse", responses=CapabilityOverrideSerializer(many=True)
+    )
     def get(self, request: Request) -> Response:
         return Response(CapabilityOverrideSerializer(selectors_offices.capability_override_list(), many=True).data)
 

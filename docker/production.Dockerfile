@@ -32,11 +32,9 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Librairies SYSTÈME nécessaires à l'EXÉCUTION (pas au build) :
 #   libpq5   → client PostgreSQL requis par psycopg2 au runtime
-#   libgomp1 → OpenMP requis par onnxruntime (moteur de fastembed) au runtime
 #   ffmpeg   → encodage et normalisation des pistes de la sonothèque (apps/audio)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
-        libgomp1 \
         ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
@@ -124,4 +122,5 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
 
 # En prod on sert l'app ASGI avec Daphne (WebSocket/Channels et flux SSE).
 ENTRYPOINT ["/app/docker/entrypoint.sh"]
-CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "config.asgi:application"]
+# JB-API-005 : --server-name masque l'en-tête « Server: daphne/<version> ».
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "--server-name", "JanguBi", "config.asgi:application"]

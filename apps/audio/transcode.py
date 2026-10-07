@@ -88,7 +88,13 @@ def has_encoder(name: str) -> bool:
 def rendition_specs() -> list[RenditionSpec]:
     if has_encoder("libfdk_aac"):
         low = RenditionSpec(
-            "hls_bas", "bas", 32, 1, ("-c:a", "libfdk_aac", "-profile:a", "aac_he", "-b:a", "32k"), "mp4a.40.5", "HE-AAC"
+            "hls_bas",
+            "bas",
+            32,
+            1,
+            ("-c:a", "libfdk_aac", "-profile:a", "aac_he", "-b:a", "32k"),
+            "mp4a.40.5",
+            "HE-AAC",
         )
     else:
         low = RenditionSpec("hls_bas", "bas", 48, 1, ("-c:a", "aac", "-b:a", "48k"), "mp4a.40.2", "AAC-LC")
@@ -134,7 +140,25 @@ def normalize(src: str, dst: str) -> None:
     loudnorm = (
         f"loudnorm=I={settings.AUDIO_LOUDNORM_I}:TP={settings.AUDIO_LOUDNORM_TP}:LRA={settings.AUDIO_LOUDNORM_LRA}"
     )
-    _run([*_ffmpeg(), "-i", src, "-map", "0:a:0", "-vn", "-af", loudnorm, "-ar", "44100", "-ac", "2", "-c:a", "flac", dst])
+    _run(
+        [
+            *_ffmpeg(),
+            "-i",
+            src,
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-af",
+            loudnorm,
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            "-c:a",
+            "flac",
+            dst,
+        ]
+    )
 
 
 _EXTINF = re.compile(r"#EXTINF:([\d.]+)")
@@ -231,9 +255,7 @@ def master_playlist(renditions: list[RenditionResult]) -> str:
     for r in renditions:
         peak = max(r.peak_bandwidth, r.spec.bitrate_kbps * 1000)
         average = max(r.average_bandwidth, 1)
-        lines.append(
-            f'#EXT-X-STREAM-INF:BANDWIDTH={peak},AVERAGE-BANDWIDTH={average},CODECS="{r.spec.codecs}"'
-        )
+        lines.append(f'#EXT-X-STREAM-INF:BANDWIDTH={peak},AVERAGE-BANDWIDTH={average},CODECS="{r.spec.codecs}"')
         lines.append(r.playlist)
     return "\n".join(lines) + "\n"
 

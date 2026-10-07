@@ -38,6 +38,7 @@ class CanAccessLiturgyOfHours(IsAuthenticated):
 # Base helpers
 # ---------------------------------------------------------------------------
 
+
 class _DailyLiturgyBase(ApiAuthMixin, APIView):
     """
     Common date/zone parsing and AELF auto-sync for liturgy endpoints.
@@ -129,6 +130,7 @@ class _OfficeBase(_DailyLiturgyBase):
 # Public endpoints — informations + messes
 # ---------------------------------------------------------------------------
 
+
 class LiturgyTodayApi(ApiAuthMixin, APIView):
     """Jour liturgique V1, public (EF-PAR-01, -02, -05)."""
 
@@ -177,6 +179,7 @@ class OfficeDetailApi(ApiAuthMixin, APIView):
 # ---------------------------------------------------------------------------
 # Liturgy of the Hours — clergy-only (7 offices)
 # ---------------------------------------------------------------------------
+
 
 class LiturgyLaudesApi(_OfficeBase):
     office_type = "laudes"

@@ -28,7 +28,14 @@ SEASON_LABELS = {
     TRIDUUM: "Triduum pascal",
     EASTER: "Temps pascal",
 }
-SOLEMNITY, LORD_FEAST, FEAST, SUNDAY, WEEKDAY = "solennite", "fete_du_seigneur", "fete", "dimanche", "ferie"
+SOLEMNITY, LORD_FEAST, FEAST, MEMORIAL, SUNDAY, WEEKDAY = (
+    "solennite",
+    "fete_du_seigneur",
+    "fete",
+    "memoire",
+    "dimanche",
+    "ferie",
+)
 WHITE, RED, GREEN, VIOLET, ROSE = "blanc", "rouge", "vert", "violet", "rose"
 WEEKDAYS = ("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche")
 SEASON_OF = {ADVENT: "de l'Avent", LENT: "de Carême", EASTER: "de Pâques", ORDINARY: "du temps ordinaire"}
@@ -176,6 +183,95 @@ def _proper_days(year: int) -> frozenset[D]:
     )
 
 
+# Sanctoral du calendrier romain général : fêtes et mémoires OBLIGATOIRES à date fixe
+# (mois, jour) → (libellé, rang, couleur). Les mémoires facultatives et les calendriers
+# propres (diocèse, pays) ne sont pas couverts. Une fête/mémoire ne s'applique qu'à une
+# férie (jamais un dimanche, une solennité ou une fête du Seigneur déjà posée) et hors
+# Carême/Triduum/octave de Pâques (RG liturgique : mémoires alors facultatives ou omises).
+_SANCTORAL: dict[tuple[int, int], tuple[str, str, str]] = {
+    (1, 2): ("Saints Basile le Grand et Grégoire de Nazianze", MEMORIAL, WHITE),
+    (1, 17): ("Saint Antoine, abbé", MEMORIAL, WHITE),
+    (1, 21): ("Sainte Agnès, vierge et martyre", MEMORIAL, RED),
+    (1, 24): ("Saint François de Sales", MEMORIAL, WHITE),
+    (1, 25): ("Conversion de saint Paul, apôtre", FEAST, WHITE),
+    (1, 26): ("Saints Timothée et Tite", MEMORIAL, WHITE),
+    (1, 28): ("Saint Thomas d'Aquin", MEMORIAL, WHITE),
+    (1, 31): ("Saint Jean Bosco", MEMORIAL, WHITE),
+    (2, 10): ("Sainte Scholastique, vierge", MEMORIAL, WHITE),
+    (2, 22): ("Chaire de saint Pierre, apôtre", FEAST, WHITE),
+    (4, 25): ("Saint Marc, évangéliste", FEAST, RED),
+    (4, 29): ("Sainte Catherine de Sienne, vierge et docteur de l'Église", MEMORIAL, WHITE),
+    (5, 3): ("Saints Philippe et Jacques, apôtres", FEAST, RED),
+    (5, 14): ("Saint Matthias, apôtre", FEAST, RED),
+    (5, 26): ("Saint Philippe Néri", MEMORIAL, WHITE),
+    (5, 31): ("Visitation de la Vierge Marie", FEAST, WHITE),
+    (6, 1): ("Saint Justin, martyr", MEMORIAL, RED),
+    (6, 3): ("Saints Charles Lwanga et ses compagnons, martyrs", MEMORIAL, RED),
+    (6, 5): ("Saint Boniface, évêque et martyr", MEMORIAL, RED),
+    (6, 11): ("Saint Barnabé, apôtre", MEMORIAL, RED),
+    (6, 13): ("Saint Antoine de Padoue", MEMORIAL, WHITE),
+    (6, 21): ("Saint Louis de Gonzague", MEMORIAL, WHITE),
+    (6, 28): ("Saint Irénée, évêque et martyr", MEMORIAL, RED),
+    (7, 3): ("Saint Thomas, apôtre", FEAST, RED),
+    (7, 11): ("Saint Benoît, abbé", MEMORIAL, WHITE),
+    (7, 15): ("Saint Bonaventure", MEMORIAL, WHITE),
+    (7, 22): ("Sainte Marie Madeleine", FEAST, WHITE),
+    (7, 25): ("Saint Jacques, apôtre", FEAST, RED),
+    (7, 26): ("Saints Joachim et Anne, parents de la Vierge Marie", MEMORIAL, WHITE),
+    (7, 29): ("Saintes Marthe, Marie et saint Lazare", MEMORIAL, WHITE),
+    (7, 31): ("Saint Ignace de Loyola", MEMORIAL, WHITE),
+    (8, 1): ("Saint Alphonse-Marie de Liguori", MEMORIAL, WHITE),
+    (8, 4): ("Saint Jean-Marie Vianney, curé d'Ars", MEMORIAL, WHITE),
+    (8, 8): ("Saint Dominique", MEMORIAL, WHITE),
+    (8, 10): ("Saint Laurent, diacre et martyr", FEAST, RED),
+    (8, 11): ("Sainte Claire, vierge", MEMORIAL, WHITE),
+    (8, 14): ("Saint Maximilien-Marie Kolbe, martyr", MEMORIAL, RED),
+    (8, 20): ("Saint Bernard", MEMORIAL, WHITE),
+    (8, 21): ("Saint Pie X", MEMORIAL, WHITE),
+    (8, 22): ("Vierge Marie Reine", MEMORIAL, WHITE),
+    (8, 24): ("Saint Barthélemy, apôtre", FEAST, RED),
+    (8, 27): ("Sainte Monique", MEMORIAL, WHITE),
+    (8, 28): ("Saint Augustin", MEMORIAL, WHITE),
+    (8, 29): ("Martyre de saint Jean-Baptiste", MEMORIAL, RED),
+    (9, 3): ("Saint Grégoire le Grand", MEMORIAL, WHITE),
+    (9, 8): ("Nativité de la Vierge Marie", FEAST, WHITE),
+    (9, 13): ("Saint Jean Chrysostome", MEMORIAL, WHITE),
+    (9, 15): ("Notre-Dame des Douleurs", MEMORIAL, WHITE),
+    (9, 16): ("Saints Corneille, pape, et Cyprien, évêque, martyrs", MEMORIAL, RED),
+    (9, 21): ("Saint Matthieu, apôtre et évangéliste", FEAST, RED),
+    (9, 27): ("Saint Vincent de Paul", MEMORIAL, WHITE),
+    (9, 29): ("Saints Michel, Gabriel et Raphaël, archanges", FEAST, WHITE),
+    (9, 30): ("Saint Jérôme", MEMORIAL, WHITE),
+    (10, 1): ("Sainte Thérèse de l'Enfant-Jésus, vierge et docteur de l'Église", MEMORIAL, WHITE),
+    (10, 2): ("Saints Anges gardiens", MEMORIAL, WHITE),
+    (10, 4): ("Saint François d'Assise", MEMORIAL, WHITE),
+    (10, 7): ("Notre-Dame du Rosaire", MEMORIAL, WHITE),
+    (10, 15): ("Sainte Thérèse d'Avila, vierge et docteur de l'Église", MEMORIAL, WHITE),
+    (10, 17): ("Saint Ignace d'Antioche, évêque et martyr", MEMORIAL, RED),
+    (10, 18): ("Saint Luc, évangéliste", FEAST, RED),
+    (10, 28): ("Saints Simon et Jude, apôtres", FEAST, RED),
+    (11, 10): ("Saint Léon le Grand", MEMORIAL, WHITE),
+    (11, 11): ("Saint Martin de Tours", MEMORIAL, WHITE),
+    (11, 12): ("Saint Josaphat, évêque et martyr", MEMORIAL, RED),
+    (11, 17): ("Sainte Élisabeth de Hongrie", MEMORIAL, WHITE),
+    (11, 21): ("Présentation de la Vierge Marie", MEMORIAL, WHITE),
+    (11, 22): ("Sainte Cécile, vierge et martyre", MEMORIAL, RED),
+    (11, 24): ("Saints André Dung-Lac et ses compagnons, martyrs", MEMORIAL, RED),
+    (11, 30): ("Saint André, apôtre", FEAST, RED),
+    (12, 3): ("Saint François Xavier", MEMORIAL, WHITE),
+    (12, 7): ("Saint Ambroise", MEMORIAL, WHITE),
+    (12, 13): ("Sainte Lucie, vierge et martyre", MEMORIAL, RED),
+    (12, 14): ("Saint Jean de la Croix", MEMORIAL, WHITE),
+    (12, 26): ("Saint Étienne, premier martyr", FEAST, RED),
+    (12, 27): ("Saint Jean, apôtre et évangéliste", FEAST, WHITE),
+    (12, 28): ("Saints Innocents, martyrs", FEAST, RED),
+}
+
+
+def _sanctoral_for(day: D) -> tuple[str, str, str] | None:
+    return _SANCTORAL.get((day.month, day.day))
+
+
 def _ordinal(n: int, *, feminine: bool = False) -> str:
     if n == 1:
         return "1re" if feminine else "1er"
@@ -251,6 +347,15 @@ def liturgical_day(day: D) -> LiturgicalDay:
         day.weekday() != 6 or day in _proper_days(day.year) or _overrides_sunday(special[1], season)
     ):
         label, rank, color = special
+    elif special is None and rank == WEEKDAY:
+        # Fêtes et mémoires du sanctoral : n'écrasent qu'une férie, hors Carême/Triduum et
+        # hors octave de Pâques (où les mémoires sont facultatives ou omises).
+        e = easter(day.year)
+        in_easter_octave = e < day < e + 8 * DAY
+        if season not in (LENT, TRIDUUM) and not in_easter_octave:
+            sanctoral = _sanctoral_for(day)
+            if sanctoral is not None:
+                label, rank, color = sanctoral
     return LiturgicalDay(
         date=day,
         liturgical_year=liturgical_year,

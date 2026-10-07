@@ -233,7 +233,9 @@ def track_search(*, user: Any, q: str, cursor: str = "", limit: int = 20) -> dic
     if cursor:
         c = _cursor_decode(cursor)
         qs = qs.filter(
-            Q(rank__lt=c["r"]) | Q(rank=c["r"], play_count__lt=c["p"]) | Q(rank=c["r"], play_count=c["p"], pk__gt=c["i"])
+            Q(rank__lt=c["r"])
+            | Q(rank=c["r"], play_count__lt=c["p"])
+            | Q(rank=c["r"], play_count=c["p"], pk__gt=c["i"])
         )
     page = list(qs.order_by("-rank", "-play_count", "pk")[: limit + 1])
     has_more = len(page) > limit
@@ -341,10 +343,7 @@ def offline_verify(*, user: Any, track_ids: list[Any], now: datetime.datetime | 
     ``retiree``, ``privee``, ``introuvable``). Aucune écriture : la licence vit dans l'app."""
     now = now or timezone.now()
     wanted = list(dict.fromkeys(str(t) for t in track_ids))
-    tracks = {
-        str(t.pk): t
-        for t in Track.objects.filter(pk__in=wanted).select_related("source__node__type", "album")
-    }
+    tracks = {str(t.pk): t for t in Track.objects.filter(pk__in=wanted).select_related("source__node__type", "album")}
     results = []
     for track_id in wanted:
         track = tracks.get(track_id)
@@ -384,11 +383,13 @@ def library(*, user: Any) -> dict[str, Any]:
     liked_ids = list(Like.objects.filter(user=user).order_by("-created_at").values_list("track_id", flat=True)[:200])
     liked = {t.pk: t for t in listenable.filter(pk__in=liked_ids).select_related("source", "album")}
     positions = list(
-        PlaybackPosition.objects.filter(user=user).order_by("-client_updated_at").values_list(
-            "track_id", "position_seconds", "client_updated_at"
-        )[:50]
+        PlaybackPosition.objects.filter(user=user)
+        .order_by("-client_updated_at")
+        .values_list("track_id", "position_seconds", "client_updated_at")[:50]
     )
-    recent_tracks = {t.pk: t for t in listenable.filter(pk__in=[p[0] for p in positions]).select_related("source", "album")}
+    recent_tracks = {
+        t.pk: t for t in listenable.filter(pk__in=[p[0] for p in positions]).select_related("source", "album")
+    }
     recent = [
         {"track": recent_tracks[tid], "position_seconds": pos, "updated_at": at}
         for tid, pos, at in positions
@@ -652,6 +653,8 @@ def reports_open(*, user: Any) -> QuerySet[TrackReport]:
     return (
         TrackReport.objects.filter(status=ReportStatus.OUVERT)
         .filter(Q(track__source__node__in=nodes) | Q(album__source__node__in=nodes) | Q(source__node__in=nodes))
-        .select_related("track__source", "track__album", "album__source", "album__cover", "source__node", "source__cover")
+        .select_related(
+            "track__source", "track__album", "album__source", "album__cover", "source__node", "source__cover"
+        )
         .order_by("created_at")
     )

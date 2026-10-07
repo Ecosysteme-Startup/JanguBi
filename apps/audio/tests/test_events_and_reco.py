@@ -63,7 +63,9 @@ def test_events_batch_is_idempotent_and_counts_starts(world):
 
 def test_anonymous_events_are_kept_without_user(world):
     kyrie = ready_track(world.chorale, "Kyrie")
-    assert client_for().post(f"{API}/evenements/", {"events": [_event(kyrie)]}, format="json").json()["enregistres"] == 1
+    assert (
+        client_for().post(f"{API}/evenements/", {"events": [_event(kyrie)]}, format="json").json()["enregistres"] == 1
+    )
     assert PlayEvent.objects.get(track=kyrie).user_id is None
 
 
@@ -86,7 +88,9 @@ def _partitions() -> set[str]:
 
 def test_play_event_table_is_partitioned_by_month():
     with connection.cursor() as cursor:
-        cursor.execute("SELECT partstrat FROM pg_partitioned_table pt JOIN pg_class c ON c.oid = pt.partrelid WHERE c.relname = 'audio_play_event'")
+        cursor.execute(
+            "SELECT partstrat FROM pg_partitioned_table pt JOIN pg_class c ON c.oid = pt.partrelid WHERE c.relname = 'audio_play_event'"
+        )
         assert cursor.fetchone() == ("r",)
     assert "audio_play_event_default" in _partitions()
 
@@ -102,7 +106,9 @@ def test_monthly_partition_task_creates_ahead_moves_default_rows_and_purges(worl
                 "VALUES (%s, now(), %s, %s, 'start')",
                 [at, str(uuid.uuid4()), str(kyrie.pk)],
             )
-        cursor.execute("CREATE TABLE audio_play_event_p202507 PARTITION OF audio_play_event FOR VALUES FROM ('2025-07-01') TO ('2025-08-01')")
+        cursor.execute(
+            "CREATE TABLE audio_play_event_p202507 PARTITION OF audio_play_event FOR VALUES FROM ('2025-07-01') TO ('2025-08-01')"
+        )
 
     result = services.play_event_partitions_ensure(today=datetime.date(2027, 2, 10))
     assert result["creees"] == ["audio_play_event_p202702", "audio_play_event_p202703", "audio_play_event_p202704"]
@@ -119,19 +125,6 @@ def test_monthly_partition_task_creates_ahead_moves_default_rows_and_purges(worl
 
 
 # --- Recommandations -------------------------------------------------------------------------
-
-
-class FakeEmbedder:
-    """Fournisseur déterministe : deux « familles » de contenus (chants, homélies)."""
-
-    def embed_texts(self, texts):
-        vectors = []
-        for text in texts:
-            v = [0.0] * 768
-            v[0 if "Chorale" in text else 1] = 1.0
-            v[2] = 0.1 * (len(text) % 7)
-            vectors.append(v)
-        return vectors
 
 
 def _listen(user, track, *, days_ago=1, kind="complete"):
@@ -172,7 +165,9 @@ def test_colisten_neighbors_use_cosine_on_90_days(listening):
     _listen(old, w.neuve, days_ago=120)
     assert recommendations.colisten_neighbors_compute() > 0
     neighbors = dict(
-        TrackNeighbor.objects.filter(track=w.kyrie, method=NeighborMethod.COECOUTE).values_list("neighbor__title", "score")
+        TrackNeighbor.objects.filter(track=w.kyrie, method=NeighborMethod.COECOUTE).values_list(
+            "neighbor__title", "score"
+        )
     )
     # Kyrie : 4 auditeurs ; Gloria : 3, tous communs → 3 / sqrt(4 × 3).
     assert neighbors["Gloria"] == pytest.approx(3 / (4 * 3) ** 0.5)
@@ -181,28 +176,44 @@ def test_colisten_neighbors_use_cosine_on_90_days(listening):
     assert neighbors["Gloria"] > neighbors["Sanctus"]
 
 
-def test_content_neighbors_come_from_metadata_embeddings(listening, monkeypatch):
-    monkeypatch.setattr(recommendations, "embedding_provider", lambda: FakeEmbedder())
-    assert recommendations.track_embeddings_refresh() == 5
-    assert recommendations.track_embeddings_refresh() == 0  # empreinte inchangée : rien à recalculer
+def test_content_neighbors_come_from_metadata(listening):
+    assert recommendations.content_neighbors_compute() > 0
+    near = dict(
+        TrackNeighbor.objects.filter(track=listening.neuve, method=NeighborMethod.CONTENU).values_list(
+            "neighbor__title", "score"
+        )
+    )
+    # Piste neuve sans album : rattachée aux chants de sa chorale, pas à l'homélie de la paroisse.
+    assert set(near) == {"Kyrie", "Gloria", "Sanctus"}
+
+
+def test_content_neighbors_rank_same_album_first(listening):
+    w = listening
     recommendations.content_neighbors_compute()
     near = list(
-        TrackNeighbor.objects.filter(track=listening.neuve, method=NeighborMethod.CONTENU)
+        TrackNeighbor.objects.filter(track=w.kyrie, method=NeighborMethod.CONTENU)
         .order_by("-score")
         .values_list("neighbor__title", flat=True)
     )
-    assert set(near[:3]) == {"Kyrie", "Gloria", "Sanctus"}  # même chorale avant l'homélie
-    assert "Homélie du 27 septembre" not in near[:3]
+    # Même album (et même chorale) avant la simple même chorale ; jamais l'homélie.
+    assert set(near[:2]) == {"Gloria", "Sanctus"}
+    assert near[2] == "Ave Maria (nouveau)"
+    assert "Homélie du 27 septembre" not in near
 
 
-def test_stub_provider_zero_vectors_are_not_stored(listening):
-    recommendations.track_embeddings_refresh()  # EMBEDDING_PROVIDER=stub en test
-    assert not listening.kyrie.__class__.objects.filter(embedding__isnull=False).exists()
-
-
-def test_nightly_task_builds_user_recommendations_with_reasons(listening, monkeypatch):
+def test_content_neighbors_use_shared_tags_across_sources(listening):
     w = listening
-    monkeypatch.setattr(recommendations, "embedding_provider", lambda: FakeEmbedder())
+    marial = ready_track(w.paroisse, "Je vous salue Marie", tags=["marie", "chapelet"])
+    w.neuve.tags = ["marie", "chapelet"]
+    w.neuve.save(update_fields=["tags"])
+
+    recommendations.content_neighbors_compute()
+
+    assert TrackNeighbor.objects.filter(track=w.neuve, neighbor=marial, method=NeighborMethod.CONTENU).exists()
+
+
+def test_nightly_task_builds_user_recommendations_with_reasons(listening):
+    w = listening
     result = audio_reco_recompute_task.apply().get()
     assert result["voisins_coecoute"] > 0 and result["recommandations"] > 0
 

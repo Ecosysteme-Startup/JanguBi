@@ -10,13 +10,14 @@ from django.db import transaction
 
 from apps.bible.models import Book, Chapter, Testament, Verse
 from apps.bible.services.cleaning import CleaningService
-from apps.bible.tasks import compute_embeddings_task, populate_tsv_task
+from apps.bible.tasks import populate_tsv_task
 
 logger = logging.getLogger(__name__)
 
+
 class ImportFormat(Enum):
-    FORMAT_A = "format_a" # Format typique de structuration par 'Testaments' 
-    FORMAT_B = "format_b" # Format plat par 'books'
+    FORMAT_A = "format_a"  # Format typique de structuration par 'Testaments'
+    FORMAT_B = "format_b"  # Format plat par 'books'
 
 
 class ImportService:
@@ -31,7 +32,7 @@ class ImportService:
         mapping_path = Path(settings.BASE_DIR) / "apps" / "bible" / "data" / "book_mapping.yaml"
         with open(mapping_path, "r", encoding="utf-8") as f:
             self.mapping = yaml.safe_load(f)
-        
+
         # Build quick lookup by alias (normalized)
         self.alias_to_canonical = {}
         for key, data in self.mapping.items():
@@ -74,21 +75,21 @@ class ImportService:
             else:
                 testament = self.ancien_testament
             return canonical, testament, data["order"], data.get("aliases", [])
-        
+
         # Fallback: create an unknown book at the end of Ancien Testament
         logger.warning(f"Could not resolve book name: '{name_hint}'. Using as-is.")
         return name_hint, self.ancien_testament, 999, []
 
     def get_or_create_book(self, raw_name: str) -> Book:
         canonical_name, testament, order, aliases = self.resolve_book_info(raw_name)
-        
+
         book, created = Book.objects.get_or_create(
             name=canonical_name,
             defaults={
                 "testament": testament,
                 "order": order,
                 "alt_names": aliases,
-            }
+            },
         )
 
         if not created:
@@ -112,7 +113,7 @@ class ImportService:
         logger.info(f"Starting import from {file_path} as '{source_name}'")
 
         self._purge_source_data(source_name)
-        
+
         with open(file_path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
 
@@ -122,7 +123,7 @@ class ImportService:
             self._import_format_b(data, source_name)
         else:
             raise ValueError(f"Unknown JSON format in {file_path}")
-            
+
         logger.info(f"Import from {source_name} complete.")
 
     def _purge_source_data(self, source_name: str):
@@ -207,9 +208,9 @@ class ImportService:
     def _import_chapters(self, book: Book, chapters_data: list, source_name: str, format_type: ImportFormat):
         """Imports chapters and verses for a specific book."""
         logger.info(f"Importing book: {book.name}")
-        
+
         verses_to_create = []
-        
+
         # We process chapter by chapter
         for c_idx, c_data in enumerate(chapters_data):
             # Resolve chapter number
@@ -217,17 +218,17 @@ class ImportService:
                 chapter_number = c_data.get("ID") or (c_idx + 1)
             else:
                 chapter_number = c_data.get("chapter") or (c_idx + 1)
-                
+
             chapter, _ = Chapter.objects.get_or_create(
                 book=book,
                 number=chapter_number,
             )
-            
+
             verses_data = c_data.get("verses", []) if format_type == ImportFormat.FORMAT_B else c_data.get("Verses", [])
-            
+
             # Format A: first verse often lacks ID. Keep internal counter.
             internal_number = 1
-            
+
             for v_idx, v_data in enumerate(verses_data):
                 if format_type == ImportFormat.FORMAT_A:
                     # In Format A, ID is often absent on first verse
@@ -241,15 +242,15 @@ class ImportService:
                     original_id = v_data.get("verse")
                     verse_number = original_id or (v_idx + 1)
                     raw_text = v_data.get("text", "")
-                    
+
                 internal_number += 1
-                
+
                 cleaned_text = CleaningService.clean_text(raw_text)
-                
+
                 # Instruction spec: Skip completely empty verses
                 if not cleaned_text:
                     continue
-                    
+
                 verses_to_create.append(
                     Verse(
                         chapter=chapter,
@@ -270,24 +271,22 @@ class ImportService:
             with transaction.atomic():
                 # Delete existing verses from this source for this book to ensure clean import
                 Verse.objects.filter(chapter__book=book, source_file=source_name).delete()
-                
+
                 # Bulk create verses with chunk size 1000, ignore duplicates from dirty JSON files
                 batch_size = 1000
                 Verse.objects.bulk_create(verses_to_create, batch_size=batch_size, ignore_conflicts=True)
-                
+
                 # Update counters
                 self._update_counters(book)
-                
+
                 logger.info(f"Imported {len(verses_to_create)} verses for {book.name}")
-                
+
         except Exception as e:
             logger.error(f"Failed to import book {book.name}: {str(e)}")
             raise
 
         # Enqueue async tasks for this book
         populate_tsv_task.delay(book.id)
-        if getattr(settings, "PGVECTOR_ENABLED", False):
-            compute_embeddings_task.delay(book.id)
 
     def _update_counters(self, book: Book):
         """Updates verse_count on Chapter and Book models."""

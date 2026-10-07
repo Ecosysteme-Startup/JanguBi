@@ -13,9 +13,7 @@ from typing import Any
 
 # Modules « socle » : toujours actifs, non gelables (identité, erreurs, fichiers…).
 # ``contact`` : formulaire public « Pour les paroisses », jamais gelé.
-CORE_MODULES: frozenset[str] = frozenset(
-    {"authentication", "users", "files", "notifications", "contact"}
-)
+CORE_MODULES: frozenset[str] = frozenset({"authentication", "users", "files", "notifications", "contact"})
 
 # Modules et sous-modules qu'on peut activer ou geler.
 FREEZABLE_MODULES: tuple[str, ...] = (

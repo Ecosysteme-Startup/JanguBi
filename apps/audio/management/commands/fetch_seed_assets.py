@@ -1,8 +1,8 @@
 """Télécharge une fois les médias du manifeste ``seed_assets/manifest.yaml`` (domaine public, CC0, CC BY),
-vérifie leur sha256 et les range dans le cache local ou le bucket MinIO ``seed-assets`` (recette).
+vérifie leur sha256 et les range dans le cache local ou, en recette, sous ``seed-assets/`` dans le bucket MinIO de l'app.
 
     python manage.py fetch_seed_assets                    # cache local (~/.cache/jangubi-seed/)
-    python manage.py fetch_seed_assets --profil recette   # bucket MinIO « seed-assets »
+    python manage.py fetch_seed_assets --profil recette   # seed-assets/ du bucket MinIO de l'app
     python manage.py fetch_seed_assets --epingler         # écrit dans le manifeste les sha256 manquants
 
 Un fichier injoignable ou dont l'empreinte diffère est signalé et ignoré : le semis se replie sur
@@ -48,7 +48,10 @@ class Command(BaseCommand):
             text = path.read_text(encoding="utf-8")
             for asset_id, digest in pins.items():
                 text = re.sub(
-                    rf"(- id: {re.escape(asset_id)}\n(?:    .*\n)*?    sha256:)[ \t]*\n", rf"\1 {digest}\n", text, count=1
+                    rf"(- id: {re.escape(asset_id)}\n(?:    .*\n)*?    sha256:)[ \t]*\n",
+                    rf"\1 {digest}\n",
+                    text,
+                    count=1,
                 )
             path.write_text(text, encoding="utf-8")
             self.stdout.write(f"{len(pins)} empreinte(s) épinglée(s) dans {path}.")

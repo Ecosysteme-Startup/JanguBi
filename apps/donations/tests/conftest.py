@@ -65,13 +65,19 @@ def world(tree):
     nominate(w.econome_dio, "econome_diocesain", w.dakar)
     nominate(w.doyen, "doyen", tree.doyenne)
     DonationActivation.objects.create(
-        node=w.sd, enabled=True, authorization_ref="ARCH-DAK-2026-041", authorization_date=TODAY, allocation_key="SD01",
+        node=w.sd,
+        enabled=True,
+        authorization_ref="ARCH-DAK-2026-041",
+        authorization_date=TODAY,
+        allocation_key="SD01",
         receipt_prefix="SD",
     )
     return w
 
 
-def open_fund(world: Any, *, kind: str = "quete_dominicale", title: str = "Quête du dimanche 27 septembre", **kw: Any) -> Fund:
+def open_fund(
+    world: Any, *, kind: str = "quete_dominicale", title: str = "Quête du dimanche 27 septembre", **kw: Any
+) -> Fund:
     fund = services.fund_create(actor=world.cure, node=world.sd, kind=kind, title=title, **kw)
     return services.fund_publish(fund=fund, actor=world.cure)
 
@@ -81,7 +87,9 @@ def fund(world):
     return open_fund(world)
 
 
-def pay(donation: Any, *, status: str = "completed", amount: int | None = None, method: str = "wave", fee: int | None = None):
+def pay(
+    donation: Any, *, status: str = "completed", amount: int | None = None, method: str = "wave", fee: int | None = None
+):
     """Simule l'agrégateur puis poste la notification signée ; renvoie la réponse HTTP."""
     attempt = donation.attempts.get()
     headers, body = FakeProvider.simulate(attempt.external_ref, status, amount=amount, method=method, fee=fee)

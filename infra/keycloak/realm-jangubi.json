@@ -29,6 +29,44 @@
   ],
   "defaultLocale": "fr",
   "browserFlow": "browser-mfa",
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 20,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 30,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 40,
+      "config": {}
+    }
+  ],
   "roles": {
     "realm": [
       {
@@ -367,7 +405,7 @@
         "subComponents": {},
         "config": {
           "kc.user.profile.config": [
-            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"multivalued\": false}, {\"name\": \"phone\", \"displayName\": \"${phoneLabel}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 20}, \"pattern\": {\"pattern\": \"^\\\\s*(?:\\\\+?221[\\\\s.-]?)?7[05-8](?:[\\\\s.-]?\\\\d){7}\\\\s*$\", \"error-message\": \"phoneInvalid\"}}, \"annotations\": {\"inputType\": \"html5-tel\", \"inputTypePlaceholder\": \"${phonePlaceholder}\", \"inputHelperTextBefore\": \"${phonePrefix}\", \"inputHelperTextAfter\": \"${phoneHelp}\", \"autocomplete\": \"tel-national\", \"inputTypeMaxlength\": \"20\"}, \"multivalued\": false}, {\"name\": \"birthdate\", \"displayName\": \"${birthdateLabel}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"iso-date\": {}}, \"annotations\": {\"inputType\": \"html5-date\", \"autocomplete\": \"bday\"}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"multivalued\": false}, {\"name\": \"phone\", \"displayName\": \"${phoneLabel}\", \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"validations\": {\"length\": {\"max\": 20}, \"pattern\": {\"pattern\": \"^\\\\s*(?:\\\\+?221[\\\\s.-]?)?7[05-8](?:[\\\\s.-]?\\\\d){7}\\\\s*$\", \"error-message\": \"phoneInvalid\"}}, \"annotations\": {\"inputType\": \"html5-tel\", \"inputTypePlaceholder\": \"${phonePlaceholder}\", \"inputHelperTextBefore\": \"${phonePrefix}\", \"inputHelperTextAfter\": \"${phoneHelp}\", \"autocomplete\": \"tel-national\", \"inputTypeMaxlength\": \"20\"}, \"multivalued\": false}, {\"name\": \"birthdate\", \"displayName\": \"${birthdateLabel}\", \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"validations\": {\"iso-date\": {}}, \"annotations\": {\"inputType\": \"html5-date\", \"autocomplete\": \"bday\"}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
           ]
         }
       }

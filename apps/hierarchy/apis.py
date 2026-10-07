@@ -120,12 +120,22 @@ def _resolve_node_refs(data: dict[str, Any]) -> dict[str, Any]:
 
 
 class NodeTypeListApi(HierarchyBaseApi):
-    @extend_schema(tags=TAG, summary="Types de nœuds et parents autorisés", responses=NodeTypeOutputSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Types de nœuds et parents autorisés", responses=NodeTypeOutputSerializer(many=True)
+    )
     def get(self, request: Request) -> Response:
         return Response(NodeTypeOutputSerializer(selectors.node_type_list(), many=True).data)
 
 
 class NodeListCreateApi(HierarchyBaseApi):
+    def get_permissions(self):
+        # JB-API-001 : la liste des nœuds expose tout l'arbre (statut, coordonnées, nœuds
+        # non actifs) et n'est PAS un écran public — l'annuaire public passe par public/nodes/.
+        # Lecture réservée aux utilisateurs connectés ; écriture soumise à la capacité.
+        if self.request.method in SAFE_METHODS:
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), _CanWrite()]
+
     def get_write_node(self) -> Node | None:
         parent_id = self.request.data.get("parent_id") if hasattr(self.request.data, "get") else None
         try:
@@ -235,7 +245,9 @@ class NodeChildrenApi(HierarchyBaseApi):
 
 
 class NodeAncestorsApi(HierarchyBaseApi):
-    @extend_schema(tags=TAG, summary="Ancêtres d'un nœud (de la racine au parent)", responses=NodeOutputSerializer(many=True))
+    @extend_schema(
+        tags=TAG, summary="Ancêtres d'un nœud (de la racine au parent)", responses=NodeOutputSerializer(many=True)
+    )
     def get(self, request: Request, node_id: str) -> Response:
         node = selectors.node_get(node_id=node_id)
         ancestors = list(selectors.node_ancestors(node=node))
@@ -336,7 +348,7 @@ class PlaceExceptionListCreateApi(HierarchyBaseApi):
         place = selectors.place_get(place_id=place_id)
         serializer = ScheduleExceptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        exception = services.schedule_exception_create(place=place, **serializer.validated_data)
+        exception = services.schedule_exception_create(place=place, actor=request.user, **serializer.validated_data)
         return Response(ScheduleExceptionSerializer(exception).data, status=status.HTTP_201_CREATED)
 
 
@@ -348,7 +360,8 @@ class PlaceExceptionDeleteApi(HierarchyBaseApi):
     def delete(self, request: Request, place_id: int, exception_id: int) -> Response:
         place = selectors.place_get(place_id=place_id)
         services.schedule_exception_delete(
-            exception=selectors.schedule_exception_get(place=place, exception_id=exception_id)
+            exception=selectors.schedule_exception_get(place=place, exception_id=exception_id),
+            actor=request.user,
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
 

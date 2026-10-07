@@ -93,3 +93,30 @@ def test_transferred_solemnities():
 def test_solemnity_replaces_ordinary_sunday_but_not_lent_sunday():
     assert cal.liturgical_day(D(2026, 11, 1)).celebration == "Tous les Saints"  # dimanche du T.O.
     assert cal.liturgical_day(D(2026, 3, 22)).celebration == "5e dimanche de Carême"
+
+
+def test_sanctoral_feasts_and_memorials_2026():
+    # JB-WEB-010 : fêtes et mémoires du calendrier romain général, plus en « férie vert ».
+    archanges = cal.liturgical_day(D(2026, 9, 29))  # mardi
+    assert archanges.celebration == "Saints Michel, Gabriel et Raphaël, archanges"
+    assert (archanges.rank, archanges.color) == (cal.FEAST, cal.WHITE)
+
+    therese = cal.liturgical_day(D(2026, 10, 1))  # jeudi
+    assert therese.celebration.startswith("Sainte Thérèse de l'Enfant-Jésus")
+    assert (therese.rank, therese.color) == (cal.MEMORIAL, cal.WHITE)
+
+    anges = cal.liturgical_day(D(2026, 10, 2))  # vendredi
+    assert anges.celebration == "Saints Anges gardiens"
+    assert (anges.rank, anges.color) == (cal.MEMORIAL, cal.WHITE)
+
+    # Mémoire de martyre un jour de semaine : couleur rouge.
+    agnes = cal.liturgical_day(D(2026, 1, 21))  # mercredi
+    assert (agnes.rank, agnes.color) == (cal.MEMORIAL, cal.RED)
+
+
+def test_sanctoral_never_overrides_sunday_or_season():
+    # Saint François d'Assise (4 oct) tombe un dimanche en 2026 : le dimanche l'emporte.
+    assert cal.liturgical_day(D(2026, 10, 4)).celebration == "27e dimanche du temps ordinaire"
+    # Une férie sans mémoire reste férie verte.
+    assert cal.liturgical_day(D(2026, 10, 5)).rank == cal.WEEKDAY
+    assert cal.liturgical_day(D(2026, 10, 5)).color == cal.GREEN

@@ -4,7 +4,7 @@
     python manage.py seed_prod --jours 30      # liturgie sur 30 jours
     python manage.py seed_prod --hors-ligne    # sans appel à AELF (liturgie sautée)
 
-Rien de fictif ici : référentiel territorial (profil ``senegal``), Bible (importée seulement si absente),
+Rien de fictif ici : référentiel territorial (profil ``senegal``), Bible (importée si absente ou incomplète),
 mystères du Rosaire, lectures du jour AELF rattachées aux versets. Les données de démonstration et de test
 sont dans ``seed_recette``.
 """
@@ -37,11 +37,13 @@ class Command(BaseCommand):
         call_command("seed_hierarchy_profile", o["territoire"], stdout=self.stdout)
 
         self._step("Bible")
-        from apps.bible.seeders import bible_present
+        from apps.bible.seeders import bible_complete, bible_present
 
-        if bible_present():
+        if bible_complete(o["bible_json"], o["bible_source"]):
             self.stdout.write("  déjà importée")
         else:
+            if bible_present():
+                self.stdout.write(self.style.WARNING("  import incomplet (livres manquants) : réimport"))
             call_command("import_bible", o["bible_json"], source=o["bible_source"], stdout=self.stdout)
 
         self._step("Rosaire")
@@ -70,12 +72,15 @@ class Command(BaseCommand):
             # Synchrone : les lectures doivent exister avant leur rattachement aux versets.
             daily_sync_task.apply(args=[day.isoformat(), [zone]])
         served = set(
-            Reading.objects.filter(liturgical_date__zone=zone, liturgical_date__date__in=days)
-            .values_list("liturgical_date__date", flat=True)
+            Reading.objects.filter(liturgical_date__zone=zone, liturgical_date__date__in=days).values_list(
+                "liturgical_date__date", flat=True
+            )
         )
         self.stdout.write(f"  {len(served)}/{jours} jour(s) avec lectures, zone {zone}")
         if len(served) < jours:
-            self.stdout.write(self.style.WARNING("  AELF injoignable pour certains jours : relancer seed_prod plus tard."))
+            self.stdout.write(
+                self.style.WARNING("  AELF injoignable pour certains jours : relancer seed_prod plus tard.")
+            )
 
     def _step(self, label: str) -> None:
         self.stdout.write(self.style.MIGRATE_HEADING(f"▸ {label}"))

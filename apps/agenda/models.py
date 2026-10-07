@@ -56,9 +56,7 @@ class Event(BaseModel):
     # s'y sont engagés et sont prévenus par email) et sort simplement des feeds.
     # Une suppression sèche cascaderait sur EventRegistration et effacerait la
     # trace de qui s'était inscrit — inacceptable pour un acte pastoral public.
-    cancelled_at = models.DateTimeField(
-        _("annulé le"), null=True, blank=True, db_index=True
-    )
+    cancelled_at = models.DateTimeField(_("annulé le"), null=True, blank=True, db_index=True)
     cancelled_by = models.ForeignKey(
         "users.BaseUser",
         verbose_name=_("annulé par"),

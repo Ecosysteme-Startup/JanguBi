@@ -37,7 +37,10 @@ class ConfessionsSeeder(Seeder):
             if ctx.persona("vicaire") in priests:
                 priests = [staff_of(parish, "cure")]  # le vicaire persona a déjà sa règle (seed_demo)
             for k, priest in enumerate(priests):
-                weekday, hour = [(5, 10), (2, 18), (4, 17)][k % 3]
+                # JB-WEB-018 : le samedi, les créneaux tombent dans la permanence de confession
+                # affichée (16 h-18 h) au lieu de 10 h ; les autres jours restent des créneaux
+                # supplémentaires en soirée.
+                weekday, hour = [(5, 16), (2, 18), (4, 17)][k % 3]
                 rule = ConfessionSlotRule(priest=priest, place=place, weekday=weekday, start_time=datetime.time(hour, 0),
                                           end_time=datetime.time(hour + 1, 0), slot_minutes=15,
                                           valid_from=ctx.today - datetime.timedelta(days=60))  # fmt: skip
@@ -56,7 +59,9 @@ class ConfessionsSeeder(Seeder):
                                 if past:
                                     status = rng.choices(["honoree", "absent", "annulee_fidele"], [80, 10, 10])[0]
                                 else:
-                                    status = rng.choices(["reservee", "annulee_fidele", "annulee_pretre"], [85, 10, 5])[0]
+                                    status = rng.choices(["reservee", "annulee_fidele", "annulee_pretre"], [85, 10, 5])[
+                                        0
+                                    ]
                                 cancelled = status.startswith("annulee")
                                 bookings.append(ConfessionBooking(
                                     slot=slot, person_id=person, status=status,
@@ -64,7 +69,9 @@ class ConfessionsSeeder(Seeder):
                                     cancel_message="Empêchement, je réserverai un autre créneau." if status == "annulee_fidele" else
                                     ("Absence imprévue du prêtre. Merci de choisir un autre créneau." if status == "annulee_pretre" else ""),
                                 ))  # fmt: skip
-                                slot.status = {"reservee": "reserve", "annulee_pretre": "bloque"}.get(status, "reserve" if not cancelled else "libre")
+                                slot.status = {"reservee": "reserve", "annulee_pretre": "bloque"}.get(
+                                    status, "reserve" if not cancelled else "libre"
+                                )
                     day += datetime.timedelta(days=1)
         with transaction.atomic():
             ConfessionSlotRule.objects.bulk_create(rules)

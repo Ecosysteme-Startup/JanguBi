@@ -1,6 +1,6 @@
 # Manifeste des médias de test (plan des données de test §5). AUCUN binaire dans Git : seulement ce fichier.
 # `python manage.py fetch_seed_assets` télécharge chaque fichier une fois, vérifie son sha256 et le range dans le
-# cache local (~/.cache/jangubi-seed/) ou, en recette (--profil recette), dans le bucket MinIO « seed-assets ».
+# cache local (~/.cache/jangubi-seed/) ou, en recette (--profil recette), sous seed-assets/ dans le bucket MinIO de l'app.
 #
 # Règle : domaine public, CC0, CC BY ou CC BY-SA uniquement (pas de NC ni de ND) ; l'attribution est reprise
 # dans les crédits de la piste. Les photos Unsplash (licence Unsplash) servent de pochettes, comme dans l'app.

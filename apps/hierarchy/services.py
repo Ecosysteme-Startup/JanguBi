@@ -116,7 +116,9 @@ def node_update(*, node: Node, data: dict[str, Any]) -> Node:
     if unknown:
         raise ApplicationError("Champs non modifiables.", {"fields": sorted(unknown)}, code="field_not_updatable")
     if "code" in data and Node.objects.filter(code=data["code"]).exclude(pk=node.pk).exists():
-        raise ApplicationError(f"Le code « {data['code']} » est déjà utilisé.", {"code": data["code"]}, code="code_taken")
+        raise ApplicationError(
+            f"Le code « {data['code']} » est déjà utilisé.", {"code": data["code"]}, code="code_taken"
+        )
     if data.get("located_in") is not None and data["located_in"].pk == node.pk:
         raise ApplicationError("Un nœud ne peut pas être situé dans lui-même.", code="invalid_location")
 
@@ -251,15 +253,14 @@ def schedule_exception_create(
     start_time: time | None = None,
     end_time: time | None = None,
     note: str = "",
+    actor: Any = None,
 ) -> ScheduleException:
     if not cancelled and start_time is None:
-        raise ApplicationError(
-            "Un horaire supplémentaire doit avoir une heure de début.", code="exception_needs_time"
-        )
+        raise ApplicationError("Un horaire supplémentaire doit avoir une heure de début.", code="exception_needs_time")
     if start_time is not None and end_time is not None and end_time <= start_time:
         raise ApplicationError("La fin doit suivre le début.", code="invalid_schedule")
     try:
-        return ScheduleException.objects.create(
+        exception = ScheduleException.objects.create(
             place=place,
             date=date,
             kind=kind,
@@ -270,8 +271,29 @@ def schedule_exception_create(
         )
     except IntegrityError as exc:  # pragma: no cover - doublé par la validation ci-dessus
         raise ApplicationError("Exception d'horaire invalide.", code="invalid_schedule") from exc
+    # JB-WEB-031 : action sensible → journal d'audit (rubrique Horaires).
+    audit_log(
+        actor=actor,
+        action="horaires.exception_creee",
+        target=exception,
+        node=place.node,
+        metadata={"place_id": place.pk, "date": date.isoformat(), "kind": kind, "cancelled": cancelled},
+    )
+    return exception
 
 
 @transaction.atomic
-def schedule_exception_delete(*, exception: ScheduleException) -> None:
+def schedule_exception_delete(*, exception: ScheduleException, actor: Any = None) -> None:
+    # JB-WEB-031 : on journalise AVANT la suppression (Django remet la pk à None après delete).
+    audit_log(
+        actor=actor,
+        action="horaires.exception_supprimee",
+        target=exception,
+        node=exception.place.node,
+        metadata={
+            "place_id": exception.place_id,
+            "date": exception.date.isoformat(),
+            "kind": exception.kind,
+        },
+    )
     exception.delete()

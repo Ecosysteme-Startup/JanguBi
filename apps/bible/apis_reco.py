@@ -33,7 +33,9 @@ class ReadingEventInputSerializer(serializers.Serializer):
         has_verse = bool(attrs.get("verset_debut_id") or attrs.get("verset_fin_id"))
         has_chapter = bool(attrs.get("livre_id") and attrs.get("chapitre"))
         if not has_verse and not has_chapter:
-            raise serializers.ValidationError("Indiquez un verset (verset_debut_id) ou un chapitre (livre_id et chapitre).")
+            raise serializers.ValidationError(
+                "Indiquez un verset (verset_debut_id) ou un chapitre (livre_id et chapitre)."
+            )
         return attrs
 
 
@@ -194,7 +196,9 @@ class BookmarkListCreateApi(V1ApiMixin, ApiAuthMixin, APIView):
         serializer = BookmarkInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        bookmark = bookmark_upsert(user=request.user, verse_id=data["verset_id"], color=data["couleur"], note=data["note"])
+        bookmark = bookmark_upsert(
+            user=request.user, verse_id=data["verset_id"], color=data["couleur"], note=data["note"]
+        )
         bookmark = bookmark_get(user=request.user, bookmark_id=bookmark.pk)
         return Response(BookmarkOutputSerializer(bookmark).data, status=status.HTTP_201_CREATED)
 

@@ -173,9 +173,7 @@ def capability_holders(*, node: Node, capability: str, direct_only: bool = False
         .filter(Q(node=node) | Q(office_type__inherits_down=True))
         .select_related("node", "office_type")
     )
-    overrides = list(
-        CapabilityOverride.objects.filter(capability_id=capability).select_related("diocese_node")
-    )
+    overrides = list(CapabilityOverride.objects.filter(capability_id=capability).select_related("diocese_node"))
     person_ids = {
         a.person_id
         for a in assignments

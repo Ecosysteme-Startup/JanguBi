@@ -5,7 +5,6 @@ from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
-from pgvector.django import HnswIndex, VectorField
 
 from apps.common.models import BaseModel
 
@@ -89,13 +88,9 @@ class Verse(models.Model):
     original_position = models.IntegerField(null=True, blank=True)
     source_file = models.CharField(max_length=128, blank=True, null=True)
 
-    # Postgres full-text search vector
+    # Plein texte PostgreSQL (configuration PG_TS_CONFIG, `fr_unaccent`) : recherche et proximité
+    # entre versets, sans IA ni modèle (ADR-018).
     tsv = SearchVectorField(null=True)
-
-    # pgvector embedding — 768 dims (modèle local mpnet-base-v2, recherche
-    # sémantique cosine). Vecteurs non normalisés => on interroge en cosine
-    # (<=> / vector_cosine_ops), invariant à l'échelle.
-    embedding = VectorField(dimensions=768, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -104,14 +99,6 @@ class Verse(models.Model):
         ordering = ["number"]
         indexes = [
             GinIndex(fields=["tsv"], name="idx_verse_tsv"),
-            # Index ANN cosine pour la recherche vectorielle (top-k via <=>).
-            HnswIndex(
-                name="idx_verse_embedding_hnsw",
-                fields=["embedding"],
-                m=16,
-                ef_construction=64,
-                opclasses=["vector_cosine_ops"],
-            ),
         ]
 
     def __str__(self) -> str:
@@ -267,9 +254,7 @@ class ReadingPlanSubscription(BaseModel):
         verbose_name = "Inscription à un parcours"
         verbose_name_plural = "Inscriptions aux parcours"
         constraints = [
-            models.UniqueConstraint(
-                fields=["user", "plan"], name="uniq_reading_plan_subscription"
-            ),
+            models.UniqueConstraint(fields=["user", "plan"], name="uniq_reading_plan_subscription"),
         ]
 
     def __str__(self) -> str:

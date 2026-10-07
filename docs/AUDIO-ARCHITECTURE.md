@@ -203,17 +203,27 @@ globale du catalogue (`audio:catalog:version`), ce qui invalide toutes les entr�
   1 h 10) crée le mois courant et les deux suivants, déplace les lignes tombées dans `DEFAULT`, et
   supprime les partitions de plus de 13 mois.
 
+## 7 bis. Encodages interrompus
+
+Un worker média tué en plein encodage (redéploiement, manque de mémoire) laissait la piste « encodage »
+pour toujours (recette du 30/09/2026). `audio_transcode_stalled_task` (toutes les 15 min) relance les
+pistes « encodage » ou « en_file » sans nouvelles depuis `AUDIO_TRANSCODE_STALL_SECONDS` (45 min, plus que
+le verrou de 30 min : jamais deux encodages à la fois) ; au-delà de 4 tentatives, la piste passe en échec
+et l'uploader est prévenu.
+
 ## 8. Recommandations (`audio_reco_recompute_task`, file `reco`, 3 h 05)
 
-1. Embeddings des métadonnées des pistes prêtes (fournisseur des versets, `EMBEDDING_PROVIDER`,
-   768 dimensions, index HNSW cosinus), recalculés seulement si le texte a changé (empreinte).
-2. Voisins **co-écoute** : cosinus binaire utilisateur × piste sur 90 jours (écoutes complètes,
+1. Voisins **co-écoute** : cosinus binaire utilisateur × piste sur 90 jours (écoutes complètes,
    likes, ajouts en playlist), en SQL, 50 par piste, au moins 2 auditeurs communs.
-3. Voisins **contenu** : 50 plus proches par pgvector (poids 0,6 face à la co-écoute).
-4. Par utilisateur actif : voisins de ses signaux récents (demi-vie 30 jours), nouveautés de sa
+2. Voisins **contenu**, en SQL sur les métadonnées, sans IA ni modèle (ADR-018) : même album
+   0,30 ; même temps liturgique (le sien, sinon celui de l'album) 0,15 ; mots-clés communs
+   0,25 × Jaccard ; même source 0,10 ; même compositeur 0,05 ; interprètes communs 0,05 × Jaccard ;
+   titres proches 0,10 × similarité trigramme. Seuil 0,10, 50 par piste (poids 0,6 face à la
+   co-écoute). Une piste neuve sans album se rattache au moins aux pistes de sa source.
+3. Par utilisateur actif : voisins de ses signaux récents (demi-vie 30 jours), nouveautés de sa
    paroisse, temps liturgique du jour ; on retire ce qu'il a déjà écouté, passé ou aimé ; filtre
    par droits ; 100 au plus, raison lisible (« Parce que vous avez écouté « Kyrie » »).
-5. Réglages : `AUDIO_RECO_ENABLED` (global) et « recommandations personnalisées » par personne.
+4. Réglages : `AUDIO_RECO_ENABLED` (global) et « recommandations personnalisées » par personne.
    Aucune donnée de dons, de confession ou de messagerie n'est lue.
 
 ## 9. À faire par l'équipe (Cloudflare R2 et CDN)

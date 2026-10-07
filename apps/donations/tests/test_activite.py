@@ -24,7 +24,9 @@ def keys(value: Any) -> set[str]:
 
 
 def test_activity_has_counts_rates_and_delays_but_no_amount(world, sept):
-    Donation.objects.filter(pk__in=[d.pk for d in sept.online[:6]]).update(returned_at=datetime.datetime(2026, 9, 20, tzinfo=datetime.UTC))
+    Donation.objects.filter(pk__in=[d.pk for d in sept.online[:6]]).update(
+        returned_at=datetime.datetime(2026, 9, 20, tzinfo=datetime.UTC)
+    )
     PaymentWebhookEvent.objects.create(provider="fake", payload_hash="a" * 64, status=WebhookStatus.TRAITE)
     PaymentWebhookEvent.objects.create(provider="fake", payload_hash="b" * 64, status=WebhookStatus.ERREUR,
                                        error_code="unknown_reference", external_ref="fake_x")  # fmt: skip
@@ -38,10 +40,17 @@ def test_activity_has_counts_rates_and_delays_but_no_amount(world, sept):
     assert p["plus_ancien_en_attente"].startswith("2026-09-27T01:00")
     assert body["delais"]["confirmation_mediane_s"] == 41 and body["delais"]["reversement_moyen_jours"] is not None
     assert [(m["moyen"], m["confirmes"]) for m in body["par_moyen"]][:4] == [
-        ("wave", 29), ("orange_money", 14), ("free_money", 0), ("carte", 4)
+        ("wave", 29),
+        ("orange_money", 14),
+        ("free_money", 0),
+        ("carte", 4),
     ]
     sources = {s["source"]: s for s in body["par_source"]}
-    assert (sources["app_android"]["confirmes"], sources["web"]["confirmes"], sources["app_ios"]["confirmes"]) == (26, 13, 8)
+    assert (sources["app_android"]["confirmes"], sources["web"]["confirmes"], sources["app_ios"]["confirmes"]) == (
+        26,
+        13,
+        8,
+    )
     assert sum(s["retours"] for s in body["par_source"]) == 6
     names = [row["nom"] for row in body["par_paroisse"]]
     assert names[0] == "Cathédrale Notre-Dame-des-Victoires" and len(names) == 5

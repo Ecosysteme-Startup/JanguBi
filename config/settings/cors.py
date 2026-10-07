@@ -41,4 +41,7 @@ CORS_ALLOW_HEADERS = (
     "x-auth-transport",
     # Reprise des flux SSE (dons) avec @microsoft/fetch-event-source (docs/TEMPS-REEL.md §3.4).
     "last-event-id",
+    # Déduplication des paiements : le front envoie cet en-tête sur POST /dons/checkout/.
+    # Non safelisté CORS → sans cette ligne le preflight OPTIONS le refuse.
+    "idempotency-key",
 )

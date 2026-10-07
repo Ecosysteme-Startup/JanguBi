@@ -14,9 +14,19 @@ urlpatterns = [
     path("accounts/<uuid:account_id>/", a.AdminAccountDetailApi.as_view(), name="account"),
     path("accounts/<uuid:account_id>/disable/", a.AdminAccountDisableApi.as_view(), name="account-disable"),
     path("accounts/<uuid:account_id>/enable/", a.AdminAccountEnableApi.as_view(), name="account-enable"),
-    path("accounts/<uuid:account_id>/password-reset/", a.AdminAccountPasswordResetApi.as_view(), name="account-password-reset"),
-    path("accounts/<uuid:account_id>/actions-email/", a.AdminAccountActionsEmailApi.as_view(), name="account-actions-email"),
-    path("accounts/<uuid:account_id>/verify-email/", a.AdminAccountVerifyEmailApi.as_view(), name="account-verify-email"),
+    path(
+        "accounts/<uuid:account_id>/password-reset/",
+        a.AdminAccountPasswordResetApi.as_view(),
+        name="account-password-reset",
+    ),
+    path(
+        "accounts/<uuid:account_id>/actions-email/",
+        a.AdminAccountActionsEmailApi.as_view(),
+        name="account-actions-email",
+    ),
+    path(
+        "accounts/<uuid:account_id>/verify-email/", a.AdminAccountVerifyEmailApi.as_view(), name="account-verify-email"
+    ),
     path(
         "accounts/<uuid:account_id>/mark-email-verified/",
         a.AdminAccountMarkEmailVerifiedApi.as_view(),
@@ -35,7 +45,11 @@ urlpatterns = [
         a.AdminAccountBruteForceUnlockApi.as_view(),
         name="account-brute-force-unlock",
     ),
-    path("accounts/<uuid:account_id>/platform-admin/", a.AdminAccountPlatformAdminApi.as_view(), name="account-platform-admin"),
+    path(
+        "accounts/<uuid:account_id>/platform-admin/",
+        a.AdminAccountPlatformAdminApi.as_view(),
+        name="account-platform-admin",
+    ),
     path("accounts/<uuid:account_id>/resync/", a.AdminAccountResyncApi.as_view(), name="account-resync"),
     path("accounts/<uuid:account_id>/offices/", a.AdminAccountOfficeAssignApi.as_view(), name="account-offices"),
     path(

@@ -47,15 +47,14 @@ class ImportServiceTests(TestCase):
         self.assertEqual(order, 999)
 
     @patch("apps.bible.services.import_service.populate_tsv_task.delay")
-    @patch("apps.bible.services.import_service.compute_embeddings_task.delay")
-    def test_import_format_a(self, mock_emb, mock_tsv):
+    def test_import_format_a(self, mock_tsv):
         self.service.import_file(self.format_a_path, "FRC97")
 
         # In mini_bible_format_a.json:
         # AT: 1 book (Genèse) -> 2 chapters -> 3 verses, 2 verses = 5 verses
         # NT: 1 book (Exode/Jean) -> 1 chapter -> 3 verses
         self.assertEqual(Book.objects.count(), 2)
-        
+
         # Check first book
         genese = Book.objects.get(name="Genèse")
         self.assertEqual(genese.chapters.count(), 2)
@@ -73,23 +72,16 @@ class ImportServiceTests(TestCase):
 
         # The TSV indexing task is always enqueued per imported book.
         mock_tsv.assert_called()
-        # The embeddings task is gated by PGVECTOR_ENABLED; it is only enqueued
-        # when vector search is turned on (currently in stand-by by default).
-        if getattr(settings, "PGVECTOR_ENABLED", False):
-            mock_emb.assert_called()
-        else:
-            mock_emb.assert_not_called()
 
     @patch("apps.bible.services.import_service.populate_tsv_task.delay")
-    @patch("apps.bible.services.import_service.compute_embeddings_task.delay")
-    def test_import_format_b_skips_empty_verses(self, mock_emb, mock_tsv):
+    def test_import_format_b_skips_empty_verses(self, mock_tsv):
         self.service.import_file(self.format_b_path, "FreSynodale1921")
 
         # In mini_bible_format_b.json:
         # Genesis has 2 verses but both are empty text
         # Psalms has 3 verses with text
         self.assertEqual(Book.objects.count(), 2)
-        
+
         psalms = Book.objects.get(name="Psaumes")
         self.assertEqual(psalms.verse_count, 3)
         self.assertEqual(psalms.testament.slug, "psaume")
@@ -100,12 +92,11 @@ class ImportServiceTests(TestCase):
         self.assertEqual(genese.chapters.first().verses.count(), 0)
 
     @patch("apps.bible.services.import_service.populate_tsv_task.delay")
-    @patch("apps.bible.services.import_service.compute_embeddings_task.delay")
-    def test_import_replaces_existing_source(self, mock_emb, mock_tsv):
+    def test_import_replaces_existing_source(self, mock_tsv):
         # Import once
         self.service.import_file(self.format_b_path, "FreSynodale1921")
         initial_verses = Verse.objects.count()
-        
+
         # Import again with SAME source
         self.service.import_file(self.format_b_path, "FreSynodale1921")
         self.assertEqual(Verse.objects.count(), initial_verses)

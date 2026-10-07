@@ -23,6 +23,14 @@ def audio_transcode_task(self: Any, track_id: str, version: int) -> str:
         raise self.retry(exc=exc, countdown=30 * (2**self.request.retries)) from exc
 
 
+@shared_task
+def audio_transcode_stalled_task() -> dict[str, int]:
+    """Toutes les 15 min : relance les encodages interrompus (worker tué par un redéploiement…)."""
+    from apps.audio.services import tracks_stalled_requeue
+
+    return tracks_stalled_requeue()
+
+
 @shared_task(queue="reco")
 def audio_reco_recompute_task() -> dict[str, Any]:
     """Chaque nuit (3 h) : voisins de co-écoute et de contenu, recommandations par utilisateur."""

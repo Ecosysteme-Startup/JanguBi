@@ -73,7 +73,14 @@ from apps.hierarchy.models import Node, PlaceOfWorship
 logger = logging.getLogger(__name__)
 
 EDITABLE_FUND_FIELDS = (
-    "title", "description", "starts_on", "ends_on", "goal_amount", "authorization_ref", "image", "place",
+    "title",
+    "description",
+    "starts_on",
+    "ends_on",
+    "goal_amount",
+    "authorization_ref",
+    "image",
+    "place",
 )
 MAX_CASH_AMOUNT = 50_000_000
 IMPEREE_REMIT_DAYS = 7
@@ -260,7 +267,9 @@ def fund_update(*, fund: Fund, actor: Any, **fields: Any) -> Fund:
     for name, value in fields.items():
         setattr(fund, name, value)
     fund.save()
-    audit_log(actor=actor, action="dons.fonds_modification", target=fund, node=fund.node, metadata={"fields": sorted(fields)})
+    audit_log(
+        actor=actor, action="dons.fonds_modification", target=fund, node=fund.node, metadata={"fields": sorted(fields)}
+    )
     return fund
 
 
@@ -286,6 +295,26 @@ def fund_close(*, fund: Fund, actor: Any) -> Fund:
     fund.save(update_fields=["status", "closed_at", "updated_at"])
     audit_log(actor=actor, action="dons.fonds_cloture", target=fund, node=fund.node)
     return fund
+
+
+@transaction.atomic
+def funds_close_past(*, today: datetime.date | None = None) -> int:
+    """JB-WEB-042 : clôture automatique des fonds ouverts dont la période est révolue
+    (``ends_on`` passé) — quêtes dominicales et impérées restées « En cours » après leur fin.
+    Les fonds sans date de fin et les fonds déjà clos ne sont pas touchés ; une clôture manuelle
+    est donc respectée (on ne réouvre jamais). Renvoie le nombre de fonds clôturés."""
+    today = today or timezone.localdate()
+    now = timezone.now()
+    expired = list(
+        Fund.objects.filter(status=FundStatus.OUVERT, ends_on__isnull=False, ends_on__lt=today)
+    )
+    for fund in expired:
+        fund.status = FundStatus.CLOS
+        fund.closed_at = now
+        fund.save(update_fields=["status", "closed_at", "updated_at"])
+        audit_log(actor=None, action="dons.fonds_cloture_auto", target=fund, node=fund.node,
+                  metadata={"ends_on": fund.ends_on.isoformat() if fund.ends_on else None})  # fmt: skip
+    return len(expired)
 
 
 @transaction.atomic
@@ -381,11 +410,32 @@ def _check_fund_open(fund: Fund) -> DonationActivation:
         raise ApplicationError("On donne au fonds d'une paroisse.", code="not_a_parish_fund")
     activation = _activation_or_error(fund.node)
     today = timezone.localdate()
-    if fund.status != FundStatus.OUVERT or (fund.starts_on and today < fund.starts_on) or (
-        fund.ends_on and today > fund.ends_on
+    if (
+        fund.status != FundStatus.OUVERT
+        or (fund.starts_on and today < fund.starts_on)
+        or (fund.ends_on and today > fund.ends_on)
     ):
         raise ApplicationError("Ce fonds n'est pas ouvert aux dons.", code="fund_not_open")
     return activation
+
+
+ADULT_AGE = 18
+MINOR_DONATION_MESSAGE = (
+    "Les dons en ligne sont réservés aux personnes majeures. "
+    "Un mineur peut faire un don à sa paroisse accompagné d'un adulte."
+)
+
+
+def _donor_adult_check(donor: Any) -> None:
+    """RG-13 : refuse côté serveur un don d'un donateur connecté mineur. Un donateur anonyme
+    (non connecté) n'a pas de date de naissance : il n'est pas concerné par ce contrôle."""
+    birth = getattr(getattr(donor, "profile", None), "date_of_birth", None)
+    if birth is None:
+        return
+    today = timezone.localdate()
+    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+    if age < ADULT_AGE:
+        raise PermissionDeniedError(MINOR_DONATION_MESSAGE, code="minor")
 
 
 def checkout_create(
@@ -412,11 +462,15 @@ def checkout_create(
     if source not in DonationSource.values:
         source = DonationSource.INCONNU
     donor = donor if getattr(donor, "is_authenticated", False) else None
+    if donor is not None:
+        _donor_adult_check(donor)
     if idempotency_key:
         existing = PaymentAttempt.objects.select_related("donation").filter(idempotency_key=idempotency_key).first()
         if existing is not None:
             if existing.donation.fund_id != fund.pk or existing.donation.amount != amount:
-                raise ConflictError("Cette clé d'idempotence a déjà servi pour un autre don.", code="idempotency_conflict")
+                raise ConflictError(
+                    "Cette clé d'idempotence a déjà servi pour un autre don.", code="idempotency_conflict"
+                )
             return existing.donation, existing, False
     activation = _check_fund_open(fund)
     _check_place(place, fund.node)
@@ -469,7 +523,9 @@ def checkout_create(
         with transaction.atomic():
             attempt.status = AttemptStatus.ECHOUE
             attempt.save(update_fields=["status", "updated_at"])
-            donation_transition(donation=donation, to=DonationStatus.ECHOUE, source=StatusSource.CHECKOUT, note="provider")
+            donation_transition(
+                donation=donation, to=DonationStatus.ECHOUE, source=StatusSource.CHECKOUT, note="provider"
+            )
         raise ProviderUnavailable("Le service de paiement est indisponible. Réessayez dans un instant.") from exc
 
     with transaction.atomic():
@@ -478,7 +534,9 @@ def checkout_create(
         attempt.expires_at = session.expires_at
         attempt.raw_payload = session.raw
         attempt.status = AttemptStatus.EN_ATTENTE
-        attempt.save(update_fields=["external_ref", "checkout_url", "expires_at", "raw_payload", "status", "updated_at"])
+        attempt.save(
+            update_fields=["external_ref", "checkout_url", "expires_at", "raw_payload", "status", "updated_at"]
+        )
         donation = donation_transition(donation=donation, to=DonationStatus.EN_ATTENTE, source=StatusSource.CHECKOUT)
     return donation, attempt, True
 
@@ -496,9 +554,7 @@ def donation_mark_returned(*, donation: Donation) -> Donation:
 
 
 @transaction.atomic
-def donation_transition(
-    *, donation: Donation, to: str, source: str, actor: Any = None, note: str = ""
-) -> Donation:
+def donation_transition(*, donation: Donation, to: str, source: str, actor: Any = None, note: str = "") -> Donation:
     """Transition stricte et journalisée (SRS §8.4). Rester dans le même statut est sans effet."""
     locked = Donation.objects.select_for_update().get(pk=donation.pk)
     if locked.status == to:
@@ -714,6 +770,8 @@ def donations_reconcile(*, now: datetime.datetime | None = None) -> dict[str, in
     check_before = now - datetime.timedelta(minutes=settings.DONATIONS_PENDING_CHECK_MINUTES)
     expire_before = now - datetime.timedelta(hours=settings.DONATIONS_EXPIRE_HOURS)
     counts = {"verifies": 0, "confirmes": 0, "expires": 0, "erreurs": 0}
+    # JB-WEB-042 : clôture des fonds dont la période est révolue (statut cohérent avec les dates).
+    counts["fonds_clotures"] = funds_close_past(today=timezone.localdate())
     pending = PaymentAttempt.objects.filter(
         donation__status__in=[DonationStatus.INITIE, DonationStatus.EN_ATTENTE],
         external_ref__isnull=False,
@@ -1032,4 +1090,3 @@ def donor_emails_purge(*, now: datetime.datetime | None = None) -> int:
         .exclude(status__in=[DonationStatus.INITIE, DonationStatus.EN_ATTENTE])
         .update(donor_email="")
     )
-

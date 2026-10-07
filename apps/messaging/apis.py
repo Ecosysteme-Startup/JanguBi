@@ -92,7 +92,9 @@ class PriestListApi(ApiAuthMixin, APIView):
 class AvailabilityApi(ApiAuthMixin, APIView):
     permission_classes = [IsAuthenticated, HasCapability("messagerie.recevoir_fideles")]
 
-    @extend_schema(responses={200: AvailabilitySerializer}, tags=["messaging"], summary="Mes disponibilités (prêtre joignable)")
+    @extend_schema(
+        responses={200: AvailabilitySerializer}, tags=["messaging"], summary="Mes disponibilités (prêtre joignable)"
+    )
     def get(self, request):
         availability = MessagingAvailability.objects.filter(user=request.user).first() or MessagingAvailability(
             user=request.user
@@ -120,7 +122,11 @@ class AvailabilityApi(ApiAuthMixin, APIView):
 class MessagingCguApi(ApiAuthMixin, APIView):
     """CGU de messagerie globales : une acceptation vaut pour toutes les conversations."""
 
-    @extend_schema(responses={200: MessagingCguStatusSerializer}, tags=["messaging"], summary="Statut d'acceptation des CGU de messagerie")
+    @extend_schema(
+        responses={200: MessagingCguStatusSerializer},
+        tags=["messaging"],
+        summary="Statut d'acceptation des CGU de messagerie",
+    )
     def get(self, request):
         acceptance = messaging_cgu_get(user=request.user)
         data = {
@@ -129,7 +135,12 @@ class MessagingCguApi(ApiAuthMixin, APIView):
         }
         return Response(MessagingCguStatusSerializer(data).data)
 
-    @extend_schema(request=None, responses={200: MessagingCguStatusSerializer}, tags=["messaging"], summary="Accepter les CGU de messagerie (global, idempotent)")
+    @extend_schema(
+        request=None,
+        responses={200: MessagingCguStatusSerializer},
+        tags=["messaging"],
+        summary="Accepter les CGU de messagerie (global, idempotent)",
+    )
     def post(self, request):
         acceptance = messaging_cgu_accept(user=request.user)
         data = {"accepted": True, "accepted_at": acceptance.accepted_at}
@@ -152,7 +163,12 @@ class ConversationListApi(ApiAuthMixin, APIView):
 
 
 class ConversationCreateApi(ApiAuthMixin, APIView):
-    @extend_schema(request=ConversationCreateInputSerializer, responses={201: ConversationOutputSerializer}, tags=["messaging"], summary="Démarrer une conversation avec un prêtre")
+    @extend_schema(
+        request=ConversationCreateInputSerializer,
+        responses={201: ConversationOutputSerializer},
+        tags=["messaging"],
+        summary="Démarrer une conversation avec un prêtre",
+    )
     def post(self, request):
         serializer = ConversationCreateInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -168,7 +184,12 @@ class ConversationCguApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant()]
 
-    @extend_schema(request=None, responses={200: ConversationOutputSerializer}, tags=["messaging"], summary="Accepter les CGU de messagerie")
+    @extend_schema(
+        request=None,
+        responses={200: ConversationOutputSerializer},
+        tags=["messaging"],
+        summary="Accepter les CGU de messagerie",
+    )
     def post(self, request, conversation_id: UUID):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         self.check_object_permissions(request, conversation)
@@ -183,7 +204,12 @@ class ConversationArchiveApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant()]
 
-    @extend_schema(request=None, responses={200: ConversationOutputSerializer}, tags=["messaging"], summary="Archiver une conversation")
+    @extend_schema(
+        request=None,
+        responses={200: ConversationOutputSerializer},
+        tags=["messaging"],
+        summary="Archiver une conversation",
+    )
     def post(self, request, conversation_id: UUID):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         self.check_object_permissions(request, conversation)
@@ -195,7 +221,11 @@ class ConversationDetailApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant()]
 
-    @extend_schema(responses={200: ConversationOutputSerializer}, tags=["messaging"], summary="Récupérer le détail d'une conversation")
+    @extend_schema(
+        responses={200: ConversationOutputSerializer},
+        tags=["messaging"],
+        summary="Récupérer le détail d'une conversation",
+    )
     def get(self, request, conversation_id: UUID):
         conversation = conversation_get(conversation_id=conversation_id, user=request.user)
         if conversation is None:
@@ -214,14 +244,23 @@ class ConversationExportApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant()]
 
-    @extend_schema(request=None, responses={201: ExportOutputSerializer}, tags=["messaging"], summary="Demander l'export d'une conversation")
+    @extend_schema(
+        request=None,
+        responses={201: ExportOutputSerializer},
+        tags=["messaging"],
+        summary="Demander l'export d'une conversation",
+    )
     def post(self, request, conversation_id: UUID):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         self.check_object_permissions(request, conversation)
         export = conversation_export_request(conversation=conversation, user=request.user)
         return Response(ExportOutputSerializer(export).data, status=status.HTTP_201_CREATED)
 
-    @extend_schema(responses={200: ExportOutputSerializer(many=True)}, tags=["messaging"], summary="Lister les exports d'une conversation")
+    @extend_schema(
+        responses={200: ExportOutputSerializer(many=True)},
+        tags=["messaging"],
+        summary="Lister les exports d'une conversation",
+    )
     def get(self, request, conversation_id: UUID):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         self.check_object_permissions(request, conversation)
@@ -240,8 +279,14 @@ class MessageListApi(ApiAuthMixin, APIView):
 
     @extend_schema(
         parameters=[
-            OpenApiParameter("before_id", OpenApiTypes.UUID, description="Charger les messages avant cet identifiant (pagination curseur)"),
-            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de messages à retourner (max 100, défaut 30)"),
+            OpenApiParameter(
+                "before_id",
+                OpenApiTypes.UUID,
+                description="Charger les messages avant cet identifiant (pagination curseur)",
+            ),
+            OpenApiParameter(
+                "limit", OpenApiTypes.INT, description="Nombre de messages à retourner (max 100, défaut 30)"
+            ),
         ],
         responses={200: MessageOutputSerializer(many=True)},
         tags=["messaging"],
@@ -260,7 +305,12 @@ class MessageSendApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant(), HasAcceptedMessagingCgu()]
 
-    @extend_schema(request=MessageSendInputSerializer, responses={201: MessageOutputSerializer}, tags=["messaging"], summary="Envoyer un message")
+    @extend_schema(
+        request=MessageSendInputSerializer,
+        responses={201: MessageOutputSerializer},
+        tags=["messaging"],
+        summary="Envoyer un message",
+    )
     def post(self, request, conversation_id: UUID):
         conversation = get_object_or_404(Conversation, id=conversation_id)
         self.check_object_permissions(request, conversation)
@@ -316,7 +366,9 @@ class MessageReactApi(ApiAuthMixin, APIView):
     def get_permissions(self):
         return [IsAuthenticated(), IsParticipant()]
 
-    @extend_schema(request=ReactInputSerializer, responses={201: None}, tags=["messaging"], summary="Réagir à un message")
+    @extend_schema(
+        request=ReactInputSerializer, responses={201: None}, tags=["messaging"], summary="Réagir à un message"
+    )
     def post(self, request, message_id: UUID):
         message = get_object_or_404(Message, id=message_id)
         self.check_object_permissions(request, message.conversation)
@@ -325,7 +377,9 @@ class MessageReactApi(ApiAuthMixin, APIView):
         message_react(message=message, user=request.user, emoji=serializer.validated_data["emoji"])
         return Response(status=status.HTTP_201_CREATED)
 
-    @extend_schema(request=ReactInputSerializer, responses={204: None}, tags=["messaging"], summary="Supprimer une réaction")
+    @extend_schema(
+        request=ReactInputSerializer, responses={204: None}, tags=["messaging"], summary="Supprimer une réaction"
+    )
     def delete(self, request, message_id: UUID):
         message = get_object_or_404(Message, id=message_id)
         self.check_object_permissions(request, message.conversation)
@@ -346,7 +400,12 @@ class BlockListCreateApi(ApiAuthMixin, APIView):
         blocks = block_list(user=request.user)
         return Response(BlockOutputSerializer(blocks, many=True).data)
 
-    @extend_schema(request=BlockCreateInputSerializer, responses={201: BlockOutputSerializer}, tags=["messaging"], summary="Bloquer un utilisateur")
+    @extend_schema(
+        request=BlockCreateInputSerializer,
+        responses={201: BlockOutputSerializer},
+        tags=["messaging"],
+        summary="Bloquer un utilisateur",
+    )
     def post(self, request):
         serializer = BlockCreateInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -380,7 +439,11 @@ class BlockDeleteApi(ApiAuthMixin, APIView):
 
 class NotificationListApi(ApiAuthMixin, APIView):
     @extend_schema(
-        parameters=[OpenApiParameter("unread_only", OpenApiTypes.BOOL, description="Si true, retourne uniquement les notifications non lues")],
+        parameters=[
+            OpenApiParameter(
+                "unread_only", OpenApiTypes.BOOL, description="Si true, retourne uniquement les notifications non lues"
+            )
+        ],
         responses={200: NotificationOutputSerializer(many=True)},
         tags=["messaging"],
         summary="Lister mes notifications",
@@ -392,7 +455,12 @@ class NotificationListApi(ApiAuthMixin, APIView):
 
 
 class NotificationReadApi(ApiAuthMixin, APIView):
-    @extend_schema(request=None, responses={200: NotificationOutputSerializer}, tags=["messaging"], summary="Marquer une notification comme lue")
+    @extend_schema(
+        request=None,
+        responses={200: NotificationOutputSerializer},
+        tags=["messaging"],
+        summary="Marquer une notification comme lue",
+    )
     def post(self, request, notification_id: UUID):
         from apps.messaging.models import Notification
 
@@ -440,9 +508,7 @@ class PushDeviceApi(ApiAuthMixin, APIView):
         serializer = PushDeviceInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         device = push_device_register(user=request.user, **serializer.validated_data)
-        return Response(
-            PushDeviceOutputSerializer(device).data, status=status.HTTP_201_CREATED
-        )
+        return Response(PushDeviceOutputSerializer(device).data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
         request=PushDeviceInputSerializer,
@@ -453,8 +519,6 @@ class PushDeviceApi(ApiAuthMixin, APIView):
     def delete(self, request):
         token = request.data.get("token") or request.query_params.get("token")
         if not token:
-            return Response(
-                {"detail": "token requis."}, status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"detail": "token requis."}, status=status.HTTP_400_BAD_REQUEST)
         push_device_unregister(user=request.user, token=token)
         return Response(status=status.HTTP_204_NO_CONTENT)

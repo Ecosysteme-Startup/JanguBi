@@ -216,6 +216,18 @@ def booking_create(*, slot: ConfessionSlot, person: Any) -> ConfessionBooking:
         raise ApplicationError(
             f"Vous avez déjà {active} rendez-vous à venir.", {"max": MAX_ACTIVE_BOOKINGS}, code="too_many_bookings"
         )
+    # JB-WEB-017 : pas de chevauchement horaire. Un fidèle ne peut pas réserver deux
+    # rendez-vous qui se recoupent dans le temps (même avec deux prêtres différents).
+    overlapping = ConfessionBooking.objects.filter(
+        person=person,
+        status=ConfessionBooking.Status.RESERVEE,
+        slot__starts_at__lt=locked.ends_at,
+        slot__ends_at__gt=locked.starts_at,
+    ).exists()
+    if overlapping:
+        raise ConflictError(
+            "Vous avez déjà un rendez-vous qui chevauche ce créneau.", code="overlapping_booking"
+        )
     try:
         with transaction.atomic():
             booking = ConfessionBooking.objects.create(slot=locked, person=person)

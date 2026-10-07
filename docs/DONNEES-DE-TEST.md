@@ -35,7 +35,7 @@ Options (`--help`) :
 
 | Option | Rôle |
 |---|---|
-| `--profil local\|recette` | recette : comptes Keycloak des personas, médias lus dans le bucket MinIO `seed-assets` |
+| `--profil local\|recette` | recette : comptes Keycloak des personas, médias lus sous `seed-assets/` dans le bucket MinIO de l'app |
 | `--echelle petite\|moyenne\|grande` | volumes ci-dessous |
 | `--graine 2026` | même graine, mêmes données (noms, montants, dates relatives au jour du semis) ; le lot s'appelle `realiste-<graine>` |
 | `--modules tous\|socle,dons,vie,audio,parole` | sous-ensemble ; les dépendances sont ajoutées d'office |
@@ -67,9 +67,9 @@ Hors Docker : `python manage.py prepare_musique_demo --pack <dossier du pack> --
 `seed_realiste --medias-dossier <dossier>`.
 
 **En recette, une seule fois** : `prepare_musique_demo --publier` copie les 10 FLAC et `credits.yaml` dans le
-bucket MinIO `seed-assets/musique-demo/` du serveur (bucket privé, jamais servi au public). Ensuite, même après
+dossier `seed-assets/musique-demo/` du bucket MinIO de l'app (bucket privé, jamais servi au public ; pas de bucket à part : la clé de recette n'ouvre que celui de l'app). Ensuite, même après
 une remise à zéro de la base, `seed_recette` reprend la musique dans ce bucket : plus besoin du pack. `--musique-demo` lit d'abord `seed_assets/musique-demo/` s'il
-existe, sinon le bucket. Si le bucket `seed-assets` est vidé, repartir du RAR (copie de référence hors Git). En `--medias legers`, seules les 4 premières pistes servent (extraits
+existe, sinon le bucket. Si le dossier `seed-assets/` est vidé, repartir du RAR (copie de référence hors Git). En `--medias legers`, seules les 4 premières pistes servent (extraits
 de 30 s) ; en `--medias complets`, les 10.
 
 ## Échelles
@@ -169,8 +169,8 @@ Sources, par ordre de préférence :
 
 2. **Manifeste** `seed_assets/manifest.yaml` (domaine public, CC0, CC BY/BY-SA ; pochettes Unsplash comme
    l'app) : `python manage.py fetch_seed_assets` télécharge une fois, vérifie les sha256 et range dans
-   `~/.cache/jangubi-seed/` (local, `JANGUBI_SEED_CACHE` pour changer) ou dans le bucket MinIO
-   **`seed-assets`** de la recette (`--profil recette`). `--epingler` écrit les sha256 manquants.
+   `~/.cache/jangubi-seed/` (local, `JANGUBI_SEED_CACHE` pour changer) ou, en recette
+   (`--profil recette`), sous **`seed-assets/`** dans le bucket MinIO de l'app. `--epingler` écrit les sha256 manquants.
    Aucun binaire dans Git.
 3. **Voix** (homélies, lectures, retraites) : synthèse vocale **Piper** si le binaire `piper` et une voix
    (`--piper-voix` ou `PIPER_VOICE`, `PIPER_BIN`) sont disponibles, lisant des textes rédigés pour le projet
@@ -188,9 +188,9 @@ données fictives ».
 Rien n'est généré. La Bible vient de `import_bible` (`--bible-json`, ex. `init/bibles/format/json/bible-fr-aelf.json`,
 source `AELF` par défaut, `--bible-source` pour changer) ; les lectures viennent de la synchronisation AELF
 réelle. Sans réseau (ou `--hors-ligne`), l'étape est sautée et signalée ; la « lecture du jour » des profils
-quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare des embeddings : avec
-`EMBEDDING_PROVIDER=stub` (tests, poste local par défaut), il reste vide et le rapport le dit ; en recette,
-`EMBEDDING_PROVIDER=local`, `seed_embeddings`, puis `seed_realiste --modules parole`.
+quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) compare les mots des versets
+(plein texte PostgreSQL, sans modèle, ADR-018) : il est calculé partout, poste local compris, dès que la
+Bible est importée.
 
 ## Vérification (`--verifier`)
 
@@ -200,7 +200,7 @@ quotidiens se replie sur une rotation des évangiles. « Pour vous » (Parole) c
 - une paroisse principale par fidèle, `paroisse_suivie` à jour, curé et économe dans chaque paroisse ;
 - pistes `pret` avec leurs 3 débits HLS (et fichiers présents dans le stockage hors `aucun`) ;
 - événements d'écoute dans les partitions mensuelles (aucun dans la partition par défaut) ;
-- recommandations audio calculées ; « Pour vous » (Parole) calculé quand les embeddings le permettent ;
+- recommandations audio calculées ; « Pour vous » (Parole) calculé (au moins un fidèle) quand la Bible est là ;
 - adresses en `@demo.jangubi.sn`, messagerie sans mineur.
 
 ## Local, recette, clients

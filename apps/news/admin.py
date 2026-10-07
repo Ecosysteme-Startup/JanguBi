@@ -18,9 +18,7 @@ class ArticleAdmin(admin.ModelAdmin):
     list_filter = ["status", "category"]
     search_fields = ["title", "slug", "content"]
     raw_id_fields = ["author", "cover_image", "unpublished_by", "scope_node", "scope_place"]
-    readonly_fields = [
-        "id", "slug", "views_count", "published_at", "unpublished_at", "created_at", "updated_at"
-    ]
+    readonly_fields = ["id", "slug", "views_count", "published_at", "unpublished_at", "created_at", "updated_at"]
     date_hierarchy = "created_at"
     ordering = ["-created_at"]
 

@@ -28,7 +28,9 @@ class AnnoncesSeeder(Seeder):
 
         rng = ctx.rng(self.name)
         t = textes()
-        category, created = ArticleCategory.objects.get_or_create(slug="vie-paroissiale", defaults={"name": "Vie paroissiale"})
+        category, created = ArticleCategory.objects.get_or_create(
+            slug="vie-paroissiale", defaults={"name": "Vie paroissiale"}
+        )
         if created:
             ctx.track(ArticleCategory, [category.pk])
         articles: list[Any] = []
@@ -53,7 +55,9 @@ class AnnoncesSeeder(Seeder):
             for i in range(n - n // 2):
                 kind = "meditation" if i % 3 == 2 else "article"
                 src = rng.choice(t["meditations"] if kind == "meditation" else t["articles"])
-                published: datetime.datetime | None = ctx.now - datetime.timedelta(days=rng.randint(1, 120), hours=rng.randint(0, 12))
+                published: datetime.datetime | None = ctx.now - datetime.timedelta(
+                    days=rng.randint(1, 120), hours=rng.randint(0, 12)
+                )
                 status = "published"
                 if i == 0:
                     status, published = "draft", None  # brouillon du staff
@@ -84,7 +88,9 @@ class AnnoncesSeeder(Seeder):
                 reads.extend(ArticleRead(article=a, user_id=u) for u in readers)
                 for u in readers:
                     if rng.random() < 0.3:
-                        kind = rng.choices(["pray", "amen", "attend"], [5, 4, 2 if a.content_type == "announcement" else 0])[0]
+                        kind = rng.choices(
+                            ["pray", "amen", "attend"], [5, 4, 2 if a.content_type == "announcement" else 0]
+                        )[0]
                         reactions.append(ArticleReaction(article=a, user_id=u, reaction_type=kind))
                 a.views_count = int(len(readers) * rng.uniform(1.1, 1.8))
             ArticleRead.objects.bulk_create(reads, batch_size=5000, ignore_conflicts=True)

@@ -59,9 +59,7 @@ class Article(BaseModel):
 
     title = models.CharField(max_length=200, verbose_name=_("Titre"))
     slug = models.SlugField(max_length=220, verbose_name=_("Slug"))
-    excerpt = models.CharField(
-        max_length=400, blank=True, default="", verbose_name=_("Résumé court")
-    )
+    excerpt = models.CharField(max_length=400, blank=True, default="", verbose_name=_("Résumé court"))
     content = models.TextField(verbose_name=_("Contenu"))
     # Format du contenu : "text" pour l'existant (rédigé en textarea brut),
     # "html" pour l'éditeur riche (TipTap). Le HTML est SANITIZÉ côté service
@@ -127,9 +125,7 @@ class Article(BaseModel):
         related_name="articles",
         verbose_name=_("Lieu de culte"),
     )
-    is_sunday_notice = models.BooleanField(
-        _("annonce du dimanche"), default=False, db_default=False
-    )
+    is_sunday_notice = models.BooleanField(_("annonce du dimanche"), default=False, db_default=False)
     sunday_date = models.DateField(_("dimanche concerné"), null=True, blank=True)
     publish_at = models.DateTimeField(_("publication programmée"), null=True, blank=True)
     # Option « notifier les fidèles » : lue au moment de la publication (immédiate ou
@@ -154,9 +150,7 @@ class Article(BaseModel):
         related_name="unpublished_articles",
         verbose_name=_("Dépublié par"),
     )
-    unpublish_reason = models.TextField(
-        blank=True, default="", verbose_name=_("Motif de dépublication")
-    )
+    unpublish_reason = models.TextField(blank=True, default="", verbose_name=_("Motif de dépublication"))
 
     views_count = models.PositiveIntegerField(default=0, verbose_name=_("Nombre de vues"))
 
@@ -173,12 +167,8 @@ class Article(BaseModel):
             models.Index(fields=["status", "-published_at"], name="article_status_pub_idx"),
             models.Index(fields=["category", "status"], name="article_category_idx"),
             models.Index(fields=["scope_node", "status", "-published_at"], name="article_node_pub_idx"),
-            models.Index(
-                fields=["sunday_date"], condition=models.Q(is_sunday_notice=True), name="article_sunday_idx"
-            ),
-            models.Index(
-                fields=["publish_at"], condition=models.Q(status="scheduled"), name="article_scheduled_idx"
-            ),
+            models.Index(fields=["sunday_date"], condition=models.Q(is_sunday_notice=True), name="article_sunday_idx"),
+            models.Index(fields=["publish_at"], condition=models.Q(status="scheduled"), name="article_scheduled_idx"),
             models.Index(fields=["author", "-created_at"], name="article_author_idx"),
             models.Index(
                 fields=["pinned_until"], condition=models.Q(pinned_until__isnull=False), name="article_pinned_idx"

@@ -37,9 +37,7 @@ def can_administer(actor: Any) -> bool:
 
 
 def _open_assignments(user: Any) -> QuerySet[OfficeAssignment]:
-    return OfficeAssignment.objects.filter(person=user, status__in=OPEN_STATUSES).select_related(
-        "node", "office_type"
-    )
+    return OfficeAssignment.objects.filter(person=user, status__in=OPEN_STATUSES).select_related("node", "office_type")
 
 
 def account_scope_nodes(user: Any) -> list[Node]:
@@ -138,11 +136,15 @@ def scope_q(actor: Any) -> Q:
     from apps.invitations.models import ClergyInvitation, InvitationStatus
 
     return (
-        Q(admin_node__in=nodes)
-        | Q(pk__in=OfficeAssignment.objects.filter(node__in=nodes, status__in=OPEN_STATUSES).values("person_id"))
-        | Q(
-            pk__in=ClergyInvitation.objects.filter(node__in=nodes, status=InvitationStatus.ACCEPTEE).values(
-                "accepted_by_id"
+        (
+            Q(admin_node__in=nodes)
+            | Q(pk__in=OfficeAssignment.objects.filter(node__in=nodes, status__in=OPEN_STATUSES).values("person_id"))
+            | Q(
+                pk__in=ClergyInvitation.objects.filter(node__in=nodes, status=InvitationStatus.ACCEPTEE).values(
+                    "accepted_by_id"
+                )
             )
         )
-    ) & Q(keycloak_platform_admin=False) & ~Q(pk=getattr(actor, "pk", None))
+        & Q(keycloak_platform_admin=False)
+        & ~Q(pk=getattr(actor, "pk", None))
+    )

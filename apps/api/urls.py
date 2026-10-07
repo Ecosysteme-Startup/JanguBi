@@ -66,7 +66,7 @@ def build_v1_patterns(*, active: Iterable[str] | None = None) -> list:
 
 urlpatterns = [
     path("v1/", include(build_v1_patterns())),
-    path('schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('swagger-ui/', SpectacularSwaggerView.as_view(url_name='api:schema'), name='swagger-ui'),
-    path('redoc/', SpectacularRedocView.as_view(url_name='api:schema'), name='redoc'),
+    path("schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("swagger-ui/", SpectacularSwaggerView.as_view(url_name="api:schema"), name="swagger-ui"),
+    path("redoc/", SpectacularRedocView.as_view(url_name="api:schema"), name="redoc"),
 ]

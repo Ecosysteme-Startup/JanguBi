@@ -11,7 +11,7 @@ class CleaningService:
         if not text:
             return text
         # Remove ASCII control characters except newline and tab
-        return re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f]', '', text)
+        return re.sub(r"[\x00-\x08\x0b-\x0c\x0e-\x1f]", "", text)
 
     @staticmethod
     def clean_text(raw: str) -> str:
@@ -24,8 +24,8 @@ class CleaningService:
         # we might need to handle it. For safety, we can attempt an encode/decode pass.
         try:
             # If it's a raw string containing literal \uXXXX sequences not handled by json parser
-            if r'\u' in raw:
-                raw = raw.encode('utf-8').decode('unicode_escape')
+            if r"\u" in raw:
+                raw = raw.encode("utf-8").decode("unicode_escape")
         except UnicodeDecodeError:
             pass
 
@@ -36,13 +36,13 @@ class CleaningService:
         text = CleaningService.strip_control_chars(text)
 
         # Step 4: Normalize spaces: replace multiple spaces, tabs, newlines with single space
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
 
         # Step 5: Normalize apostrophes to standard right single quotation mark
         # Some texts use standard apostrophe ('), others use curly right single quote (\u2019)
         # We will normalize to standard apostrophe to facilitate search, but both are acceptable.
         # Format A has "l\u2019obscurit\u00e9", Format B has "l'homme"
-        text = text.replace('\u2019', "'").replace('`', "'")
+        text = text.replace("\u2019", "'").replace("`", "'")
 
         return text
 
@@ -52,9 +52,9 @@ class CleaningService:
         if not name:
             return ""
         name = name.strip().lower()
-        name = re.sub(r'\s+', ' ', name)
+        name = re.sub(r"\s+", " ", name)
         # Optionally, remove accents for even more robust matching
         import unicodedata
-        name = ''.join(c for c in unicodedata.normalize('NFD', name)
-                       if unicodedata.category(c) != 'Mn')
+
+        name = "".join(c for c in unicodedata.normalize("NFD", name) if unicodedata.category(c) != "Mn")
         return name

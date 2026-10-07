@@ -96,12 +96,8 @@ def test_conversation_list_ordered_by_last_message_at_descending():
     old_time = timezone.now().replace(year=2020)
     new_time = timezone.now()
 
-    conv_old = ConversationFactory(
-        participant_a=user, participant_b=other_a, last_message_at=old_time
-    )
-    conv_new = ConversationFactory(
-        participant_a=user, participant_b=other_b, last_message_at=new_time
-    )
+    conv_old = ConversationFactory(participant_a=user, participant_b=other_a, last_message_at=old_time)
+    conv_new = ConversationFactory(participant_a=user, participant_b=other_b, last_message_at=new_time)
 
     # Act
     qs = list(conversation_list(user=user))
@@ -233,9 +229,7 @@ def test_message_list_cursor_pagination_with_before_id():
     messages = []
     for i in range(5):
         msg = MessageFactory(conversation=conv)
-        Message.objects.filter(pk=msg.pk).update(
-            created_at=base + timezone.timedelta(seconds=i)
-        )
+        Message.objects.filter(pk=msg.pk).update(created_at=base + timezone.timedelta(seconds=i))
         msg.refresh_from_db()
         messages.append(msg)
 
@@ -285,9 +279,7 @@ def test_unread_count_excludes_soft_deleted_messages():
     sender = conv.participant_a
 
     # Deleted message — must not count even if read_at is null
-    MessageFactory(
-        conversation=conv, sender=sender, read_at=None, deleted_at=timezone.now()
-    )
+    MessageFactory(conversation=conv, sender=sender, read_at=None, deleted_at=timezone.now())
 
     # Act
     count = unread_count(conversation=conv, user=reader)
@@ -368,9 +360,7 @@ def test_export_list_returns_exports_scoped_to_conversation():
     # Export for a different conversation — must not appear
     other_conv = ConversationFactory()
     with patch("django.db.transaction.on_commit", lambda fn: None):
-        conversation_export_request(
-            conversation=other_conv, user=other_conv.participant_a
-        )
+        conversation_export_request(conversation=other_conv, user=other_conv.participant_a)
 
     # Act
     result = export_list(conversation=conv)

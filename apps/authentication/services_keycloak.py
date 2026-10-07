@@ -40,6 +40,11 @@ def keycloak_staff_role_sync(*, person: Any, admin: KeycloakAdmin | None = None)
         return "added"
     if not has_office and staff in roles:
         admin.remove_realm_role(person.keycloak_sub, staff)
+        # JB-WEB-039 : la fin de nomination retire l'obligation de configurer un second
+        # facteur, SAUF pour un platform_admin (MFA toujours exigée) ou si l'OTP est déjà posé.
+        platform_role = settings.KEYCLOAK_PLATFORM_ADMIN_ROLE
+        if platform_role not in roles and not admin.user_has_otp(person.keycloak_sub):
+            admin.remove_required_action(person.keycloak_sub, "CONFIGURE_TOTP")
         return "removed"
     return "unchanged"
 

@@ -15,17 +15,12 @@ class AelfService:
     Coordinates fetching from the AELF HTTP Client and saving to the Django ORM.
     Handles idempotent Database writes.
     """
-    
+
     @staticmethod
     @sync_to_async
     def _save_raw(endpoint: str, dt_str: str, zone: str, raw_json: Dict[str, Any]) -> None:
         """Saves the unadulterated response for audit tracking."""
-        AelfDataEntry.objects.create(
-            source_endpoint=endpoint,
-            date=dt_str,
-            zone=zone,
-            raw_json=raw_json
-        )
+        AelfDataEntry.objects.create(source_endpoint=endpoint, date=dt_str, zone=zone, raw_json=raw_json)
 
     @staticmethod
     @sync_to_async
@@ -40,7 +35,7 @@ class AelfService:
                 "season": info.get("temps") or "",
                 "mystery": info.get("fete") or "",
                 "notes": info.get("couleur") or "",
-            }
+            },
         )
         return ld
 
@@ -72,32 +67,26 @@ class AelfService:
         messes = source_json.get("messes", [])
         if not messes:
             return
-            
+
         # Target the first mass if multiple are returned
         primary_mass = messes[0]
         lectures = primary_mass.get("lectures", [])
-        
+
         for lec in lectures:
             typ = lec.get("type", "unknown")
             ref = lec.get("ref", "")
             texte = lec.get("contenu", "")
-            
+
             # Create the Reading
             reading, created = Reading.objects.update_or_create(
-                liturgical_date=ld,
-                type=typ,
-                citation=ref,
-                defaults={
-                    "text": texte,
-                    "raw_metadata": lec
-                }
+                liturgical_date=ld, type=typ, citation=ref, defaults={"text": texte, "raw_metadata": lec}
             )
-            
+
             # If it's a new or updated reading, attempt to match to local Bible
             # Matcher relies on sync_to_async, but we are already inside a sync_to_async block.
             # However `CitationMatcher.match` is marked async, so we must be careful.
             # Actually, let's call it synchronously inside this sync block.
-            
+
     @staticmethod
     @sync_to_async
     def _save_readings_sync(ld: LiturgicalDate, source_json: Dict[str, Any]):
@@ -105,29 +94,23 @@ class AelfService:
         messes = source_json.get("messes", [])
         if not messes:
             return
-            
+
         primary_mass = messes[0]
         lectures = primary_mass.get("lectures", [])
-        
+
         for lec in lectures:
             typ = lec.get("type", "unknown")
             ref = lec.get("ref", "")
             texte = lec.get("contenu", "")
-            
+
             # Use synchronous matching BEFORE creating the object to avoid
             # holding the transaction open too long locally if CitationMatcher gets heavy
             verses = CitationMatcher.match(ref)
-            
+
             reading, _ = Reading.objects.update_or_create(
-                liturgical_date=ld,
-                type=typ,
-                citation=ref,
-                defaults={
-                    "text": texte,
-                    "raw_metadata": lec
-                }
+                liturgical_date=ld, type=typ, citation=ref, defaults={"text": texte, "raw_metadata": lec}
             )
-            
+
             if verses:
                 reading.matched_verses.set(verses)
 
@@ -153,19 +136,11 @@ class AelfService:
             ps_key = f"psaume_{i}"
             ant_key = f"antienne_{i}"
             if ps_key in data or ant_key in data:
-                psalms.append({
-                    "number": i,
-                    "antienne": data.get(ant_key, ""),
-                    "psaume": data.get(ps_key, {})
-                })
+                psalms.append({"number": i, "antienne": data.get(ant_key, ""), "psaume": data.get(ps_key, {})})
 
         # 3. Extract Canticle based on office
         canticle_text = ""
-        canticle_keys = {
-            "laudes": "cantique_zacharie",
-            "vepres": "cantique_mariale",
-            "complies": "cantique_symeon"
-        }
+        canticle_keys = {"laudes": "cantique_zacharie", "vepres": "cantique_mariale", "complies": "cantique_symeon"}
         c_key = canticle_keys.get(office_type)
         if c_key and c_key in data:
             c_data = data.get(c_key)
@@ -181,11 +156,13 @@ class AelfService:
             if "lecture" in data:
                 readings.append(data["lecture"])
             if "texte_patristique" in data:
-                readings.append({
-                    "titre": data.get("titre_patristique", "Texte Patristique"),
-                    "texte": data.get("texte_patristique"),
-                    "repons": data.get("repons_patristique")
-                })
+                readings.append(
+                    {
+                        "titre": data.get("titre_patristique", "Texte Patristique"),
+                        "texte": data.get("texte_patristique"),
+                        "repons": data.get("repons_patristique"),
+                    }
+                )
         else:
             # For others, it's usually "pericope"
             pericope = data.get("pericope")
@@ -204,8 +181,8 @@ class AelfService:
                 "canticle": canticle_text,
                 "readings": readings,
                 "intercessions": str(intercession),
-                "raw_metadata": data
-            }
+                "raw_metadata": data,
+            },
         )
 
     @classmethod
@@ -215,10 +192,10 @@ class AelfService:
         then synchronously saving them to the DB.
         """
         logger.info(f"Syncing AELF data for {date_str} ({zone})")
-        
+
         # 1. Fetch concurrently
         payloads = await AelfAsyncClient.fetch_all_daily(date_str, zone)
-        
+
         # 2. Informational data is required to anchor LiturgicalDate
         info_json = payloads.get("informations", {})
         if not info_json:
@@ -243,7 +220,7 @@ class AelfService:
         for ot in office_types:
             if ot in payloads and payloads[ot]:
                 await cls._save_office_sync(ld, ot, payloads[ot])
-                
+
         logger.info(f"Successfully synced AELF data for {date_str}")
 
 

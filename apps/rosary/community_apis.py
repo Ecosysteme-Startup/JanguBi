@@ -109,9 +109,7 @@ class CommunityRosaryIntentionApi(ApiAuthMixin, APIView):
 
     @extend_schema(
         parameters=[
-            OpenApiParameter(
-                "limit", OpenApiTypes.INT, description="Nombre de résultats (défaut 50, max 200)"
-            ),
+            OpenApiParameter("limit", OpenApiTypes.INT, description="Nombre de résultats (défaut 50, max 200)"),
             OpenApiParameter("offset", OpenApiTypes.INT, description="Décalage de pagination"),
         ],
         responses={200: paginated_response_serializer(IntentionOutputSerializer)},

@@ -14,9 +14,7 @@ class RosaryService:
     @staticmethod
     def get_group_with_mysteries(group_id_or_slug):
         """Returns a group with its mysteries, but not necessarily all prayers."""
-        qs = MysteryGroup.objects.prefetch_related(
-            Prefetch("mysteries", queryset=Mystery.objects.order_by("order"))
-        )
+        qs = MysteryGroup.objects.prefetch_related(Prefetch("mysteries", queryset=Mystery.objects.order_by("order")))
         if isinstance(group_id_or_slug, int) or str(group_id_or_slug).isdigit():
             return qs.get(id=int(group_id_or_slug))
         return qs.get(slug=group_id_or_slug)
@@ -29,17 +27,19 @@ class RosaryService:
         """
         if day_of_week is None:
             day_of_week = timezone.now().weekday()
-        
+
         # We need the day, group, mysteries, and their prayers (for the today endpoint)
         prefetch_prayers = Prefetch(
-            "group__mysteries__prayers",
-            queryset=MysteryPrayer.objects.select_related("prayer").order_by("order")
+            "group__mysteries__prayers", queryset=MysteryPrayer.objects.select_related("prayer").order_by("order")
         )
-        
-        return RosaryDay.objects.select_related("group").prefetch_related(
-            Prefetch("group__mysteries", queryset=Mystery.objects.order_by("order")),
-            prefetch_prayers
-        ).get(weekday=day_of_week)
+
+        return (
+            RosaryDay.objects.select_related("group")
+            .prefetch_related(
+                Prefetch("group__mysteries", queryset=Mystery.objects.order_by("order")), prefetch_prayers
+            )
+            .get(weekday=day_of_week)
+        )
 
     @staticmethod
     def get_today_rosary():
@@ -52,6 +52,37 @@ class RosaryService:
         # Intro and closing prayers like Creed, Glory Be, Hail Holy Queen, etc.
         # Everything from Prayer, we could return all or filter by type
         return Prayer.objects.all().order_by("type", "language", "id")
+
+    # JB-WEB-025 : séquence traditionnelle des prières d'ouverture, dans l'ordre, AVANT la
+    # 1re dizaine (signe de croix, Je crois en Dieu, Notre Père, 3 Je vous salue Marie, Gloire
+    # au Père). Prières du domaine public, aucune question de licence.
+    OPENING_SEQUENCE = (
+        Prayer.Type.SIGN_OF_CROSS,
+        Prayer.Type.CREED,
+        Prayer.Type.OUR_FATHER,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.HAIL_MARY,
+        Prayer.Type.GLORY_BE,
+    )
+
+    @staticmethod
+    def get_opening_prayers(language: str = "fr"):
+        """Prières d'ouverture du chapelet, dans l'ordre (le Je vous salue Marie apparaît 3 fois).
+        On choisit une prière par type ; un type absent du contenu est simplement ignoré."""
+        picked: dict[str, Prayer] = {}
+        sequence: list[Prayer] = []
+        for ptype in RosaryService.OPENING_SEQUENCE:
+            if ptype not in picked:
+                found = (
+                    Prayer.objects.filter(type=ptype, language__iexact=language).order_by("id").first()
+                    or Prayer.objects.filter(type=ptype).order_by("id").first()
+                )
+                if found is None:
+                    continue
+                picked[ptype] = found
+            sequence.append(picked[ptype])
+        return sequence
 
     @staticmethod
     def search_text(query: str):
@@ -67,18 +98,13 @@ class RosaryService:
 
         vector = SearchVector("text", config="french")
         search_query = SearchQuery(query, config="french")
-        return (
-            Prayer.objects.annotate(rank=SearchRank(vector, search_query))
-            .filter(rank__gt=0)
-            .order_by("-rank")
-        )
+        return Prayer.objects.annotate(rank=SearchRank(vector, search_query)).filter(rank__gt=0).order_by("-rank")
 
     @staticmethod
-    def vector_search(query: str, embedding: list | None = None):
-        """Recherche « sémantique » des prières.
+    def vector_search(query: str):
+        """Ancienne route « vectorielle » (conservée pour les clients existants) : plein texte.
 
-        Le rosaire ne porte pas d'embeddings (corpus minuscule) : on délègue à la
-        recherche plein-texte française, fonctionnelle et suffisante ici, plutôt
-        que de renvoyer un QuerySet vide (l'ancien stub).
+        Il n'y a pas de recherche vectorielle dans la plateforme (ADR-018) ; la recherche plein
+        texte française suffit au corpus des prières.
         """
         return RosaryService.search_text(query)

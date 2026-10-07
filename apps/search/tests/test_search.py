@@ -1,6 +1,5 @@
 """Recherche transverse (lot V1-routes, B03) : visibilités et pagination par type."""
 
-
 import pytest
 from django.core.cache import cache
 from django.db import connection
@@ -78,14 +77,20 @@ def test_parishes_places_accent_insensitive(world):
 
 
 def test_priests_reachable_only_names_and_offices(world):
-    items = client_for(world.fidele).get(URL, {"q": "Emmanuel", "types": "pretres"}).json()["results"]["pretres"]["items"]
+    items = (
+        client_for(world.fidele).get(URL, {"q": "Emmanuel", "types": "pretres"}).json()["results"]["pretres"]["items"]
+    )
     assert sorted(i["name"] for i in items) == ["Emmanuel Faye", "Emmanuel Tine"]
     assert all(set(i) == {"id", "name", "office", "node_id", "node_name"} for i in items)
     MessagingAvailability.objects.create(user=world.vicaire, accepts_new_conversations=False)
-    items = client_for(world.fidele).get(URL, {"q": "Emmanuel", "types": "pretres"}).json()["results"]["pretres"]["items"]
+    items = (
+        client_for(world.fidele).get(URL, {"q": "Emmanuel", "types": "pretres"}).json()["results"]["pretres"]["items"]
+    )
     assert [i["name"] for i in items] == ["Emmanuel Tine"]
     # La secrétaire n'est pas un prêtre joignable.
-    assert client_for(world.fidele).get(URL, {"q": "Coly", "types": "pretres"}).json()["results"]["pretres"]["items"] == []
+    assert (
+        client_for(world.fidele).get(URL, {"q": "Coly", "types": "pretres"}).json()["results"]["pretres"]["items"] == []
+    )
 
 
 def test_audio_respects_visibility(world):

@@ -124,10 +124,14 @@ class SyntheseSerializer(serializers.Serializer):
     nombre_dons_en_ligne = serializers.IntegerField()
     nombre_quetes = serializers.IntegerField()
     par_destination = DestinationSerializer()
-    par_type_fonds = TypeFondsLigneSerializer(many=True, help_text="Ordre fixe de la palette : dominicale, impérée, campagne, contribution")
+    par_type_fonds = TypeFondsLigneSerializer(
+        many=True, help_text="Ordre fixe de la palette : dominicale, impérée, campagne, contribution"
+    )
     par_fonds = FondsLigneSerializer(many=True, allow_null=True, help_text="Paroisse seulement ; null au-dessus")
     par_canal = CanalLigneSerializer(many=True, help_text="En ligne (avec ses sources), puis espèces")
-    par_moyen = MoyenLigneSerializer(many=True, help_text="En ligne ; ordre canonique Wave, Orange Money, Free Money, carte")
+    par_moyen = MoyenLigneSerializer(
+        many=True, help_text="En ligne ; ordre canonique Wave, Orange Money, Free Money, carte"
+    )
     par_lieu = LieuLigneSerializer(many=True, allow_null=True, help_text="Paroisse seulement ; null au-dessus")
 
 
@@ -172,7 +176,9 @@ class ATraiterSerializer(serializers.Serializer):
 class ParoisseLigneSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     nom = serializers.CharField()
-    statut_collecte = serializers.ChoiceField(choices=[("ouverte", "Collecte ouverte"), ("en_preparation", "En préparation")])
+    statut_collecte = serializers.ChoiceField(
+        choices=[("ouverte", "Collecte ouverte"), ("en_preparation", "En préparation")]
+    )
     collecte = serializers.IntegerField(allow_null=True, help_text="Arrondi au millier ; null en préparation")
     part_en_ligne = serializers.IntegerField(allow_null=True)
     quetes_a_valider = serializers.IntegerField(allow_null=True)
@@ -211,7 +217,9 @@ class QueteImpereeSerializer(serializers.Serializer):
     date = serializers.DateField()
     echeance = serializers.DateField(allow_null=True)
     messe_anticipee_incluse = serializers.BooleanField()
-    paroisses = ImpereeParoisseSerializer(many=True, help_text="Montants exacts (argent de la curie) ; ordre alphabétique")
+    paroisses = ImpereeParoisseSerializer(
+        many=True, help_text="Montants exacts (argent de la curie) ; ordre alphabétique"
+    )
 
 
 class TresorerieEnLigneSerializer(serializers.Serializer):

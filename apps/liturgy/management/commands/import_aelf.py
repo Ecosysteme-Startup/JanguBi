@@ -43,14 +43,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR("Invalid date format. Please use YYYY-MM-DD."))
             return
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Starting bulk import from {start_date} to {end_date} for zones {zones}"
-            )
-        )
-        
+        self.stdout.write(self.style.SUCCESS(f"Starting bulk import from {start_date} to {end_date} for zones {zones}"))
+
         # Dispatch the Celery task
         # It handles the delta looping internally
         bulk_import_task.delay(start_date, end_date, zones)
-        
+
         self.stdout.write(self.style.SUCCESS("Bulk import tasks have been queued to Celery! Check logs for progress."))
