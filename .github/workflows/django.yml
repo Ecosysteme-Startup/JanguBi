@@ -2,9 +2,7 @@ name: CI JanguBi Backend
 
 on:
   push:
-    # Qualité seule. Livraison : push `stage` et tags `v*` →
-    # .github/workflows/livraison-recette.yml (runner ceac, contrat de
-    # l'Infrastructure Ecosysteme-Startup).
+    # Qualité seule : aucune livraison (Jàngu Bi est sorti de l'infrastructure CEAC).
     branches:
       - main
       - develop
