@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6.0.3
 
-      - uses: actions/setup-python@28f2168f4d98ee0445e3c6321f6e6616c83dd5ec #v6.2.0
+      - uses: actions/setup-python@ff73b2463e2f3baa703f830da214b8dfeeaeccf8 #v6.2.0
         with:
           python-version: "3.12.4"
           cache: "pip"
